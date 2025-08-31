@@ -14,7 +14,7 @@ import (
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
 
-	hypermark "github.com/herdworks/hypertemplates-go/lib/hypermark"
+	hypermark "github.com/herdworks/hypertemplates-go/hypermark"
 	emoji "github.com/yuin/goldmark-emoji"
 	meta "github.com/yuin/goldmark-meta"
 )

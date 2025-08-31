@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/herdworks/hypertemplates-go/lib/opml"
+	"github.com/herdworks/hypertemplates-go/opml"
 	"gopkg.in/yaml.v3"
 )
 
