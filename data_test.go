@@ -477,10 +477,10 @@ func TestTemplateData_Merge(t *testing.T) {
 			want:       TemplateData{"tags": []string{"api", "web"}},
 		},
 		{
-			name: "merge nested TemplateData",
-			data: TemplateData{"author": TemplateData{"name": "John"}},
+			name:     "merge nested TemplateData",
+			data:     TemplateData{"author": TemplateData{"name": "John"}},
 			incoming: TemplateData{"author": TemplateData{"email": "john@example.com"}},
-			want: TemplateData{"author": TemplateData{"name": "John", "email": "john@example.com"}},
+			want:     TemplateData{"author": TemplateData{"name": "John", "email": "john@example.com"}},
 		},
 	}
 
@@ -550,16 +550,16 @@ func TestTemplateData_Inspect(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		path       []string
-		format     string
-		wantErr    bool
-		checkFunc  func([]byte) bool
+		name      string
+		path      []string
+		format    string
+		wantErr   bool
+		checkFunc func([]byte) bool
 	}{
 		{
-			name:   "inspect as JSON",
-			path:   []string{},
-			format: "json",
+			name:    "inspect as JSON",
+			path:    []string{},
+			format:  "json",
 			wantErr: false,
 			checkFunc: func(b []byte) bool {
 				var result map[string]any
@@ -567,9 +567,9 @@ func TestTemplateData_Inspect(t *testing.T) {
 			},
 		},
 		{
-			name:   "inspect as YAML",
-			path:   []string{},
-			format: "yaml",
+			name:    "inspect as YAML",
+			path:    []string{},
+			format:  "yaml",
 			wantErr: false,
 			checkFunc: func(b []byte) bool {
 				var result map[string]any
@@ -617,31 +617,31 @@ func TestTemplateData_Inspect(t *testing.T) {
 // TestParseTemplateDataBytes tests parsing from different data formats
 func TestParseTemplateDataBytes(t *testing.T) {
 	tests := []struct {
-		name     string
-		data     []byte
-		format   string
-		want     TemplateData
-		wantErr  bool
+		name    string
+		data    []byte
+		format  string
+		want    TemplateData
+		wantErr bool
 	}{
 		{
-			name:   "parse JSON",
-			data:   []byte(`{"title": "Test", "author": "John"}`),
-			format: ".json",
-			want:   TemplateData{"title": "Test", "author": "John"},
+			name:    "parse JSON",
+			data:    []byte(`{"title": "Test", "author": "John"}`),
+			format:  ".json",
+			want:    TemplateData{"title": "Test", "author": "John"},
 			wantErr: false,
 		},
 		{
-			name:   "parse YAML",
-			data:   []byte("title: Test\nauthor: John\n"),
-			format: ".yaml",
-			want:   TemplateData{"title": "Test", "author": "John"},
+			name:    "parse YAML",
+			data:    []byte("title: Test\nauthor: John\n"),
+			format:  ".yaml",
+			want:    TemplateData{"title": "Test", "author": "John"},
 			wantErr: false,
 		},
 		{
-			name:   "parse YML",
-			data:   []byte("title: Test\nauthor: John\n"),
-			format: ".yml",
-			want:   TemplateData{"title": "Test", "author": "John"},
+			name:    "parse YML",
+			data:    []byte("title: Test\nauthor: John\n"),
+			format:  ".yml",
+			want:    TemplateData{"title": "Test", "author": "John"},
 			wantErr: false,
 		},
 		{
@@ -684,9 +684,9 @@ func TestTemplateData_StringifyMapKeys(t *testing.T) {
 	data := TemplateData{
 		"normal": "value",
 		"nested": map[any]any{
-			123:     "numeric key",
+			123:      "numeric key",
 			"string": "string key",
-			true:    "boolean key",
+			true:     "boolean key",
 		},
 		"array": []any{
 			map[any]any{
@@ -747,9 +747,9 @@ func TestOrderedTemplateData_MarshalYAML(t *testing.T) {
 	}
 
 	yamlStr := string(yamlBytes)
-	
-	// Check that ordered fields appear first
-	orderedFields := []string{"created_at", "layout", "title", "description", "author"}
+
+	// Check that ordered fields appear first (must match the order defined in MarshalYAML)
+	orderedFields := []string{"created_at", "layout", "author", "title", "description"}
 	lastPos := -1
 	for _, field := range orderedFields {
 		pos := strings.Index(yamlStr, field+":")

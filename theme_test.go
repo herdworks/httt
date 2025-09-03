@@ -179,19 +179,19 @@ func TestHyperTheme_ResolveConfig(t *testing.T) {
 	}
 
 	if theme.Config.ContentTypesDirectory != expectedDefaults["ContentTypesDirectory"] {
-		t.Errorf("ResolveConfig() ContentTypesDirectory = %v, want %v", 
+		t.Errorf("ResolveConfig() ContentTypesDirectory = %v, want %v",
 			theme.Config.ContentTypesDirectory, expectedDefaults["ContentTypesDirectory"])
 	}
 	if theme.Config.BlocksDirectory != expectedDefaults["BlocksDirectory"] {
-		t.Errorf("ResolveConfig() BlocksDirectory = %v, want %v", 
+		t.Errorf("ResolveConfig() BlocksDirectory = %v, want %v",
 			theme.Config.BlocksDirectory, expectedDefaults["BlocksDirectory"])
 	}
 	if theme.Config.LayoutsDirectory != expectedDefaults["LayoutsDirectory"] {
-		t.Errorf("ResolveConfig() LayoutsDirectory = %v, want %v", 
+		t.Errorf("ResolveConfig() LayoutsDirectory = %v, want %v",
 			theme.Config.LayoutsDirectory, expectedDefaults["LayoutsDirectory"])
 	}
 	if theme.Config.StaticDirectory != expectedDefaults["StaticDirectory"] {
-		t.Errorf("ResolveConfig() StaticDirectory = %v, want %v", 
+		t.Errorf("ResolveConfig() StaticDirectory = %v, want %v",
 			theme.Config.StaticDirectory, expectedDefaults["StaticDirectory"])
 	}
 }
@@ -203,9 +203,9 @@ func TestHyperTheme_ResourcePath(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		resourceRef  string
-		expected     string
+		name        string
+		resourceRef string
+		expected    string
 	}{
 		{
 			name:        "resource with extension",
@@ -429,7 +429,7 @@ func TestHyperTheme_ParseNonExistentFile(t *testing.T) {
 
 // Helper function to check if a string contains a substring
 func containsString(s, substr string) bool {
-	return len(substr) == 0 || (len(s) >= len(substr) && 
+	return len(substr) == 0 || (len(s) >= len(substr) &&
 		func() bool {
 			for i := 0; i <= len(s)-len(substr); i++ {
 				if s[i:i+len(substr)] == substr {

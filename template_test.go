@@ -136,24 +136,24 @@ func TestTemplate_setAttribute(t *testing.T) {
 		expectedAttrs map[string]string
 	}{
 		{
-			name:    "set new attribute",
-			element: createTestElement("div", map[string]string{}),
-			key:     "class",
-			value:   "test-class",
+			name:          "set new attribute",
+			element:       createTestElement("div", map[string]string{}),
+			key:           "class",
+			value:         "test-class",
 			expectedAttrs: map[string]string{"class": "test-class"},
 		},
 		{
-			name:    "update existing attribute",
-			element: createTestElement("div", map[string]string{"class": "old-class"}),
-			key:     "class",
-			value:   "new-class",
+			name:          "update existing attribute",
+			element:       createTestElement("div", map[string]string{"class": "old-class"}),
+			key:           "class",
+			value:         "new-class",
 			expectedAttrs: map[string]string{"class": "new-class"},
 		},
 		{
-			name:    "add to existing attributes",
-			element: createTestElement("div", map[string]string{"id": "main"}),
-			key:     "class",
-			value:   "test-class",
+			name:          "add to existing attributes",
+			element:       createTestElement("div", map[string]string{"id": "main"}),
+			key:           "class",
+			value:         "test-class",
 			expectedAttrs: map[string]string{"id": "main", "class": "test-class"},
 		},
 	}
@@ -590,9 +590,9 @@ func TestTemplate_AttributeData(t *testing.T) {
 // Benchmark tests for performance-critical template operations
 func BenchmarkTemplate_getAttribute(b *testing.B) {
 	element := createTestElement("div", map[string]string{
-		"class": "test-class",
-		"id":    "main",
-		"style": "color: red",
+		"class":      "test-class",
+		"id":         "main",
+		"style":      "color: red",
 		"data-value": "123",
 	})
 	b.ResetTimer()

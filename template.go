@@ -21,10 +21,10 @@ import (
 // A HyperTemplate is an HTML document.
 // HyperTemplates may contain templating instructions as HTML5 data attributes.
 type Template struct {
-	Layout *html.Node
-	Theme *HyperTheme
-	StrictMode bool // enforce HTML5 custom attribute syntax (data-ht-*)
-	TidyMode bool
+	Layout         *html.Node
+	Theme          *HyperTheme
+	StrictMode     bool // enforce HTML5 custom attribute syntax (data-ht-*)
+	TidyMode       bool
 	MarkdownConfig *HyperMarkConfig
 
 	// Internal state
@@ -33,65 +33,99 @@ type Template struct {
 
 // TODO: add strict mode toggle (only process data-attributes)
 func (template *Template) Process(data *TemplateData) (htmlBytes []byte, err error) {
-	if template.Layout == nil { return nil, errors.New("template layout empty, nothing to do") } // guard
-	if template.MarkdownConfig == nil { template.MarkdownConfig = &DefaultHyperMarkConfig } // TODO: is this still needed?
+	if template.Layout == nil {
+		return nil, errors.New("template layout empty, nothing to do")
+	} // guard
+	if template.MarkdownConfig == nil {
+		template.MarkdownConfig = &DefaultHyperMarkConfig
+	} // TODO: is this still needed?
 
 	// process includes
-	if err = template.ResolveIncludes(); err != nil { return nil, err }
+	if err = template.ResolveIncludes(); err != nil {
+		return nil, err
+	}
 
 	// process layout template data
 	data.Set("layout", template.LayoutData())
 
 	// process conditionals and debuggers, then render template
 	for _, element := range template.HyperIfElements() {
-		if err = template.EvaluateElement(element, data, true); err != nil { return nil, err }
+		if err = template.EvaluateElement(element, data, true); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperNotElements() {
-		if err = template.EvaluateElement(element, data, false); err != nil { return nil, err }
+		if err = template.EvaluateElement(element, data, false); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperDebugElements() {
-		if err = template.Debug(element, data); err != nil { return nil, err }
+		if err = template.Debug(element, data); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperTemplateElements() {
-		if err = template.RenderTemplate(element, data); err != nil { return nil, err }
+		if err = template.RenderTemplate(element, data); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperAttrsElements() {
-		if err = template.RenderAttributes(element, data); err != nil { return nil, err }
+		if err = template.RenderAttributes(element, data); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperQueryElements() {
-		if err = template.RenderQueryParams(element, data); err != nil { return nil, err }
+		if err = template.RenderQueryParams(element, data); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperParamsElements() {
-		if err = template.RenderParams(element, data); err != nil { return nil, err }
+		if err = template.RenderParams(element, data); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperContentElements() {
-		if err = template.RenderContent(element, data); err != nil { return nil, err }
+		if err = template.RenderContent(element, data); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperBlockElements() {
-		if err = template.RenderBlocks(element); err != nil { return nil, err }
+		if err = template.RenderBlocks(element); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperPipeElements() {
-		if err = template.RenderPipe(element); err != nil { return nil, err }
+		if err = template.RenderPipe(element); err != nil {
+			return nil, err
+		}
 	}
 	for _, element := range template.HyperBaseElements() {
-		if err = template.RenderBasedElement(element, data); err != nil { return nil, err }
+		if err = template.RenderBasedElement(element, data); err != nil {
+			return nil, err
+		}
 	}
 	return template.HTML(template.Layout), nil
 }
 
 func (template *Template) ResolveIncludes() (err error) {
 	for _, element := range template.HyperIncludeElements() {
-		if err = template.Include(element); err != nil { return err }
+		if err = template.Include(element); err != nil {
+			return err
+		}
 	}
 	if len(template.HyperIncludeElements()) > 0 {
-		if err = template.ResolveIncludes(); err != nil { return err } // RECURSION!
+		if err = template.ResolveIncludes(); err != nil {
+			return err
+		} // RECURSION!
 	}
 	return nil
 }
 func (template *Template) Include(element *html.Node) (err error) {
 	path := getAttribute(element, HyperIncludeAttributeStrings...)
 	fragments, err := template.IncludeFragments(element, path)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	template.PassthroughAttributes(element, true, fragments...)
 	outerHTML(element, fragments)
 	return nil
@@ -99,18 +133,30 @@ func (template *Template) Include(element *html.Node) (err error) {
 func (template *Template) IncludeFragments(element *html.Node, path string) ([]*html.Node, error) {
 	includePath := template.Theme.ResourcePath(path)
 	source, err := os.ReadFile(includePath)
-	if err != nil { return nil, err }
-	if len(source) == 0 { return []*html.Node{}, nil } // TODO: throw an error if fragment source is empty?
+	if err != nil {
+		return nil, err
+	}
+	if len(source) == 0 {
+		return []*html.Node{}, nil
+	} // TODO: throw an error if fragment source is empty?
 	fragment, err := html.ParseFragment(bytes.NewReader(source), element.Parent)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return fragment, nil
 }
 func (template *Template) IncludeFragment(element *html.Node, path string) (fragment *html.Node, err error) {
 	var fragments []*html.Node
-	if fragments, err = template.IncludeFragments(element, path); err != nil { return nil, err}
-	if len(fragments) == 0 { return &html.Node{}, nil } // TODO: throw an error if no fragments found?
-	for _,fragment := range fragments {
-		if fragment.Type == html.ElementNode { return fragment, nil }
+	if fragments, err = template.IncludeFragments(element, path); err != nil {
+		return nil, err
+	}
+	if len(fragments) == 0 {
+		return &html.Node{}, nil
+	} // TODO: throw an error if no fragments found?
+	for _, fragment := range fragments {
+		if fragment.Type == html.ElementNode {
+			return fragment, nil
+		}
 	}
 	// TODO: select the first element from fragments that matches the target element tag name?
 	return fragments[0], nil // fallback to the first element, which could be a comment node
@@ -123,57 +169,85 @@ func (template *Template) EvaluateElement(element *html.Node, data *TemplateData
 			removeAttributes(element, "hidden") // remove "hidden" attribute if set
 		} else {
 			setAttribute(element, "hidden", "true") // hide conditional content
-			if template.TidyMode { removeElement(element) } // remove the element (if possible)
+			if template.TidyMode {
+				removeElement(element)
+			} // remove the element (if possible)
 		}
 	}
-	if template.TidyMode { removeAttributes(element, HyperConditionalAttributeStrings...) } // cleanup
+	if template.TidyMode {
+		removeAttributes(element, HyperConditionalAttributeStrings...)
+	} // cleanup
 	return nil
 }
 
 func (template *Template) RenderTemplate(element *html.Node, data *TemplateData) (err error) {
 	var params Parameters
 	paramString := getAttribute(element, HyperTemplateAttributeStrings...)
-	if params = template.ParseParameters(paramString, data); len(params) == 0 { return nil } // TODO: do we still need to handle tidy_mode for empty ht-template attributes?
+	if params = template.ParseParameters(paramString, data); len(params) == 0 {
+		return nil
+	} // TODO: do we still need to handle tidy_mode for empty ht-template attributes?
 	for index, value := range params[0].ValueSet() {
 		index += 1 // one-indexed
 		count := len(params[0].ValueSet())
-		layoutTemplate := cloneElement(element) // element becomes the new/nested layout template
+		layoutTemplate := cloneElement(element)                            // element becomes the new/nested layout template
 		removeAttributes(layoutTemplate, HyperTemplateAttributeStrings...) // remove the ht-template attribute from the new layout template
-		nestedData := &TemplateData{} // instantiate a new/scoped TemplateData object for the new layout template
-		nestedData.Set("ht", TemplateData{ "index": index, "count": count }) // set template meta
+		nestedData := &TemplateData{}                                      // instantiate a new/scoped TemplateData object for the new layout template
+		nestedData.Set("ht", TemplateData{"index": index, "count": count}) // set template meta
 		nestedData.Set(params[0].Target, value)
-		for _, p := range params[1:] { nestedData.Set(p.Target, p.Value()) } // set additional TemplateData values
-		nestedTemplate := Template{ Layout: layoutTemplate, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig }
-		if _,err = nestedTemplate.Process(nestedData); err != nil { return err } // RECURSION!
-		if layoutTemplate.Type == html.CommentNode { continue } // skip comment nodes
-		if layoutTemplate.Type == html.ElementNode { element.Parent.InsertBefore(layoutTemplate, element) } // NOTE: when InsertBefore argument #2 (oldChild) is nil, InsertBefore effectively becomes InsertAfter
+		for _, p := range params[1:] {
+			nestedData.Set(p.Target, p.Value())
+		} // set additional TemplateData values
+		nestedTemplate := Template{Layout: layoutTemplate, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig}
+		if _, err = nestedTemplate.Process(nestedData); err != nil {
+			return err
+		} // RECURSION!
+		if layoutTemplate.Type == html.CommentNode {
+			continue
+		} // skip comment nodes
+		if layoutTemplate.Type == html.ElementNode {
+			element.Parent.InsertBefore(layoutTemplate, element)
+		} // NOTE: when InsertBefore argument #2 (oldChild) is nil, InsertBefore effectively becomes InsertAfter
 	}
 	setAttribute(element, "hidden", "true") // hide placeholder template content
-	if template.TidyMode { removeElement(element) } // cleanup
+	if template.TidyMode {
+		removeElement(element)
+	} // cleanup
 	return nil
 }
 
 func (template *Template) RenderAttributes(element *html.Node, data *TemplateData) (err error) {
 	paramString := getAttribute(element, HyperAttrsAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, data) {
-		if param.Value() == nil { continue } // noop when no matching values found
+		if param.Value() == nil {
+			continue
+		} // noop when no matching values found
 		paramValue := fmt.Sprintf("%v", param.Value())
 		setAttribute(element, param.Target, paramValue)
-		if template.TidyMode { removeAttributes(element, HyperAttrsAttributeStrings...) } // cleanup
+		if template.TidyMode {
+			removeAttributes(element, HyperAttrsAttributeStrings...)
+		} // cleanup
 	}
 	return nil
 }
 
 func (template *Template) RenderBasedElement(element *html.Node, data *TemplateData) (err error) {
 	paramString := getAttribute(element, HyperBaseAttributeStrings...)
-	for _,param := range template.ParseParameters(paramString, data) {
-		if len(param.Values) == 0 { continue } // noop when no matching values found
+	for _, param := range template.ParseParameters(paramString, data) {
+		if len(param.Values) == 0 {
+			continue
+		} // noop when no matching values found
 		removeAttributes(element, HyperBaseAttributeStrings...)
 		var baseURL *url.URL
 		var baseHref string = fmt.Sprintf("%s", param.Value())
-		if !(strings.HasSuffix(baseHref, "/") || strings.HasSuffix(baseHref, "index.html")) { baseHref += "/" } // ensure trailing slash
-		if baseURL,err = url.Parse(baseHref); err != nil { return nil }
-		if template.ResolveBasedAttributes(element, param.Target, baseURL) != nil { return err }
+		if !(strings.HasSuffix(baseHref, "/") || strings.HasSuffix(baseHref, "index.html")) {
+			baseHref += "/"
+		} // ensure trailing slash
+		if baseURL, err = url.Parse(baseHref); err != nil {
+			return nil
+		}
+		if template.ResolveBasedAttributes(element, param.Target, baseURL) != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -181,16 +255,28 @@ func (template *Template) RenderBasedElement(element *html.Node, data *TemplateD
 func (template *Template) ResolveBasedAttributes(element *html.Node, attribute string, baseURL *url.URL) (err error) {
 	debug := hasAttribute(element, HyperDebugAttributeStrings...)
 	selectors := fmt.Sprintf("[%[1]s]:not([data-ht-template] [%[1]s], [data-ht-template][%[1]s], [data-ht-base] [%[1]s], [data-ht-base][%[1]s])", attribute)
-	if !template.StrictMode { selectors += fmt.Sprintf(":not([ht-template] [%[1]s], [ht-template][%[1]s], [ht-base] [%[1]s], [ht-base][%[1]s])", attribute) }
+	if !template.StrictMode {
+		selectors += fmt.Sprintf(":not([ht-template] [%[1]s], [ht-template][%[1]s], [ht-base] [%[1]s], [ht-base][%[1]s])", attribute)
+	}
 	for _, el := range QueryRoot(element, selectors) {
 		var resolvedHref string
 		targetHref := getAttribute(el, attribute)
-		if debug { fmt.Printf("base %s='%s' resolving\n", attribute, targetHref) }
-		if strings.HasPrefix(targetHref, "data:") { continue } // skip data URIs
-		if template.IsAbsoluteHref(targetHref) { continue } // skip absolute hrefs
-		targetURL := baseURL.ResolveReference(&url.URL{ Path: targetHref }) // resolve relative hrefs
-		if resolvedHref,err = url.PathUnescape(targetURL.String()); err != nil { return err } // unescape the URL
-		if debug { fmt.Printf("base %[1]s='%[2]s' => %[1]s='%[3]s' resolved\n", attribute, targetHref, resolvedHref) } // debug output
+		if debug {
+			fmt.Printf("base %s='%s' resolving\n", attribute, targetHref)
+		}
+		if strings.HasPrefix(targetHref, "data:") {
+			continue
+		} // skip data URIs
+		if template.IsAbsoluteHref(targetHref) {
+			continue
+		} // skip absolute hrefs
+		targetURL := baseURL.ResolveReference(&url.URL{Path: targetHref}) // resolve relative hrefs
+		if resolvedHref, err = url.PathUnescape(targetURL.String()); err != nil {
+			return err
+		} // unescape the URL
+		if debug {
+			fmt.Printf("base %[1]s='%[2]s' => %[1]s='%[3]s' resolved\n", attribute, targetHref, resolvedHref)
+		} // debug output
 		setAttribute(el, attribute, resolvedHref)
 	}
 	return nil
@@ -199,19 +285,27 @@ func (template *Template) ResolveBasedAttributes(element *html.Node, attribute s
 func (template *Template) RenderContent(element *html.Node, data *TemplateData) (err error) {
 	paramString := getAttribute(element, HyperContentAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, data) {
-		if len(param.Values) == 0 { continue } // noop when no matching values found
+		if len(param.Values) == 0 {
+			continue
+		} // noop when no matching values found
 		switch param.Target {
 		case "html":
 			htmlString := fmt.Sprintf("%v", param.Value())
 			fragment, err := html.ParseFragment(strings.NewReader(htmlString), element)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			innerHTML(element, fragment)
 		case "markdown":
 			md := HyperMark{}.New(template.MarkdownConfig)
 			content := fmt.Sprintf("%v", param.Value())
-			if err := md.Parse([]byte(content)); err != nil { return err }
+			if err := md.Parse([]byte(content)); err != nil {
+				return err
+			}
 			fragment, err := html.ParseFragment(strings.NewReader(md.Content), element)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			// TODO: markdown render hooks?
 			// See:
 			//   https://gohugo.io/render-hooks/
@@ -221,28 +315,40 @@ func (template *Template) RenderContent(element *html.Node, data *TemplateData) 
 			innerText(element, fmt.Sprintf("%v", param.Value()))
 		}
 	}
-	if template.TidyMode { removeAttributes(element, HyperContentAttributeStrings...) } // cleanup
+	if template.TidyMode {
+		removeAttributes(element, HyperContentAttributeStrings...)
+	} // cleanup
 	return nil
 }
 
 func (template *Template) RenderParams(element *html.Node, data *TemplateData) (err error) {
 	var fragment []*html.Node
-	var fragmentDiv *html.Node = &html.Node{ Type: html.ElementNode, Data: "div", DataAtom: atom.Div }
+	var fragmentDiv *html.Node = &html.Node{Type: html.ElementNode, Data: "div", DataAtom: atom.Div}
 	var paramString string = getAttribute(element, HyperParamsAttributeStrings...)
 	outerText(element, getAttribute(element, "data-default", "default")) // set the default value, if provided
 	for _, param := range template.ParseParameters(paramString, data) {
-		if len(param.Values) == 0 { continue } // guard
-		if len(fmt.Sprintf("%v", param.Value())) == 0 { continue } // noop when no matching values found
+		if len(param.Values) == 0 {
+			continue
+		} // guard
+		if len(fmt.Sprintf("%v", param.Value())) == 0 {
+			continue
+		} // noop when no matching values found
 		switch param.Target {
 		case "html":
 			htmlString := fmt.Sprintf("%v", param.Value())
-			if fragment, err = html.ParseFragment(strings.NewReader(htmlString), fragmentDiv); err != nil { return err }
+			if fragment, err = html.ParseFragment(strings.NewReader(htmlString), fragmentDiv); err != nil {
+				return err
+			}
 			outerHTML(element, fragment)
 		case "markdown":
 			md := HyperMark{}.New(template.MarkdownConfig)
 			mdString := fmt.Sprintf("%v", param.Value())
-			if err := md.Parse([]byte(mdString)); err != nil { return err }
-			if fragment, err = html.ParseFragment(strings.NewReader(md.Content), fragmentDiv); err != nil { return err }
+			if err := md.Parse([]byte(mdString)); err != nil {
+				return err
+			}
+			if fragment, err = html.ParseFragment(strings.NewReader(md.Content), fragmentDiv); err != nil {
+				return err
+			}
 			outerHTML(element, fragment)
 		default:
 			outerText(element, fmt.Sprintf("%v", param.Value()))
@@ -256,15 +362,21 @@ func (template *Template) RenderBlocks(element *html.Node) (err error) {
 	var fragmentRef string = filepath.Join(template.Theme.Config.BlocksDirectory, element.Data)
 	var fragmentData TemplateData
 	var fragmentNodes []*html.Node
-	if fragment, err = template.IncludeFragment(element, fragmentRef); err != nil { return err }
+	if fragment, err = template.IncludeFragment(element, fragmentRef); err != nil {
+		return err
+	}
 	template.PassthroughAttributes(element, false, fragment)
 	fragmentData = template.AttributeData(element)
 	fragmentNodes = childNodes(element)
-	if len(fragmentNodes) > 0 { fragmentData["content"] = string(template.HTML(fragmentNodes...)) }
-	shortcode := Template{ Layout: fragment, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig, BlockMode: true }
+	if len(fragmentNodes) > 0 {
+		fragmentData["content"] = string(template.HTML(fragmentNodes...))
+	}
+	shortcode := Template{Layout: fragment, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig, BlockMode: true}
 	shortcode.Process(&fragmentData) // RECURSION!
 	element.Parent.InsertBefore(shortcode.Layout, element)
-	if template.TidyMode { removeElement(element) } // cleanup
+	if template.TidyMode {
+		removeElement(element)
+	} // cleanup
 	return nil
 }
 
@@ -272,17 +384,23 @@ func (template *Template) RenderPipe(element *html.Node) (err error) {
 	var destination *html.Node
 	paramString := getAttribute(element, HyperPipeAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, &TemplateData{}) {
-		if destination = Query(template.Layout, param.Keys...); destination == nil { continue }
+		if destination = Query(template.Layout, param.Keys...); destination == nil {
+			continue
+		}
 		element.Parent.RemoveChild(element) // remove the element from the DOM
 		switch param.Target {
-			case "text", "css", "js", "javascript":
-				appendText(destination, template.innerText(element, true))
-			default:
-				destination.AppendChild(element) // pipe the element to the destination 😱
+		case "text", "css", "js", "javascript":
+			appendText(destination, template.innerText(element, true))
+		default:
+			destination.AppendChild(element) // pipe the element to the destination 😱
 		}
 	}
-	if template.BlockMode { return nil } // skip cleanup in block mode
-	if template.TidyMode { removeAttributes(element, HyperPipeAttributeStrings...) } // cleanup
+	if template.BlockMode {
+		return nil
+	} // skip cleanup in block mode
+	if template.TidyMode {
+		removeAttributes(element, HyperPipeAttributeStrings...)
+	} // cleanup
 	return nil
 }
 
@@ -293,9 +411,15 @@ func (template *Template) RenderQueryParams(element *html.Node, data *TemplateDa
 		var attributeName string
 		var attributeQuery string
 		var hasQuery bool
-		if param.Value() == nil { continue } // guard
-		if attributeName,attributeQuery,hasQuery = strings.Cut(param.Target, "?"); !hasQuery { continue } // guard
-		if err = setAttributeQueryParam(element, attributeName, attributeQuery, fmt.Sprintf("%v", param.Value()), debug); err != nil { return err } // set the query parameter
+		if param.Value() == nil {
+			continue
+		} // guard
+		if attributeName, attributeQuery, hasQuery = strings.Cut(param.Target, "?"); !hasQuery {
+			continue
+		} // guard
+		if err = setAttributeQueryParam(element, attributeName, attributeQuery, fmt.Sprintf("%v", param.Value()), debug); err != nil {
+			return err
+		} // set the query parameter
 		removeAttributes(element, HyperQueryAttributeStrings...) // cleanup
 	}
 	return nil
@@ -304,14 +428,18 @@ func (template *Template) RenderQueryParams(element *html.Node, data *TemplateDa
 func (template *Template) Debug(element *html.Node, data *TemplateData) (err error) {
 	var modes []string
 	modesString := strings.ReplaceAll(getAttribute(element, HyperDebugAttributeStrings...), " ", "") // remove spaces
-	if len(modesString) > 0 { modes = strings.Split(modesString, ",") }
-	if len(modes) == 0 { return nil } // nothing to do, leave the ht-debug attribute in place
-	statement := fmt.Appendf([]byte{}, "\n===== ht-debug =====\n")
-	if slices.Contains(modes, "element") { 
-		statement = fmt.Appendf(statement, "%s\n", template.HTML(element)) 
+	if len(modesString) > 0 {
+		modes = strings.Split(modesString, ",")
 	}
-	if slices.Contains(modes, "data") { 
-		dataBytes,_ := json.MarshalIndent(&data, "", "\t") // ignore errors
+	if len(modes) == 0 {
+		return nil
+	} // nothing to do, leave the ht-debug attribute in place
+	statement := fmt.Appendf([]byte{}, "\n===== ht-debug =====\n")
+	if slices.Contains(modes, "element") {
+		statement = fmt.Appendf(statement, "%s\n", template.HTML(element))
+	}
+	if slices.Contains(modes, "data") {
+		dataBytes, _ := json.MarshalIndent(&data, "", "\t") // ignore errors
 		statement = fmt.Appendf(statement, "%s\n", dataBytes)
 	}
 	statement = fmt.Appendf(statement, "====================\n")
@@ -324,119 +452,156 @@ func (template *Template) Debug(element *html.Node, data *TemplateData) (err err
 // Helper types, methods, and functions
 // =============================================================================
 
+var HyperIncludeAttributeStrings = []string{"data-ht-include", "ht-include"}
 
-var HyperIncludeAttributeStrings = []string{ "data-ht-include", "ht-include" }
-func (template *Template) HyperIncludeElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-include]:not([data-ht-template] [data-ht-include])" }
-	if template.StrictMode { return QueryAll(template.Layout, selectors...) }
+func (template *Template) HyperIncludeElements() []*html.Node {
+	selectors := []string{"[data-ht-include]:not([data-ht-template] [data-ht-include])"}
+	if template.StrictMode {
+		return QueryAll(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-include])"
 	selectors = append(selectors, "[ht-include]:not([ht-template] [ht-include]):not([data-ht-template] [ht-include])")
 	return QueryAll(template.Layout, selectors...)
 }
 
-var HyperConditionalAttributeStrings = []string{ "data-ht-if", "ht-if", "data-ht-not", "ht-not" }
-var HyperIfAttributeStrings = []string{ "data-ht-if", "ht-if" }
-func (template *Template) HyperIfElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-if]:not([data-ht-template] [data-ht-if], [data-ht-template][data-ht-if])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperConditionalAttributeStrings = []string{"data-ht-if", "ht-if", "data-ht-not", "ht-not"}
+var HyperIfAttributeStrings = []string{"data-ht-if", "ht-if"}
+
+func (template *Template) HyperIfElements() []*html.Node {
+	selectors := []string{"[data-ht-if]:not([data-ht-template] [data-ht-if], [data-ht-template][data-ht-if])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-if], [ht-template][data-ht-if])"
 	selectors = append(selectors, "[ht-if]:not([ht-template] [ht-if], [ht-template][ht-if]):not([data-ht-template] [ht-if], [data-ht-template][ht-if])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperNotAttributeStrings = []string{ "data-ht-not", "ht-not" }
-func (template *Template) HyperNotElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-not]:not([data-ht-template] [data-ht-not], [data-ht-template][data-ht-not])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperNotAttributeStrings = []string{"data-ht-not", "ht-not"}
+
+func (template *Template) HyperNotElements() []*html.Node {
+	selectors := []string{"[data-ht-not]:not([data-ht-template] [data-ht-not], [data-ht-template][data-ht-not])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-not], [ht-template][data-ht-not])"
 	selectors = append(selectors, "[ht-not]:not([ht-template] [ht-not], [ht-template][ht-not]):not([data-ht-template] [ht-not], [data-ht-template][ht-not])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperTemplateAttributeStrings = []string{ "data-ht-template", "ht-template" }
-func (template *Template) HyperTemplateElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-template]:not([data-ht-template] [data-ht-template])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperTemplateAttributeStrings = []string{"data-ht-template", "ht-template"}
+
+func (template *Template) HyperTemplateElements() []*html.Node {
+	selectors := []string{"[data-ht-template]:not([data-ht-template] [data-ht-template])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-template])"
 	selectors = append(selectors, "[ht-template]:not([ht-template] [ht-template]):not([data-ht-template] [ht-template])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperAttrsAttributeStrings = []string{ "data-ht-attrs", "ht-attrs" }
-func (template *Template) HyperAttrsElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-attrs]:not([data-ht-template] [data-ht-attrs], [data-ht-template][data-ht-attrs])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperAttrsAttributeStrings = []string{"data-ht-attrs", "ht-attrs"}
+
+func (template *Template) HyperAttrsElements() []*html.Node {
+	selectors := []string{"[data-ht-attrs]:not([data-ht-template] [data-ht-attrs], [data-ht-template][data-ht-attrs])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-attrs], [ht-template][data-ht-attrs])"
 	selectors = append(selectors, "[ht-attrs]:not([ht-template] [ht-attrs], [ht-template][ht-attrs]):not([data-ht-template] [ht-attrs], [data-ht-template][ht-attrs])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperQueryAttributeStrings = []string{ "data-ht-query", "ht-query" }
-func (template *Template) HyperQueryElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-query]:not([data-ht-template] [data-ht-query], [data-ht-template][data-ht-query])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperQueryAttributeStrings = []string{"data-ht-query", "ht-query"}
+
+func (template *Template) HyperQueryElements() []*html.Node {
+	selectors := []string{"[data-ht-query]:not([data-ht-template] [data-ht-query], [data-ht-template][data-ht-query])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-query], [ht-template][data-ht-query])"
 	selectors = append(selectors, "[ht-query]:not([ht-template] [ht-query], [ht-template][ht-query]):not([data-ht-template] [ht-query], [data-ht-template][ht-attrs])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperBaseAttributeStrings = []string{ "data-ht-base", "ht-base" }
-func (template *Template) HyperBaseElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-base]:not([data-ht-template] [data-ht-base], [data-ht-template][data-ht-base])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperBaseAttributeStrings = []string{"data-ht-base", "ht-base"}
+
+func (template *Template) HyperBaseElements() []*html.Node {
+	selectors := []string{"[data-ht-base]:not([data-ht-template] [data-ht-base], [data-ht-template][data-ht-base])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-base], [ht-template][data-ht-base])"
 	selectors = append(selectors, "[ht-base]:not([ht-template] [ht-base], [ht-template][ht-base]):not([data-ht-template] [ht-base], [data-ht-template][ht-base])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperContentAttributeStrings = []string{ "data-ht-content", "ht-content" }
-func (template *Template) HyperContentElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-content]:not([data-ht-template] [data-ht-content])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperContentAttributeStrings = []string{"data-ht-content", "ht-content"}
+
+func (template *Template) HyperContentElements() []*html.Node {
+	selectors := []string{"[data-ht-content]:not([data-ht-template] [data-ht-content])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-content])"
 	selectors = append(selectors, "[ht-content]:not([ht-template] [ht-content]):not([data-ht-template] [ht-content])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperParamsAttributeStrings = []string{ "data-ht-param", "ht-param" }
-func (template *Template) HyperParamsElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-param]:not([data-ht-template] [data-ht-param])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperParamsAttributeStrings = []string{"data-ht-param", "ht-param"}
+
+func (template *Template) HyperParamsElements() []*html.Node {
+	selectors := []string{"[data-ht-param]:not([data-ht-template] [data-ht-param])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-param])"
 	selectors = append(selectors, "[ht-param]:not([ht-template] [ht-param]):not([data-ht-template] [ht-param])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperBlockAttributeStrings = []string{ "data-ht-block", "ht-block" }
-func (template *Template) HyperBlockElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-block]" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperBlockAttributeStrings = []string{"data-ht-block", "ht-block"}
+
+func (template *Template) HyperBlockElements() []*html.Node {
+	selectors := []string{"[data-ht-block]"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors = append(selectors, "[ht-block]")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperPipeAttributeStrings = []string{ "data-ht-pipe", "ht-pipe" }
-func (template *Template) HyperPipeElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-pipe]:not([data-ht-template] [data-ht-pipe])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperPipeAttributeStrings = []string{"data-ht-pipe", "ht-pipe"}
+
+func (template *Template) HyperPipeElements() []*html.Node {
+	selectors := []string{"[data-ht-pipe]:not([data-ht-template] [data-ht-pipe])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-pipe])"
 	selectors = append(selectors, "[ht-pipe]:not([ht-template] [ht-pipe]):not([data-ht-template] [ht-pipe])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperDebugAttributeStrings = []string{ "data-ht-debug", "ht-debug" }
-func (template *Template) HyperDebugElements() ([]*html.Node) {
-	selectors := []string{ "[data-ht-debug]:not([data-ht-template] [data-ht-debug], [data-ht-template][data-ht-debug])" }
-	if template.StrictMode { return QueryRoot(template.Layout, selectors...) }
+var HyperDebugAttributeStrings = []string{"data-ht-debug", "ht-debug"}
+
+func (template *Template) HyperDebugElements() []*html.Node {
+	selectors := []string{"[data-ht-debug]:not([data-ht-template] [data-ht-debug], [data-ht-template][data-ht-debug])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
 	selectors[0] += ":not([ht-template] [data-ht-debug], [ht-template][data-ht-debug])"
 	selectors = append(selectors, "[ht-debug]:not([ht-template] [ht-debug], [ht-template][ht-debug]):not([data-ht-template] [ht-debug], [data-ht-template][ht-debug])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
-func (template *Template) HTML(elements ...*html.Node) ([]byte) {
-	if len(elements) == 0 { return []byte{} } // guard
+func (template *Template) HTML(elements ...*html.Node) []byte {
+	if len(elements) == 0 {
+		return []byte{}
+	} // guard
 	buffer := new(bytes.Buffer)
-	for _,element := range elements {
+	for _, element := range elements {
 		html.Render(buffer, element)
 	}
 	return buffer.Bytes()
@@ -449,39 +614,57 @@ func (template *Template) innerText(element *html.Node, unescape bool) (text str
 	} else {
 		innerText = string(template.HTML(childNodes(element)...))
 	}
-	if unescape { innerText = html.UnescapeString(innerText) }
+	if unescape {
+		innerText = html.UnescapeString(innerText)
+	}
 	return innerText
 }
 
 func Query(node *html.Node, query ...string) (element *html.Node) {
-	if node == nil { return nil } // guard
-	for _,q := range query {
+	if node == nil {
+		return nil
+	} // guard
+	for _, q := range query {
 		sel, err := cascadia.Parse(q)
-		if err != nil { return nil }
+		if err != nil {
+			return nil
+		}
 		element = cascadia.Query(node, sel)
-		if element != nil { break }
+		if element != nil {
+			break
+		}
 	}
 	return element
 }
 
 func QueryAll(node *html.Node, query ...string) (elements []*html.Node) {
-	if node == nil { return []*html.Node{} } // guard
+	if node == nil {
+		return []*html.Node{}
+	} // guard
 	elements = []*html.Node{}
-	for _,q := range query {
+	for _, q := range query {
 		sel, err := cascadia.Parse(q)
-		if err != nil { return []*html.Node{} }
+		if err != nil {
+			return []*html.Node{}
+		}
 		elements = append(elements, cascadia.QueryAll(node, sel)...)
 	}
 	return elements
 }
 
 func QueryRoot(node *html.Node, query ...string) (elements []*html.Node) {
-	if node == nil { return []*html.Node{} } // guard
+	if node == nil {
+		return []*html.Node{}
+	} // guard
 	elements = []*html.Node{}
-	for _,q := range query {
+	for _, q := range query {
 		sel, err := cascadia.Parse(q)
-		if err != nil { return []*html.Node{} }
-		if sel.Match(node) { elements = append(elements, node) }
+		if err != nil {
+			return []*html.Node{}
+		}
+		if sel.Match(node) {
+			elements = append(elements, node)
+		}
 		elements = append(elements, cascadia.QueryAll(node, sel)...)
 	}
 	return elements
@@ -489,14 +672,16 @@ func QueryRoot(node *html.Node, query ...string) (elements []*html.Node) {
 
 func (template *Template) ParseParameters(attr string, data *TemplateData) Parameters {
 	params := Parameters{}
-	if len(attr) == 0 { return params }
+	if len(attr) == 0 {
+		return params
+	}
 	for _, param := range strings.Split(attr, ";") {
 		param = strings.TrimSpace(param)
 		params = append(params, template.ParseParameter(param, data))
 	}
 	return params
 }
-func (template *Template) ParseParameter(attr string, data *TemplateData) (*Parameter) {
+func (template *Template) ParseParameter(attr string, data *TemplateData) *Parameter {
 	param := &Parameter{}
 	param.Parse(attr)
 	param.Resolve(data)
@@ -504,18 +689,26 @@ func (template *Template) ParseParameter(attr string, data *TemplateData) (*Para
 }
 
 func (template *Template) PassthroughAttributes(placeholder *html.Node, strict bool, target ...*html.Node) {
-	if len(target) == 0 { return } // guard
-	if strict && placeholder.Data != target[0].Data { return }
+	if len(target) == 0 {
+		return
+	} // guard
+	if strict && placeholder.Data != target[0].Data {
+		return
+	}
 	for _, attr := range placeholder.Attr {
-		if slices.Contains(HyperIncludeAttributeStrings, attr.Key) { continue } // skip the ht-include attribute
-		if slices.Contains(HyperBlockAttributeStrings, attr.Key) { continue } // skip the ht-block attribute
+		if slices.Contains(HyperIncludeAttributeStrings, attr.Key) {
+			continue
+		} // skip the ht-include attribute
+		if slices.Contains(HyperBlockAttributeStrings, attr.Key) {
+			continue
+		} // skip the ht-block attribute
 		setAttribute(target[0], attr.Key, attr.Val)
 	}
 }
 
 func (template *Template) AttributeData(element *html.Node) (data TemplateData) {
 	data = TemplateData{}
-	for _,attr := range element.Attr {
+	for _, attr := range element.Attr {
 		data[attr.Key] = attr.Val
 	}
 	return data
@@ -532,27 +725,39 @@ func (template *Template) LayoutData() (data TemplateData) {
 }
 
 func hasAttribute(element *html.Node, keys ...string) bool {
-	if element.Type != html.ElementNode { return false }
+	if element.Type != html.ElementNode {
+		return false
+	}
 	for _, attr := range element.Attr {
-		if slices.Contains(keys, attr.Key) { return true }
+		if slices.Contains(keys, attr.Key) {
+			return true
+		}
 	}
 	return false
 }
 
 func getAttribute(element *html.Node, keys ...string) (value string) {
 	value = ""
-	if element.Type != html.ElementNode { return value }
+	if element.Type != html.ElementNode {
+		return value
+	}
 	for _, attr := range element.Attr {
-		if slices.Contains(keys, attr.Key) { return attr.Val }
+		if slices.Contains(keys, attr.Key) {
+			return attr.Val
+		}
 	}
 	return value
 }
 
 func setAttribute(element *html.Node, key string, value string) {
-	if element.Type != html.ElementNode { return } // guard
+	if element.Type != html.ElementNode {
+		return
+	} // guard
 	attributeIndex := -1
 	for i, attr := range element.Attr {
-		if attr.Key != key { continue } // guard
+		if attr.Key != key {
+			continue
+		} // guard
 		attributeIndex = i
 		break
 	}
@@ -566,11 +771,15 @@ func setAttribute(element *html.Node, key string, value string) {
 func setAttributeQueryParam(element *html.Node, attribute string, queryParam string, value string, debug bool) (err error) {
 	var attributeURL *url.URL
 	attributeHref := getAttribute(element, attribute)
-	if attributeURL,err = url.Parse(attributeHref); err != nil { return err } // parse the attribute URL
-	query := attributeURL.Query() // get the query parameters
-	query.Set(queryParam, value) // set the query parameter
+	if attributeURL, err = url.Parse(attributeHref); err != nil {
+		return err
+	} // parse the attribute URL
+	query := attributeURL.Query()          // get the query parameters
+	query.Set(queryParam, value)           // set the query parameter
 	attributeURL.RawQuery = query.Encode() // update URL with new query parameters
-	if debug { fmt.Printf("urlquery %s => %s updating\n",  attributeHref, attributeURL.String()) }
+	if debug {
+		fmt.Printf("urlquery %s => %s updating\n", attributeHref, attributeURL.String())
+	}
 	setAttribute(element, attribute, attributeURL.String()) // update the element attribute with the modified URL
 	return nil
 }
@@ -580,16 +789,22 @@ func removeElement(element *html.Node) {
 		element.Parent.RemoveChild(element)
 	} else {
 		element.Type = html.CommentNode // comment out the element
-		element.Data = "" // remove the element data (tag name)
-		element.Attr = nil // remove the element attributes
+		element.Data = ""               // remove the element data (tag name)
+		element.Attr = nil              // remove the element attributes
 	}
 }
 
 func removeAttributes(element *html.Node, keys ...string) {
-	if element == nil { return } // guard
-	if element.Type != html.ElementNode { return } // guard
+	if element == nil {
+		return
+	} // guard
+	if element.Type != html.ElementNode {
+		return
+	} // guard
 	for i, attr := range element.Attr {
-		if !slices.Contains(keys, attr.Key) { continue }
+		if !slices.Contains(keys, attr.Key) {
+			continue
+		}
 		element.Attr = append(element.Attr[:i], element.Attr[i+1:]...)
 		break
 	}
@@ -600,7 +815,7 @@ func innerText(element *html.Node, text string) {
 		element.Data = text
 		return
 	}
-	for _,child := range childNodes(element) {
+	for _, child := range childNodes(element) {
 		element.RemoveChild(child)
 	}
 	element.AppendChild(&html.Node{Type: html.TextNode, Data: text})
@@ -618,8 +833,10 @@ func outerText(element *html.Node, text string) {
 }
 
 func innerHTML(element *html.Node, hypertext []*html.Node) {
-	if element.Type != html.ElementNode { return } // guard
-	for _,child := range childNodes(element) {
+	if element.Type != html.ElementNode {
+		return
+	} // guard
+	for _, child := range childNodes(element) {
 		child.Parent.RemoveChild(child)
 	}
 	for _, newElement := range hypertext {
@@ -648,7 +865,7 @@ func cloneElement(element *html.Node) *html.Node {
 	return clone
 }
 
-func childNodes(element *html.Node) ([]*html.Node) {
+func childNodes(element *html.Node) []*html.Node {
 	children := []*html.Node{}
 	for child := element.FirstChild; child != nil; child = child.NextSibling {
 		children = append(children, child)
@@ -662,8 +879,12 @@ func childNodes(element *html.Node) ([]*html.Node) {
 // 	}
 // }
 
-func (template *Template) IsAbsoluteHref(href string) (bool) {
-	if strings.HasPrefix(href, "http://") || strings.HasPrefix(href, "https://") || strings.HasPrefix(href, "//") { return true }
-	if strings.HasPrefix(href, "/") { return true }
+func (template *Template) IsAbsoluteHref(href string) bool {
+	if strings.HasPrefix(href, "http://") || strings.HasPrefix(href, "https://") || strings.HasPrefix(href, "//") {
+		return true
+	}
+	if strings.HasPrefix(href, "/") {
+		return true
+	}
 	return false // relative path
 }

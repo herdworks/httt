@@ -145,9 +145,9 @@ func TestParameter_Resolve(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		keys      []string
-		expected  []any
+		name     string
+		keys     []string
+		expected []any
 	}{
 		{
 			name:     "single existing key",
@@ -448,18 +448,18 @@ func TestParameter_Integration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			param := &Parameter{Number: tt.number}
-			
+
 			// Parse the attribute
 			param.Parse(tt.attr)
-			
+
 			// Resolve values from data
 			param.Resolve(&data)
-			
+
 			// Check target assignment
 			if param.Target != tt.expectedTarget {
 				t.Errorf("Integration test Target = %v, want %v", param.Target, tt.expectedTarget)
 			}
-			
+
 			// Evaluate conditions
 			result := param.Evaluate()
 			if result != tt.expectedEval {

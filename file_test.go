@@ -105,9 +105,9 @@ func TestHyperFile_Size(t *testing.T) {
 // TestHyperFile_Extension tests getting file extension
 func TestHyperFile_Extension(t *testing.T) {
 	tests := []struct {
-		name      string
-		path      string
-		expected  string
+		name     string
+		path     string
+		expected string
 	}{
 		{
 			name:     "HTML file",
@@ -135,7 +135,7 @@ func TestHyperFile_Extension(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			uri, _ := url.Parse(tt.path)
 			hyperFile := &HyperFile{URI: uri}
-			
+
 			got := hyperFile.Extension()
 			if got != tt.expected {
 				t.Errorf("HyperFile.Extension() = %v, want %v", got, tt.expected)
@@ -147,9 +147,9 @@ func TestHyperFile_Extension(t *testing.T) {
 // TestHyperFile_ExtensionType tests MIME type detection by extension
 func TestHyperFile_ExtensionType(t *testing.T) {
 	tests := []struct {
-		name      string
-		path      string
-		expected  string
+		name     string
+		path     string
+		expected string
 	}{
 		{
 			name:     "HTML file",
@@ -217,7 +217,7 @@ func TestHyperFile_ExtensionType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			uri, _ := url.Parse(tt.path)
 			hyperFile := &HyperFile{URI: uri}
-			
+
 			got := hyperFile.ExtensionType()
 			if got != tt.expected {
 				t.Errorf("HyperFile.ExtensionType() = %v, want %v", got, tt.expected)
@@ -337,7 +337,7 @@ func TestHyperFile_ContentType(t *testing.T) {
 			expected: "application/json",
 		},
 		{
-			name:     "both forms present (Content-Type takes precedence)",
+			name: "both forms present (Content-Type takes precedence)",
 			metadata: map[string]string{
 				"Content-Type": "text/html",
 				"content-type": "application/json",
@@ -594,7 +594,7 @@ func TestGetFilesByPattern(t *testing.T) {
 	htmlFile := filepath.Join(tmpDir, "test.html")
 	cssFile := filepath.Join(tmpDir, "style.css")
 	jsFile := filepath.Join(tmpDir, "script.js")
-	
+
 	for _, file := range []string{htmlFile, cssFile, jsFile} {
 		if err := os.WriteFile(file, []byte("content"), 0644); err != nil {
 			t.Fatalf("Failed to create test file %s: %v", file, err)
@@ -602,10 +602,10 @@ func TestGetFilesByPattern(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		include      string
-		exclude      string
-		expectedLen  int
+		name        string
+		include     string
+		exclude     string
+		expectedLen int
 	}{
 		{
 			name:        "include HTML files",

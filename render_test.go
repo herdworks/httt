@@ -111,27 +111,27 @@ func TestRender_DifferentDataFormats(t *testing.T) {
 		shouldFail bool
 	}{
 		{
-			name:     "JSON format",
-			filename: "data.json",
-			content:  `{"title": "JSON Test"}`,
+			name:       "JSON format",
+			filename:   "data.json",
+			content:    `{"title": "JSON Test"}`,
 			shouldFail: false,
 		},
 		{
-			name:     "YAML format",
-			filename: "data.yaml",
-			content:  "title: YAML Test\nauthor: Test Author",
+			name:       "YAML format",
+			filename:   "data.yaml",
+			content:    "title: YAML Test\nauthor: Test Author",
 			shouldFail: false,
 		},
 		{
-			name:     "YML format",
-			filename: "data.yml",
-			content:  "title: YML Test",
+			name:       "YML format",
+			filename:   "data.yml",
+			content:    "title: YML Test",
 			shouldFail: false,
 		},
 		{
-			name:     "Invalid JSON",
-			filename: "invalid.json",
-			content:  `{"title": "Test"`,
+			name:       "Invalid JSON",
+			filename:   "invalid.json",
+			content:    `{"title": "Test"`,
 			shouldFail: true,
 		},
 	}

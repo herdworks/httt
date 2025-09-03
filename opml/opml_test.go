@@ -186,10 +186,10 @@ func TestOPML_JSON(t *testing.T) {
 // TestOPML_Validate tests OPML validation
 func TestOPML_Validate(t *testing.T) {
 	tests := []struct {
-		name     string
-		opml     *OPML
-		wantErr  bool
-		errMsg   string
+		name    string
+		opml    *OPML
+		wantErr bool
+		errMsg  string
 	}{
 		{
 			name: "valid OPML",
@@ -416,17 +416,17 @@ func TestOPML_XMLMarshalUnmarshal(t *testing.T) {
 
 	// Check first outline
 	if unmarshaled.Body.Outlines[0].Text != original.Body.Outlines[0].Text {
-		t.Errorf("XML roundtrip first outline Text = %v, want %v", 
+		t.Errorf("XML roundtrip first outline Text = %v, want %v",
 			unmarshaled.Body.Outlines[0].Text, original.Body.Outlines[0].Text)
 	}
 	if unmarshaled.Body.Outlines[0].FaviconURL != original.Body.Outlines[0].FaviconURL {
-		t.Errorf("XML roundtrip first outline FaviconURL = %v, want %v", 
+		t.Errorf("XML roundtrip first outline FaviconURL = %v, want %v",
 			unmarshaled.Body.Outlines[0].FaviconURL, original.Body.Outlines[0].FaviconURL)
 	}
 
 	// Check nested outlines
 	if len(unmarshaled.Body.Outlines[1].Outlines) != len(original.Body.Outlines[1].Outlines) {
-		t.Errorf("XML roundtrip nested outlines length = %v, want %v", 
+		t.Errorf("XML roundtrip nested outlines length = %v, want %v",
 			len(unmarshaled.Body.Outlines[1].Outlines), len(original.Body.Outlines[1].Outlines))
 	}
 }
@@ -442,13 +442,13 @@ func TestOPML_JSONMarshalUnmarshal(t *testing.T) {
 		Body: Body{
 			Outlines: []*Outline{
 				{
-					Text:       "Sample Feed",
-					Type:       "rss",
-					HTMLURL:    "https://sample.example.com",
-					XMLURL:     "https://sample.example.com/feed.xml",
-					AudioURL:   "https://sample.example.com/podcast.mp3",
-					VideoURL:   "https://sample.example.com/video.mp4",
-					IsComment:  false,
+					Text:         "Sample Feed",
+					Type:         "rss",
+					HTMLURL:      "https://sample.example.com",
+					XMLURL:       "https://sample.example.com/feed.xml",
+					AudioURL:     "https://sample.example.com/podcast.mp3",
+					VideoURL:     "https://sample.example.com/video.mp4",
+					IsComment:    false,
 					IsBreakpoint: true,
 				},
 			},
@@ -480,7 +480,7 @@ func TestOPML_JSONMarshalUnmarshal(t *testing.T) {
 	// Check outline properties including custom attributes
 	outline := unmarshaled.Body.Outlines[0]
 	originalOutline := original.Body.Outlines[0]
-	
+
 	if outline.AudioURL != originalOutline.AudioURL {
 		t.Errorf("JSON roundtrip AudioURL = %v, want %v", outline.AudioURL, originalOutline.AudioURL)
 	}
@@ -496,7 +496,7 @@ func TestOPML_JSONMarshalUnmarshal(t *testing.T) {
 func TestOPML_EmptyHandling(t *testing.T) {
 	// Test with minimal OPML
 	minimal := &OPML{}
-	
+
 	// Should not panic with empty structure
 	rendered, err := minimal.Render()
 	if err != nil {
