@@ -1,7 +1,11 @@
+// hypertemplates-go module
+//
+// reference: https://go.dev/doc/modules/gomod-ref#replace
 module github.com/herdworks/hypertemplates-go
 
 go 1.23.5
 
+// direct dependencies
 require (
 	github.com/andybalholm/cascadia v1.3.2
 
@@ -16,6 +20,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+// transitive dependencies
 require (
 	github.com/dlclark/regexp2 v1.7.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
