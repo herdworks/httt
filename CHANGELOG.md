@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog], and this project adheres to [Semantic Versioning].
+The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org).
 
 ## Unreleased
 
@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog], and this project adheres to [Semantic
   * A fragment is a partial HTML document containing one or more elements
   * An element is a single HTML element
   * Content is user-generated data consisting of text and/or elements
+* Cleaned up OPML CRUD methods complete with tests (!)
+* Added RFC822 date parser to OPML package
 
 ## v0.17.3 (2025-09-02)
 
