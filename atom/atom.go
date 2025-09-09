@@ -44,6 +44,7 @@ package atom
 
 import (
 	"encoding/xml"
+	"regexp"
 	"time"
 )
 
@@ -113,3 +114,14 @@ func (t *TimeStamp) MarshalXML(encoder *xml.Encoder, start xml.StartElement) err
 	return encoder.EncodeElement(t.String(), start)
 }
 
+// AtomDetected demonstrates regexp on []byte.
+func AtomDetected(doc []byte) bool {
+	var patterns []*regexp.Regexp
+	patterns = append(patterns, regexp.MustCompile(`<(feed|entry)\b[^>]*\bxmlns\s*=\s*('http://www\.w3\.org/2005/Atom'|"http://www\.w3\.org/2005/Atom")`))
+	for _, pattern := range patterns {
+		if pattern.Match(doc) {
+			return true
+		}
+	}
+	return false
+}

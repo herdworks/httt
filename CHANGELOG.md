@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   * Content is user-generated data consisting of text and/or elements
 * Cleaned up OPML CRUD methods complete with tests (!)
 * Added RFC822 date parser to OPML package
+* Add Atom detection from `[]byte`
 
 ## v0.17.3 (2025-09-02)
 
