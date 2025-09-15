@@ -62,29 +62,35 @@ type Outlines []*Outline
 //
 // Usage:
 //
-//   var opml *OPML
-//   var err error
-//   if opml.URI, err = url.Parse("path/to/opml/file.opml"); err != nil { return err }
-//   if err = opml.Load(); err != nil { return err }
+//	var opml *OPML
+//	var err error
+//	if opml.URI, err = url.Parse("path/to/opml/file.opml"); err != nil { return err }
+//	if err = opml.Load(); err != nil { return err }
 func (opml *OPML) Load() error {
 	data, err := os.ReadFile(opml.URI.Path)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return opml.Unmarshal(data)
 }
 
 func (opml *OPML) Validate() error {
-	for _,outline := range opml.Body.Outlines {
-		if err := outline.Validate(); err != nil { return err }
+	for _, outline := range opml.Body.Outlines {
+		if err := outline.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (opml *OPML) Unmarshal(data []byte) (error) {
+func (opml *OPML) Unmarshal(data []byte) error {
 	return xml.Unmarshal(data, &opml)
 }
 
 func (opml *OPML) MarshalIndent(prefix string, indent string) ([]byte, error) {
-	if opml.Version == "" { opml.Version = "2.0" }
+	if opml.Version == "" {
+		opml.Version = "2.0"
+	}
 	return xml.MarshalIndent(opml, prefix, indent)
 }
 
@@ -104,7 +110,9 @@ func (opml *OPML) DateModified() (time.Time, error) {
 }
 
 func (opml *OPML) AddOutline(outline *Outline) (err error) {
-	if err = outline.Validate(); err != nil { return err }
+	if err = outline.Validate(); err != nil {
+		return err
+	}
 	opml.Body.Outlines = append(opml.Body.Outlines, outline)
 	return nil
 }
@@ -116,9 +124,15 @@ func (opml *OPML) AddSubscription(outline *Outline) (err error) {
 
 // Outline Methods
 func (outline *Outline) Validate() error {
-	if outline.Type == "" { return fmt.Errorf("outline.type is required") }
-	if outline.Text == "" { return fmt.Errorf("outline.text is required") }
-	if outline.XMLURL == "" { return fmt.Errorf("outline.xmlUrl is required") }
+	if outline.Type == "" {
+		return fmt.Errorf("outline.type is required")
+	}
+	if outline.Text == "" {
+		return fmt.Errorf("outline.text is required")
+	}
+	if outline.XMLURL == "" {
+		return fmt.Errorf("outline.xmlUrl is required")
+	}
 	return nil
 }
 
@@ -126,28 +140,32 @@ func (outline *Outline) Validate() error {
 //
 // parses RFC822 date strings
 func parseDate(date string) (ts time.Time, err error) {
-    var layouts []string = []string{
-        // RFC822 with zone name, e.g. "Mon, 02 Jan 06 15:04 MST"
-        "Mon, 02 Jan 06 15:04 MST",
-        // RFC822 without weekday, zone name, e.g. "02 Jan 06 15:04 MST"
-        "02 Jan 06 15:04 MST",
-        // RFC822Z with numeric offset, e.g. "Mon, 02 Jan 06 15:04 -0700"
-        "Mon, 02 Jan 06 15:04 -0700",
-        // RFC822Z without weekday, numeric offset, e.g. "02 Jan 06 15:04 -0700"
-        "02 Jan 06 15:04 -0700",
-        // RFC1123 with seconds and zone name, e.g. "Mon, 02 Jan 2006 15:04:05 MST"
-        "Mon, 02 Jan 2006 15:04:05 MST",
-        // RFC1123 without weekday, with seconds, zone name
-        "02 Jan 2006 15:04:05 MST",
-        // RFC1123Z with numeric offset and seconds
-        "Mon, 02 Jan 2006 15:04:05 -0700",
-        // RFC1123Z without weekday, with seconds, numeric offset
-        "02 Jan 2006 15:04:05 -0700",
-    }
-    for _, layout := range layouts {
-        if ts, err = time.Parse(layout, date); err == nil {
-            return ts, nil
-        }
+	var now = time.Now()
+	var layouts []string = []string{
+		// RFC822 with zone name, e.g. "Mon, 02 Jan 06 15:04 MST"
+		"Mon, 02 Jan 06 15:04 MST",
+		// RFC822 without weekday, zone name, e.g. "02 Jan 06 15:04 MST"
+		"02 Jan 06 15:04 MST",
+		// RFC822Z with numeric offset, e.g. "Mon, 02 Jan 06 15:04 -0700"
+		"Mon, 02 Jan 06 15:04 -0700",
+		// RFC822Z without weekday, numeric offset, e.g. "02 Jan 06 15:04 -0700"
+		"02 Jan 06 15:04 -0700",
+		// RFC1123 with seconds and zone name, e.g. "Mon, 02 Jan 2006 15:04:05 MST"
+		"Mon, 02 Jan 2006 15:04:05 MST",
+		// RFC1123 without weekday, with seconds, zone name
+		"02 Jan 2006 15:04:05 MST",
+		// RFC1123Z with numeric offset and seconds
+		"Mon, 02 Jan 2006 15:04:05 -0700",
+		// RFC1123Z without weekday, with seconds, numeric offset
+		"02 Jan 2006 15:04:05 -0700",
 	}
-	return time.Time{}, fmt.Errorf("failed to parse date: %s", date)
+	if date == "" {
+		return now, nil
+	}
+	for _, layout := range layouts {
+		if ts, err = time.Parse(layout, date); err == nil {
+			return ts, nil
+		}
+	}
+	return now, fmt.Errorf("failed to parse date: %s", date)
 }
