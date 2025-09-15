@@ -56,12 +56,14 @@ type Feed struct {
 	Link    []Link    `xml:"link"`
 	Updated TimeStamp `xml:"updated"`
 	Author  *Person   `xml:"author,omitempty"`
-	Entry   []*Entry  `xml:"entry"`
+	Entry   []*Entry  `xml:"entry"` // TODO: should this be renamed to "Entries"?
 }
 
 func (feed *Feed) Render() (string, error) {
 	atomBytes, err := xml.MarshalIndent(feed, "", "\t")
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	return string(atomBytes), nil
 }
 
@@ -104,10 +106,15 @@ type TimeStamp struct {
 	Time     time.Time
 	RawValue string
 }
-func (t *TimeStamp) String() (string) {
-	if !t.Time.IsZero() { return t.Time.Format(time.RFC3339) }
-	ts,err := time.Parse(time.RFC3339, t.RawValue)
-	if err != nil { return t.RawValue }
+
+func (t *TimeStamp) String() string {
+	if !t.Time.IsZero() {
+		return t.Time.Format(time.RFC3339)
+	}
+	ts, err := time.Parse(time.RFC3339, t.RawValue)
+	if err != nil {
+		return t.RawValue
+	}
 	return ts.Format(time.RFC3339)
 }
 func (t *TimeStamp) MarshalXML(encoder *xml.Encoder, start xml.StartElement) error {
