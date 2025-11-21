@@ -81,28 +81,35 @@ func (template *Template) Process(data *TemplateData) (htmlBytes []byte, err err
 
 func (template *Template) ResolveIncludes() (err error) {
 	for _, element := range template.HyperIncludeElements() {
-		if err = template.Include(element); err != nil { return err }
+		if err = template.Include(element); err != nil { 
+			return errors.Join(ErrInclude, err)
+		}
 	}
 	if len(template.HyperIncludeElements()) > 0 {
-		if err = template.ResolveIncludes(); err != nil { return err } // RECURSION!
+		if err = template.ResolveIncludes(); err != nil { 
+			return errors.Join(ErrInclude, err) // RECURSION!
+		}
 	}
 	return nil
 }
 func (template *Template) Include(element *html.Node) (err error) {
+	var fragments []*html.Node
 	path := getAttribute(element, HyperIncludeAttributeStrings...)
-	fragments, err := template.IncludeFragments(element, path)
-	if err != nil { return err }
-	template.PassthroughAttributes(element, true, fragments...)
+	if fragments, err = template.IncludeFragments(element, path); err != nil {
+		return errors.Join(ErrInclude, err)
+	}
+	template.ForwardAttributes(element, fragments...)
 	outerHTML(element, fragments)
 	return nil
 }
-func (template *Template) IncludeFragments(element *html.Node, path string) ([]*html.Node, error) {
-	includePath := template.Theme.ResourcePath(path)
-	source, err := os.ReadFile(includePath)
-	if err != nil { return nil, err }
-	if len(source) == 0 { return []*html.Node{}, nil } // TODO: throw an error if fragment source is empty?
-	fragment, err := html.ParseFragment(bytes.NewReader(source), element.Parent)
-	if err != nil { return nil, err }
+func (template *Template) IncludeFragments(element *html.Node, path string) (fragment []*html.Node, err error) {
+	var includePath string = template.Theme.ResourcePath(path)
+	var fragmentBytes []byte
+	if fragmentBytes, err = os.ReadFile(includePath); err != nil { 
+		return nil, errors.Join(ErrIncludeFragment, err)
+	}
+	if len(fragmentBytes) == 0 { return []*html.Node{}, nil } // TODO: throw an error if fragment fragmentBytes is empty?
+	if fragment, err = html.ParseFragment(bytes.NewReader(fragmentBytes), element.Parent); err != nil { return nil, err }
 	return fragment, nil
 }
 func (template *Template) IncludeFragment(element *html.Node, path string) (fragment *html.Node, err error) {
@@ -257,7 +264,7 @@ func (template *Template) RenderBlocks(element *html.Node) (err error) {
 	var fragmentData TemplateData
 	var fragmentNodes []*html.Node
 	if fragment, err = template.IncludeFragment(element, fragmentRef); err != nil { return err }
-	template.PassthroughAttributes(element, false, fragment)
+	template.ForwardAttributes(element, fragment)
 	fragmentData = template.AttributeData(element)
 	fragmentNodes = childNodes(element)
 	if len(fragmentNodes) > 0 { fragmentData["content"] = string(template.HTML(fragmentNodes...)) }
@@ -503,13 +510,23 @@ func (template *Template) ParseParameter(attr string, data *TemplateData) (*Para
 	return param
 }
 
-func (template *Template) PassthroughAttributes(placeholder *html.Node, strict bool, target ...*html.Node) {
-	if len(target) == 0 { return } // guard
-	if strict && placeholder.Data != target[0].Data { return }
+func (template *Template) ForwardAttributes(placeholder *html.Node, fragments ...*html.Node) {
+	var attributes []html.Attribute
+	if len(fragments) == 0 { return } // guard
 	for _, attr := range placeholder.Attr {
 		if slices.Contains(HyperIncludeAttributeStrings, attr.Key) { continue } // skip the ht-include attribute
 		if slices.Contains(HyperBlockAttributeStrings, attr.Key) { continue } // skip the ht-block attribute
-		setAttribute(target[0], attr.Key, attr.Val)
+		attributes = append(attributes, attr)
+	}
+	for _, fragment := range fragments {
+		if fragment.Type == html.ErrorNode { continue } // skip error nodes
+		if fragment.Type == html.TextNode { continue } // skip text nodes
+		if fragment.Type == html.CommentNode { continue } // skip comment nodes
+		if fragment.Type == html.DoctypeNode { continue } // skip the doctype node
+		for _, attr := range attributes {
+			setAttribute(fragment, attr.Key, attr.Val)
+		}
+		break // break after forwarding attribute to the first DocumentNode or ElementNode
 	}
 }
 
