@@ -20,7 +20,7 @@ func TestTemplateDataOPMLParser(t *testing.T) {
 		{
 			name:     "resolve includes",
 			source:   "testdata/templatedata/following.opml",
-			keypaths: []string{"head.title","body.outlines.length"},
+			keypaths: []string{"head.title", "body.outlines.length"},
 			values:   []any{"Following", 195},
 			err:      nil,
 		},

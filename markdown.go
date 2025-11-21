@@ -96,8 +96,8 @@ func (md *HyperMark) SummarizeContent(htmlBytes []byte) {
 	delim := []byte("<!--more-->")
 	more := bytes.Index(htmlBytes, delim)
 	if more < 0 {
-		return
-	} // no <!--more--> delimiter found
+		return // no <!--more--> delimiter found
+	}
 	md.Summary = string(htmlBytes[:more])
 	md.More = string(htmlBytes[more:])
 	md.More = strings.Replace(md.More, string(delim), "", 1)

@@ -103,10 +103,10 @@ func (parameter *Parameter) ValueSet() (values []any) {
 func (parameter *Parameter) Evaluate() bool {
 	if len(parameter.Values) == 0 {
 		return false // no values are set
-	} 
+	}
 	if len(parameter.Conditions) == 0 {
 		return true // a value is set, and no conditions are specified
-	} 
+	}
 	for _, condition := range parameter.Conditions {
 		for _, value := range parameter.ValueSet() {
 			switch parameter.Operator {

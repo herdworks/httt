@@ -212,8 +212,8 @@ func (data TemplateData) SetPathValue(path []string, value any) (err error) {
 	case map[any]any:
 		m := TemplateData{}
 		for k := range v {
-			m[fmt.Sprintf("%v", k)] = v[k]
-		} // convert map[any]any to map[string]any
+			m[fmt.Sprintf("%v", k)] = v[k] // convert map[any]any to map[string]any
+		}
 		data[key] = m
 		return data[key].(TemplateData).SetPathValue(subpath, value) // RECURSION!
 	default:
@@ -361,8 +361,8 @@ func (data OrderedTemplateData) MarshalYAML() (any, error) {
 	// Add remaining/unordered fields
 	for k, v := range data {
 		if slices.Contains(orderedFields, k) {
-			continue
-		} // skip ordered fields
+			continue // skip ordered fields
+		}
 		key := &yaml.Node{Kind: yaml.ScalarNode, Value: k}
 		value := &yaml.Node{}
 		if err := value.Encode(v); err != nil {
@@ -410,8 +410,8 @@ func ParseTemplateDataFile(path string, config *HyperMarkConfig) (data TemplateD
 		return TemplateData{}, err
 	}
 	if len(fileBytes) == 0 {
-		return TemplateData{}, err
-	} // skip empty files
+		return TemplateData{}, err // skip empty files
+	}
 	if fileData, err = ParseTemplateDataBytes(fileBytes, filepath.Ext(path), config); err != nil {
 		return TemplateData{}, err
 	}

@@ -26,80 +26,92 @@ type HyperFile struct {
 }
 type HyperFiles []HyperFile
 
-func (f *HyperFile) File() (*os.File) {
-	file,err := os.Open(f.URI.Path)
-	if err != nil { return nil }
+func (f *HyperFile) File() *os.File {
+	file, err := os.Open(f.URI.Path)
+	if err != nil {
+		return nil
+	}
 	return file
 }
 
 func (f *HyperFile) Bytes() ([]byte, error) {
-	file,err := os.ReadFile(f.URI.Path)
-	if err != nil { return nil, err }
+	file, err := os.ReadFile(f.URI.Path)
+	if err != nil {
+		return nil, err
+	}
 	return file, nil
 }
 
-func (f *HyperFile) Size() (int64) {
-	file,err := os.Stat(f.URI.Path)
-	if err != nil { return 0 }
+func (f *HyperFile) Size() int64 {
+	file, err := os.Stat(f.URI.Path)
+	if err != nil {
+		return 0
+	}
 	return file.Size()
 }
 
-func (f *HyperFile) Extension() (string) {
+func (f *HyperFile) Extension() string {
 	return filepath.Ext(f.URI.Path)
 }
 
-func (file *HyperFile) AbsBase() (string) {
-	absoluteBasePath,_ := filepath.Abs(file.Base)
+func (file *HyperFile) AbsBase() string {
+	absoluteBasePath, _ := filepath.Abs(file.Base)
 	return absoluteBasePath + string(filepath.Separator)
 }
-func (file *HyperFile) AbsDir() (string) {
-	absolutePath,_ := filepath.Abs(file.URI.Path)
+func (file *HyperFile) AbsDir() string {
+	absolutePath, _ := filepath.Abs(file.URI.Path)
 	return filepath.Dir(absolutePath) + string(filepath.Separator)
 }
-func (file *HyperFile) AbsPath() (string) {
-	absolutePath,_ := filepath.Abs(file.URI.Path)
+func (file *HyperFile) AbsPath() string {
+	absolutePath, _ := filepath.Abs(file.URI.Path)
 	return absolutePath
 }
-func (file *HyperFile) RelDir() (string) {
-	pwd,_ := os.Getwd()
-	reldir,_ := filepath.Rel(pwd, file.AbsDir())
+func (file *HyperFile) RelDir() string {
+	pwd, _ := os.Getwd()
+	reldir, _ := filepath.Rel(pwd, file.AbsDir())
 	return reldir
 }
-func (file *HyperFile) RelPath() (string) {
-	pwd,_ := os.Getwd()
-	relpath,_ := filepath.Rel(pwd, file.AbsPath())
+func (file *HyperFile) RelPath() string {
+	pwd, _ := os.Getwd()
+	relpath, _ := filepath.Rel(pwd, file.AbsPath())
 	return relpath
 }
-func (file *HyperFile) SubDir() (string) {
+func (file *HyperFile) SubDir() string {
 	return filepath.Dir(file.SubPath()) + string(filepath.Separator)
 }
-func (file *HyperFile) SubPath() (string) {
+func (file *HyperFile) SubPath() string {
 	return strings.Replace(file.AbsPath(), file.AbsBase(), "", 1)
 }
-func (file *HyperFile) DestinationDir(prefix string) (string) {
+func (file *HyperFile) DestinationDir(prefix string) string {
 	return filepath.Dir(file.DestinationAbsPath(prefix)) + string(filepath.Separator)
 }
-func (file *HyperFile) DestinationAbsPath(prefix string) (string) {
-	if len(prefix) > 0 { file.Prefix = prefix }
-	abspath,_ := filepath.Abs(filepath.Join(file.Prefix, file.SubPath()))
+func (file *HyperFile) DestinationAbsPath(prefix string) string {
+	if len(prefix) > 0 {
+		file.Prefix = prefix
+	}
+	abspath, _ := filepath.Abs(filepath.Join(file.Prefix, file.SubPath()))
 	return abspath
 }
-func (file *HyperFile) DestinationSubPath(prefix string) (string) {
-	if len(prefix) > 0 { file.Prefix = prefix }
+func (file *HyperFile) DestinationSubPath(prefix string) string {
+	if len(prefix) > 0 {
+		file.Prefix = prefix
+	}
 	return strings.TrimPrefix(filepath.Join(file.Prefix, file.SubPath()), string(filepath.Separator))
 }
 
 func (files HyperFiles) SetRoot(dirPath string) {
-	for f := range files { files[f].SetRoot(dirPath) }
+	for f := range files {
+		files[f].SetRoot(dirPath)
+	}
 }
 func (f *HyperFile) SetRoot(dirPath string) {
 	f.Base = dirPath
 }
 
-func (f *HyperFile) Href(href string) (string) {
-	baseURL,_ := url.Parse(href)
+func (f *HyperFile) Href(href string) string {
+	baseURL, _ := url.Parse(href)
 	baseURL.Scheme = "https"
-	url,_ := url.Parse(f.URI.String()) // make a mutable copy of the HyperFile URL
+	url, _ := url.Parse(f.URI.String()) // make a mutable copy of the HyperFile URL
 	url.Path = f.SubPath()
 	return baseURL.ResolveReference(url).String()
 }
@@ -109,11 +121,15 @@ func (f *HyperFile) GetMetadata() map[string]string {
 }
 
 func (files HyperFiles) SetMetadata(key string, value string) {
-	for f := range files { files[f].SetMetadata(key, value) }
+	for f := range files {
+		files[f].SetMetadata(key, value)
+	}
 }
 
 func (f *HyperFile) SetMetadata(key string, value string) {
-	if f.Properties == nil { f.Properties = make(map[string]string) }
+	if f.Properties == nil {
+		f.Properties = make(map[string]string)
+	}
 	f.Properties[key] = value
 }
 
@@ -121,21 +137,31 @@ func (f *HyperFile) SetMetadata(key string, value string) {
 // NOTE: 512 bytes is the maximum used by http.DetectContentType())
 func (f *HyperFile) Mimetype() (mimetype string) {
 	mimetype = f.ExtensionType() // use the corresponding MIME type for known file extensions
-	if mimetype == "application/octet-stream" { mimetype = f.ContentType() } // fallback to Content-Type metadata
-	if mimetype != "application/octet-stream" { return mimetype } // return early if a known or user-provided MIME type is detected
-	file := f.File() // open the file
+	if mimetype == "application/octet-stream" {
+		mimetype = f.ContentType() // fallback to Content-Type metadata
+	}
+	if mimetype != "application/octet-stream" {
+		return mimetype // return early if a known or user-provided MIME type is detected
+	}
+	file := f.File()                 // open the file
 	defer file.Seek(0, io.SeekStart) // reset the file handle after reading
 	header := make([]byte, 512)
-	_,err := file.Read(header)
-	if err == nil { mimetype = http.DetectContentType(header) }
+	_, err := file.Read(header)
+	if err == nil {
+		mimetype = http.DetectContentType(header)
+	}
 	return mimetype
 }
 
 // Return Content-Type metadata as a string
 func (f *HyperFile) ContentType() string {
 	contenttype := f.GetMetadata()["Content-Type"]
-	if contenttype == "" { contenttype = f.GetMetadata()["content-type"] }
-	if contenttype == "" { contenttype = "application/octet-stream" }
+	if contenttype == "" {
+		contenttype = f.GetMetadata()["content-type"]
+	}
+	if contenttype == "" {
+		contenttype = "application/octet-stream"
+	}
 	return contenttype
 }
 
@@ -143,31 +169,52 @@ func (f *HyperFile) ContentType() string {
 // Reference: https://developer.mozilla.org/en-US/docs/Web/HTTP/MIME_types/Common_types
 func (f *HyperFile) ExtensionType() string {
 	switch f.Extension() {
-		case ".html": return "text/html"
-		case ".css": return "text/css"
-		case ".js": return "application/javascript"
-		case ".json": return "application/json"
-		case ".xml": return "application/xml"
-		case ".atom": return "application/atom+xml"
-		case ".opml": return "text/x-opml"
-		case ".svg": return "image/svg+xml"
-		case ".ico": return "image/x-icon"
-		case ".jpg": return "image/jpeg"
-		case ".jpeg": return "image/jpeg"
-		case ".gif": return "image/gif"
-		case ".png": return "image/png"
-		case ".webp": return "image/webp"
-		case ".webm": return "video/webm"
-		case ".mp4": return "video/mp4"
-		case ".mp3": return "audio/mpeg"
-		case ".wav": return "audio/wav"
-		default: return "application/octet-stream"
+	case ".html":
+		return "text/html"
+	case ".css":
+		return "text/css"
+	case ".js":
+		return "application/javascript"
+	case ".json":
+		return "application/json"
+	case ".xml":
+		return "application/xml"
+	case ".atom":
+		return "application/atom+xml"
+	case ".opml":
+		return "text/x-opml"
+	case ".svg":
+		return "image/svg+xml"
+	case ".ico":
+		return "image/x-icon"
+	case ".jpg":
+		return "image/jpeg"
+	case ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	case ".webm":
+		return "video/webm"
+	case ".mp4":
+		return "video/mp4"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	default:
+		return "application/octet-stream"
 	}
 }
 
 func (files HyperFiles) Sort(recursive bool) {
 	slices.SortFunc(files, func(a, b HyperFile) int {
-		if recursive { return cmp.Compare(a.AbsDir(), b.AbsDir()) }
+		if recursive {
+			return cmp.Compare(a.AbsDir(), b.AbsDir())
+		}
 		return cmp.Compare(a.AbsPath(), b.AbsPath())
 	})
 }
@@ -188,9 +235,12 @@ func (files HyperFiles) ColumnValues(field string) (values []string) {
 	values = []string{}
 	for i := range files {
 		switch field {
-			case "Source", "source": values = append(values, files[i].RelPath())
-			case "Size", "size": values = append(values, fmt.Sprintf("%d", files[i].Size()))
-			case "Path", "path": values = append(values, files[i].SubPath())
+		case "Source", "source":
+			values = append(values, files[i].RelPath())
+		case "Size", "size":
+			values = append(values, fmt.Sprintf("%d", files[i].Size()))
+		case "Path", "path":
+			values = append(values, files[i].SubPath())
 		}
 	}
 	return values
@@ -203,15 +253,21 @@ func (files HyperFiles) ColumnValues(field string) (values []string) {
 // Walk a directory and return a list of file (sub)paths
 func GetPaths(pathname string, recursive bool) (paths []string) {
 	dir, err := os.Open(pathname)
-	if err != nil { return []string{} }
+	if err != nil {
+		return []string{}
+	}
 	defer dir.Close()
 	files, err := dir.ReadDir(-1)
-	if err != nil { return []string{} }
+	if err != nil {
+		return []string{}
+	}
 	for _, f := range files {
 		if recursive && f.IsDir() {
 			paths = append(paths, GetPaths(filepath.Join(pathname, f.Name()), recursive)...) // RECURSION
 		} else {
-			if f.IsDir() { continue }
+			if f.IsDir() {
+				continue
+			}
 			paths = append(paths, filepath.Join(pathname, f.Name()))
 		}
 	}
@@ -223,19 +279,23 @@ func GetPathsByPattern(directory string, recursive bool, include string, exclude
 	var err error
 	var regInclude *regexp.Regexp
 	var regExclude *regexp.Regexp
-	regInclude,err = regexp.Compile(include)
+	regInclude, err = regexp.Compile(include)
 	if err != nil {
 		fmt.Printf("error compiling regular expression from includsive pattern: %s\n\n%s\n", include, err)
 		return []string{} // guard against invalid regular expressions
 	}
-	regExclude,err = regexp.Compile(exclude)
+	regExclude, err = regexp.Compile(exclude)
 	if err != nil {
 		fmt.Printf("error compiling regular expression from exclusive pattern: %s\n\n%s\n", exclude, err)
 		return []string{} // guard against invalid regular expressions
 	}
 	for _, path := range GetPaths(directory, recursive) {
-		if len(include) > 0 && !regInclude.MatchString(path) { continue } // skip files that don't match the inclusive pattern
-		if len(exclude) > 0 && regExclude.MatchString(path) { continue } // skip files that match the exclusive pattern
+		if len(include) > 0 && !regInclude.MatchString(path) {
+			continue // skip files that don't match the inclusive pattern
+		}
+		if len(exclude) > 0 && regExclude.MatchString(path) {
+			continue // skip files that match the exclusive pattern
+		}
 		paths = append(paths, path)
 	}
 	slices.Sort(paths)
@@ -246,9 +306,13 @@ func GetSourcePaths(configfile string) (paths []string) {
 	// everything but the build(s)...
 	paths = []string{}
 	dir := filepath.Dir(configfile)
-	for _,p := range GetPaths(dir, true) {
-		if strings.HasPrefix(p, ".") { continue }
-		if strings.HasPrefix(p, "builds/") { continue }
+	for _, p := range GetPaths(dir, true) {
+		if strings.HasPrefix(p, ".") {
+			continue
+		}
+		if strings.HasPrefix(p, "builds/") {
+			continue
+		}
 		paths = append(paths, GetPaths(dir, true)...)
 	}
 	return paths
@@ -256,11 +320,11 @@ func GetSourcePaths(configfile string) (paths []string) {
 
 func GetFiles(directory string, recursive bool) (files HyperFiles) {
 	paths := GetPaths(directory, recursive)
-	dir,_ := filepath.Abs(directory)
+	dir, _ := filepath.Abs(directory)
 	for _, p := range paths {
-		uri,_ := url.Parse(p)
+		uri, _ := url.Parse(p)
 		files = append(files, HyperFile{
-			URI: uri,
+			URI:  uri,
 			Base: dir,
 		})
 	}
@@ -270,11 +334,11 @@ func GetFiles(directory string, recursive bool) (files HyperFiles) {
 
 func GetFilesByPattern(directory string, recursive bool, include string, exclude string) (files HyperFiles) {
 	paths := GetPathsByPattern(directory, recursive, include, exclude)
-	dir,_ := filepath.Abs(directory)
+	dir, _ := filepath.Abs(directory)
 	for _, p := range paths {
-		abs,_ := filepath.Abs(p)
-		uri,_ := url.Parse(abs)
-		files = append(files, HyperFile{ URI: uri, Base: dir })
+		abs, _ := filepath.Abs(p)
+		uri, _ := url.Parse(abs)
+		files = append(files, HyperFile{URI: uri, Base: dir})
 	}
 	files.Sort(recursive)
 	return files
