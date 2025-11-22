@@ -1,0 +1,73 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        go-version: ['1.23', '1.24']
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+    
+    - name: Verify dependencies
+      run: go mod verify
+    
+    - name: Build
+      run: go build -v ./...
+    
+    - name: Run tests
+      run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+    
+    - name: Generate coverage report
+      run: go tool cover -html=coverage.out -o coverage.html
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      if: matrix.go-version == '1.24'
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        args: --timeout=5m
+
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: Run benchmarks
+      run: go test -bench=. -benchmem ./...

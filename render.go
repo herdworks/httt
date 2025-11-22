@@ -12,16 +12,20 @@ func Render(dataPath string, layoutPath string, themePath string, untidy bool, m
 	var theme *HyperTheme
 	var template *Template
 	var err error
-	
-	if data,err = ParseTemplateDataFile(dataPath, markdownConfig); err != nil { return nil, err }
 
-	theme = &HyperTheme{ URI: &url.URL{ Path: themePath } }
-	if layout,err = theme.ResourceHTML(layoutPath); err != nil { return nil, err }
+	if data, err = ParseTemplateDataFile(dataPath, markdownConfig); err != nil {
+		return nil, err
+	}
+
+	theme = &HyperTheme{URI: &url.URL{Path: themePath}}
+	if layout, err = theme.ResourceHTML(layoutPath); err != nil {
+		return nil, err
+	}
 
 	template = &Template{
-		Theme: theme,
-		Layout: layout,
-		TidyMode: !untidy,
+		Theme:          theme,
+		Layout:         layout,
+		TidyMode:       !untidy,
 		MarkdownConfig: markdownConfig,
 	}
 	return template.Process(&data)
