@@ -13,16 +13,8 @@ jobs:
     name: Add to Project
     runs-on: ubuntu-latest
     steps:
-      - name: Get GitHub App installation token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.CI_FETCH_GITHUB_APP_ID }}
-          private-key: ${{ secrets.CI_FETCH_GITHUB_APP_PRIVATE_KEY }}
-          owner: herdworks
-
       - name: Add to Project
         uses: actions/add-to-project@v1.0.2
         with:
           project-url: https://github.com/orgs/herdworks/projects/4
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ secrets.PROJECTS_AUTOMATION_TOKEN }}
