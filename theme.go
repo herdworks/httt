@@ -13,12 +13,12 @@ import (
 )
 
 type Theme struct {
-	URI         *url.URL         `json:"-" yaml:"-"`
-	Href        string           `json:"href,omitempty" yaml:"href,omitempty"`
-	Name        string           `json:"name,omitempty" yaml:"name,omitempty"`
-	Description string           `json:"description,omitempty" yaml:"description,omitempty"`
-	Version     string           `json:"version,omitempty" yaml:"version,omitempty"`
-	Config      ThemeConfig `json:"config,omitempty" yaml:"config,omitempty"`
+	URI         *url.URL     `json:"-" yaml:"-"`
+	Href        string       `json:"href,omitempty" yaml:"href,omitempty"`
+	Name        string       `json:"name,omitempty" yaml:"name,omitempty"`
+	Description string       `json:"description,omitempty" yaml:"description,omitempty"`
+	Version     string       `json:"version,omitempty" yaml:"version,omitempty"`
+	Config      ThemeConfig  `json:"config,omitempty" yaml:"config,omitempty"`
 }
 
 type ThemeConfig struct {
@@ -27,6 +27,7 @@ type ThemeConfig struct {
 	BlocksDirectory       string `json:"blocks_dir,omitempty" yaml:"blocks_dir,omitempty"`
 	LayoutsDirectory      string `json:"layouts_dir,omitempty" yaml:"layouts_dir,omitempty"`
 	FragmentsDirectory    string `json:"fragments_dir,omitempty" yaml:"fragments_dir,omitempty"`
+	DataDirectory         string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
 	StaticDirectory       string `json:"static_dir,omitempty" yaml:"static_dir,omitempty"`
 }
 
@@ -58,7 +59,7 @@ func (theme *Theme) ContentTypesDir() string {
 	return filepath.Join(theme.RootDir(), theme.Config.ContentTypesDirectory)
 }
 
-func (theme *Theme) ElementsDir() string {
+func (theme *Theme) BlocksDir() string {
 	if len(theme.Config.BlocksDirectory) == 0 {
 		theme.Config.BlocksDirectory = "blocks"
 	}
@@ -72,11 +73,25 @@ func (theme *Theme) LayoutsDir() string {
 	return filepath.Join(theme.RootDir(), theme.Config.LayoutsDirectory)
 }
 
+func (theme *Theme) FragmentsDir() string {
+	if len(theme.Config.FragmentsDirectory) == 0 {
+		theme.Config.FragmentsDirectory = "fragments"
+	}
+	return filepath.Join(theme.RootDir(), theme.Config.FragmentsDirectory)
+}
+
 func (theme *Theme) StaticDir() string {
 	if len(theme.Config.StaticDirectory) == 0 {
 		theme.Config.StaticDirectory = "static"
 	}
 	return filepath.Join(theme.RootDir(), theme.Config.StaticDirectory)
+}
+
+func (theme *Theme) DataDir() string {
+	if len(theme.Config.DataDirectory) == 0 {
+		theme.Config.DataDirectory = "data"
+	}
+	return filepath.Join(theme.RootDir(), theme.Config.DataDirectory)
 }
 
 func (theme *Theme) ResolveConfig() {
@@ -100,6 +115,9 @@ func (theme *Theme) ResolveConfig() {
 	}
 	if len(theme.Config.StaticDirectory) == 0 {
 		theme.Config.StaticDirectory = "static"
+	}
+	if len(theme.Config.DataDirectory) == 0 {
+		theme.Config.DataDirectory = "data"
 	}
 }
 
@@ -166,4 +184,3 @@ func (theme *Theme) LayoutHTML(layoutRef string) (*html.Node, error) {
 func (theme *Theme) Assets() (assets HyperFiles) {
 	return GetFiles(theme.StaticDir(), true)
 }
-
