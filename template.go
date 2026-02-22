@@ -22,7 +22,7 @@ import (
 // HyperTemplates may contain templating instructions as HTML5 data attributes.
 type Template struct {
 	Layout         *html.Node
-	Theme          *HyperTheme
+	Theme          *Theme
 	StrictMode     bool // enforce HTML5 custom attribute syntax (data-ht-*)
 	TidyMode       bool
 	MarkdownConfig *HyperMarkConfig

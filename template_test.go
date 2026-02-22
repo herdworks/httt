@@ -36,7 +36,7 @@ func TestResolveIncludes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var layoutBytes []byte
 			var layoutHTML *html.Node
-			var theme *HyperTheme = &HyperTheme{URI: &url.URL{Path: tc.theme}}
+			var theme *Theme = &Theme{URI: &url.URL{Path: tc.theme}}
 			var err error
 			if layoutBytes, err = os.ReadFile(tc.layout); tc.err != nil && errors.Is(err, tc.err) {
 				return // expected error
@@ -81,7 +81,7 @@ func TestAttributeForwarding(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var theme *HyperTheme = &HyperTheme{URI: &url.URL{Path: tc.theme}}
+			var theme *Theme = &Theme{URI: &url.URL{Path: tc.theme}}
 			var layoutBytes []byte
 			var layoutHTML *html.Node
 			var err error
@@ -138,7 +138,7 @@ func TestRenderBlocks(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var theme *HyperTheme
+			var theme *Theme
 			var layout *html.Node
 			var data TemplateData
 			var template *Template
@@ -146,7 +146,7 @@ func TestRenderBlocks(t *testing.T) {
 			var err error
 
 			// configure the theme
-			theme = &HyperTheme{URI: &url.URL{Path: tc.theme}}
+			theme = &Theme{URI: &url.URL{Path: tc.theme}}
 			theme.ResolveConfig()
 
 			// load the layout
