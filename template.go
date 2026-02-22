@@ -371,7 +371,7 @@ func (template *Template) RenderBlocks(element *html.Node) (err error) {
 	fragmentData = template.AttributeData(element) // TODO: should block template data attributes use the "block." namespace?
 	fragmentNodes = childNodes(element)
 	if len(fragmentNodes) > 0 {
-		// pass nested block content as the template data "content" property, so that 
+		// pass nested block content as the template data "content" property, so that
 		// block templates can insert wrapped content into block layouts.
 		fragmentData["content"] = string(template.HTML(fragmentNodes...))
 	}

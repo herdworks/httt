@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/parser"
 	meta "github.com/yuin/goldmark-meta"
+	"github.com/yuin/goldmark/parser"
 )
 
 func TestWordCounter(t *testing.T) {

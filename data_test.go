@@ -65,30 +65,29 @@ func TestTemplateDataOPMLParser(t *testing.T) {
 // TestTemplateDataParser
 // TODO: Ensure that Markdown, YAML, JSON, and OPML data are properly parsed into TemplateData.
 
-
 // TestTemplateDataKeypathResolver
 // TODO: Does TemplateData.Get support keypaths with array indices? e.g., "some.array.0.key"
 func TestTemplateDataKeypathResolver(t *testing.T) {
 	tests := []struct {
-		name     string
-		source   string
-		keypath  string
-		value    any
-		err      error
+		name    string
+		source  string
+		keypath string
+		value   any
+		err     error
 	}{
 		{
-			name:     "simple keypath",
-			source:   "testdata/keypaths.yaml",
-			keypath:  "site.title",
-			value:    "HyperTemplates Testing",
-			err:      nil,
+			name:    "simple keypath",
+			source:  "testdata/keypaths.yaml",
+			keypath: "site.title",
+			value:   "HyperTemplates Testing",
+			err:     nil,
 		},
 		{
-			name:     "nested keypath",
-			source:   "testdata/keypaths.yaml",
-			keypath:  "data.a.b.c",
-			value:    "deep value",
-			err:      nil,
+			name:    "nested keypath",
+			source:  "testdata/keypaths.yaml",
+			keypath: "data.a.b.c",
+			value:   "deep value",
+			err:     nil,
 		},
 		// {
 		// 	name:     "array keypath",
@@ -134,50 +133,51 @@ func TestTemplateDataKeypathResolver(t *testing.T) {
 // TODO: Ensure that TemplateData.IsEmpty() properly resolves to true when the data is empty.
 // Example: { some: { key: { path: { x: null, y: [], z: false } } } }
 // Results: some, some.key, and some.key.path are not empty because they are maps with at least one key.
-//          some.key.path.x and some.key.path.y are empty because x is null and y is an empty array.
-//          some.key.path.z is non-empty (bools are never "empty" values).
+//
+//	some.key.path.x and some.key.path.y are empty because x is null and y is an empty array.
+//	some.key.path.z is non-empty (bools are never "empty" values).
 func TestTemplateDataExistsResolver(t *testing.T) {
 	tests := []struct {
-		name     string
-		source   string
-		keypath  string
-		exists   bool
-		err      error
+		name    string
+		source  string
+		keypath string
+		exists  bool
+		err     error
 	}{
 		{
-			name:     "simple key",
-			source:   "testdata/exists.yaml",
-			keypath:  "title",
-			exists:   true,
-			err:      nil,
+			name:    "simple key",
+			source:  "testdata/exists.yaml",
+			keypath: "title",
+			exists:  true,
+			err:     nil,
 		},
 		{
-			name:     "simple keypath",
-			source:   "testdata/exists.yaml",
-			keypath:  "some.value",
-			exists:   true,
-			err:      nil,
+			name:    "simple keypath",
+			source:  "testdata/exists.yaml",
+			keypath: "some.value",
+			exists:  true,
+			err:     nil,
 		},
 		{
-			name:     "nested keypath",
-			source:   "testdata/exists.yaml",
-			keypath:  "some.nested.key",
-			exists:   true,
-			err:      nil,
+			name:    "nested keypath",
+			source:  "testdata/exists.yaml",
+			keypath: "some.nested.key",
+			exists:  true,
+			err:     nil,
 		},
 		{
-			name:     "empty map",
-			source:   "testdata/exists.yaml",
-			keypath:  "path.to.empty.map",
-			exists:   false,
-			err:      nil,
+			name:    "empty map",
+			source:  "testdata/exists.yaml",
+			keypath: "path.to.empty.map",
+			exists:  false,
+			err:     nil,
 		},
 		{
-			name:     "map with null values",
-			source:   "testdata/exists.yaml",
-			keypath:  "some.map.containing.keys_with_null_values",
-			exists:   true,
-			err:      nil,
+			name:    "map with null values",
+			source:  "testdata/exists.yaml",
+			keypath: "some.map.containing.keys_with_null_values",
+			exists:  true,
+			err:     nil,
 		},
 	}
 	for _, tc := range tests {
