@@ -16,12 +16,13 @@ import (
 )
 
 type Theme struct {
-	URI         *url.URL    `json:"-" yaml:"-"`
-	Href        string      `json:"href,omitempty" yaml:"href,omitempty"`
-	Name        string      `json:"name,omitempty" yaml:"name,omitempty"`
-	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
-	Version     string      `json:"version,omitempty" yaml:"version,omitempty"`
-	Config      ThemeConfig `json:"config,omitempty" yaml:"config,omitempty"`
+	URI          *url.URL     `json:"-" yaml:"-"`
+	Href         string       `json:"href,omitempty" yaml:"href,omitempty"`
+	Name         string       `json:"name,omitempty" yaml:"name,omitempty"`
+	Description  string       `json:"description,omitempty" yaml:"description,omitempty"`
+	Version      string       `json:"version,omitempty" yaml:"version,omitempty"`
+	Config       ThemeConfig  `json:"config,omitempty" yaml:"config,omitempty"`
+	TemplateData TemplateData `json:"data,omitempty" yaml:"data,omitempty"`
 }
 
 type ThemeConfig struct {
