@@ -229,8 +229,10 @@ func (data TemplateData) SetPathValue(path []string, value any) (err error) {
 	case nil:
 		data[key] = wrappedValue(value, subpath)
 		return nil
-	case TemplateData, map[string]any:
-		return data[key].(TemplateData).SetPathValue(subpath, value) // RECURSION!
+	case TemplateData:
+		return v.SetPathValue(subpath, value)
+	case map[string]any:
+		return TemplateData(v).SetPathValue(subpath, value)
 	case map[any]any:
 		m := TemplateData{}
 		for k := range v {
@@ -365,7 +367,7 @@ func (data TemplateData) Clean(reserved []string) (cleaned TemplateData) {
 //	var data: TemplateData = TemplateData{ "key": "value" }
 //	yaml.Marshal(OrderedTemplateData(data))
 func (data OrderedTemplateData) MarshalYAML() (any, error) {
-	orderedFields := []string{"created_at", "updated_at", "layout", "path", "slug", "author", "contributors", "title", "description", "summary", "more", "tags", "unlisted", "redirect", "attachments"}
+	orderedFields := []string{"created_at", "updated_at", "layout", "path", "slug", "byline", "contributors", "title", "description", "summary", "more", "tags", "unlisted", "redirect", "attachments"}
 	output := &yaml.Node{Kind: yaml.MappingNode}
 
 	// Add known fields first in order
@@ -501,7 +503,6 @@ func wrappedValue(value any, path []string) any {
 	if len(path) == 0 {
 		return value
 	}
-	fmt.Printf("wrapping value %v with path %v\n", value, strings.Join(path, "."))
 	for len(path) > 0 {
 		key := path[len(path)-1]
 		path = path[:len(path)-1]        // remove last element

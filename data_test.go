@@ -211,3 +211,79 @@ func TestTemplateDataExistsResolver(t *testing.T) {
 		})
 	}
 }
+
+func TestTemplateDataSet(t *testing.T) {
+	tests := []struct {
+		name  string
+		data  TemplateData
+		key   string
+		value any
+	}{
+		{
+			name:  "set simple key",
+			data:  TemplateData{},
+			key:   "foo",
+			value: "bar",
+		},
+		{
+			name:  "set nested keypath",
+			data:  TemplateData{"some": map[string]any{"key": "old value", "other": "value"}},
+			key:   "some.key",
+			value: "new value",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			
+			tc.data.Set(tc.key, tc.value)
+			if value := tc.data.Get(tc.key); value != tc.value {
+				t.Fatalf("failed to set key value\n\texpected %q = %v\n\t     got %q = %v", tc.key, tc.value, tc.key, value)
+			}
+
+			if jsonb, err := json.MarshalIndent(tc.data, "", "  "); err == nil {
+				t.Logf("\n%s\n", jsonb)
+			}
+		})
+	}
+}
+
+func TestTemplateDataSetKeyPath(t *testing.T) {
+	tests := []struct {
+		name  string
+		data  TemplateData
+		key   string
+		value any
+	}{
+		{
+			name:  "set simple key",
+			data:  TemplateData{},
+			key:   "foo",
+			value: "bar",
+		},
+		{
+			name:  "set nested keypath",
+			data:  TemplateData{"some": map[string]any{"key": "value", "other": "value", "nested": map[string]any{ "values": []int{0, 1, 2}}}},
+			key:   "some.key",
+			value: "new value",
+		},
+		{
+			name:  "new key paths",
+			data:  TemplateData{},
+			key:   "some.key.nested.value",
+			value: 0,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+
+			tc.data.SetKeyValue(tc.key, tc.value)
+			if value := tc.data.Get(tc.key); value != tc.value {
+				t.Fatalf("expected key %q to have value %v, got %v", tc.key, tc.value, value)
+			}
+
+			if jsonb, err := json.MarshalIndent(tc.data, "", "  "); err == nil {
+				t.Logf("\n%s\n", jsonb)
+			}
+		})
+	}
+}

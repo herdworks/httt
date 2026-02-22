@@ -191,11 +191,12 @@ func (template *Template) RenderTemplate(element *html.Node, data *TemplateData)
 		layoutTemplate := cloneElement(element)                            // element becomes the new/nested layout template
 		removeAttributes(layoutTemplate, HyperTemplateAttributeStrings...) // remove the ht-template attribute from the new layout template
 		nestedData := &TemplateData{}                                      // instantiate a new/scoped TemplateData object for the new layout template
-		nestedData.Set("ht", TemplateData{"index": index, "count": count}) // set template meta
 		nestedData.Set(params[0].Target, value)
 		for _, p := range params[1:] {
 			nestedData.Set(p.Target, p.Value()) // set additional TemplateData values
 		}
+		nestedData.SetKeyValue("ht.index", index) // set template meta
+		nestedData.SetKeyValue("ht.count", count) // set template meta
 		nestedTemplate := Template{Layout: layoutTemplate, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig}
 
 		// RECURSION!
