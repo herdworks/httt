@@ -1,11 +1,14 @@
 package hypertemplates
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -13,12 +16,12 @@ import (
 )
 
 type Theme struct {
-	URI         *url.URL     `json:"-" yaml:"-"`
-	Href        string       `json:"href,omitempty" yaml:"href,omitempty"`
-	Name        string       `json:"name,omitempty" yaml:"name,omitempty"`
-	Description string       `json:"description,omitempty" yaml:"description,omitempty"`
-	Version     string       `json:"version,omitempty" yaml:"version,omitempty"`
-	Config      ThemeConfig  `json:"config,omitempty" yaml:"config,omitempty"`
+	URI         *url.URL    `json:"-" yaml:"-"`
+	Href        string      `json:"href,omitempty" yaml:"href,omitempty"`
+	Name        string      `json:"name,omitempty" yaml:"name,omitempty"`
+	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
+	Version     string      `json:"version,omitempty" yaml:"version,omitempty"`
+	Config      ThemeConfig `json:"config,omitempty" yaml:"config,omitempty"`
 }
 
 type ThemeConfig struct {
@@ -183,4 +186,139 @@ func (theme *Theme) LayoutHTML(layoutRef string) (*html.Node, error) {
 
 func (theme *Theme) Assets() (assets HyperFiles) {
 	return GetFiles(theme.StaticDir(), true)
+}
+
+// List all theme files with their paths relative to the theme root directory.
+func (theme *Theme) FilePaths() (paths []string, err error) {
+	var root string
+	var rootAbs string
+	var seen map[string]struct{} = map[string]struct{}{}
+
+	if err = theme.Validate(); err != nil {
+		return nil, err
+	}
+
+	theme.ResolveConfig()
+	root = theme.RootDir()
+	if rootAbs, err = filepath.Abs(root); err != nil {
+		return nil, fmt.Errorf("resolve theme root %q: %w", root, err)
+	}
+
+	var directories []string = []string{
+		theme.Config.ContentTypesDirectory,
+		theme.Config.BlocksDirectory,
+		theme.Config.LayoutsDirectory,
+		theme.Config.FragmentsDirectory,
+		theme.Config.DataDirectory,
+		theme.Config.StaticDirectory,
+	}
+	for _, dir := range directories {
+		dirPath := filepath.Join(rootAbs, dir)
+		for _, p := range GetPaths(dirPath, true) {
+			var absPath string
+			var relPath string
+
+			if absPath, err = filepath.Abs(p); err != nil {
+				return nil, fmt.Errorf("resolve theme file path %q: %w", p, err)
+			}
+
+			if relPath, err = filepath.Rel(rootAbs, absPath); err != nil {
+				return nil, fmt.Errorf("resolve relative theme file path %q: %w", p, err)
+			}
+
+			relPath = filepath.ToSlash(relPath)
+			if relPath == "." || relPath == "" {
+				continue
+			}
+			if relPath == ".." || strings.HasPrefix(relPath, "../") {
+				return nil, fmt.Errorf("theme file path %q escapes root %q", p, rootAbs)
+			}
+			if _, ok := seen[relPath]; ok {
+				continue
+			}
+			seen[relPath] = struct{}{}
+			paths = append(paths, relPath)
+		}
+	}
+	return paths, nil
+}
+
+// Archive uses theme.FilePaths() to list all theme files, then create a zip archive containing those files at the specified path.
+func (theme *Theme) Archive(archive string) (err error) {
+	var paths []string
+	var archiveFile *os.File
+	var zipper *zip.Writer
+	var root string = theme.RootDir()
+
+	if paths, err = theme.FilePaths(); err != nil {
+		return err
+	}
+	if archiveFile, err = os.Create(archive); err != nil {
+		return fmt.Errorf("create theme archive %q: %w", archive, err)
+	}
+	defer func() {
+		if closeErr := archiveFile.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close theme archive %q: %w", archive, closeErr)
+		}
+	}()
+
+	zipper = zip.NewWriter(archiveFile)
+	defer func() {
+		if closeErr := zipper.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("finalize theme archive %q: %w", archive, closeErr)
+		}
+	}()
+
+	for _, relPath := range paths {
+		var sourcePath string
+		var sourceFile *os.File
+		var sourceInfo os.FileInfo
+		var header *zip.FileHeader
+		var entryWriter io.Writer
+		var written int64
+
+		relPath = path.Clean(strings.TrimPrefix(filepath.ToSlash(relPath), "./"))
+		if relPath == "." || relPath == "" {
+			continue
+		}
+		if strings.HasPrefix(relPath, "/") || relPath == ".." || strings.HasPrefix(relPath, "../") {
+			return fmt.Errorf("invalid archive entry path %q", relPath)
+		}
+
+		sourcePath = filepath.Join(root, filepath.FromSlash(relPath))
+
+		if sourceInfo, err = os.Stat(sourcePath); err != nil {
+			return fmt.Errorf("stat theme file %q: %w", sourcePath, err)
+		}
+
+		if header, err = zip.FileInfoHeader(sourceInfo); err != nil {
+			return fmt.Errorf("build zip header for %q: %w", sourcePath, err)
+		}
+
+		header.Name = filepath.ToSlash(relPath)
+		header.Method = zip.Deflate
+
+		if entryWriter, err = zipper.CreateHeader(header); err != nil {
+			return fmt.Errorf("create zip entry %q: %w", header.Name, err)
+		}
+
+		if sourceFile, err = os.Open(sourcePath); err != nil {
+			return fmt.Errorf("open theme file %q: %w", sourcePath, err)
+		}
+
+		fmt.Printf("file %q writing\n", header.Name)
+
+		if written, err = io.Copy(entryWriter, sourceFile); err != nil {
+			sourceFile.Close()
+			return fmt.Errorf("write zip entry %q: %w", header.Name, err)
+		}
+
+		if err = sourceFile.Close(); err != nil {
+			return fmt.Errorf("close theme file %q: %w", sourcePath, err)
+		}
+
+		fmt.Printf("file %q written (%d bytes)\n", header.Name, written)
+	}
+
+	return nil
 }
