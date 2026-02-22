@@ -1,0 +1,16 @@
+---
+title: Testing Exists Keypaths
+some:
+  value: 42
+  nested:
+    key: nested value
+  map:
+    containing:
+      keys_with_null_values: 
+        a: null
+path:
+  to:
+    empty:
+      map: {}
+      array: []
+      slice: []

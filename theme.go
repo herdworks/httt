@@ -14,6 +14,7 @@ import (
 
 type HyperTheme struct {
 	URI         *url.URL         `json:"-" yaml:"-"`
+	Href        string           `json:"href,omitempty" yaml:"href,omitempty"`
 	Name        string           `json:"name,omitempty" yaml:"name,omitempty"`
 	Description string           `json:"description,omitempty" yaml:"description,omitempty"`
 	Version     string           `json:"version,omitempty" yaml:"version,omitempty"`
@@ -24,8 +25,7 @@ func (theme *HyperTheme) Parse() (err error) {
 	var fileBytes []byte
 	if fileBytes, err = os.ReadFile(theme.URI.Path); err == nil {
 		return json.Unmarshal(fileBytes, &theme)
-	}
-	if err != nil {
+	} else {
 		fmt.Printf("theme \"%s\" warning: %v\n", theme.URI.Path, err)
 	}
 	return nil
@@ -71,6 +71,12 @@ func (theme *HyperTheme) StaticDir() string {
 }
 
 func (theme *HyperTheme) ResolveConfig() {
+	if len(theme.Name) == 0 {
+		theme.Name = "Untitled Theme"
+	}
+	if len(theme.Version) == 0 {
+		theme.Version = "0.0.0"
+	}
 	if len(theme.Config.ContentTypesDirectory) == 0 {
 		theme.Config.ContentTypesDirectory = "types"
 	}

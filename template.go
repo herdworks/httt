@@ -130,7 +130,7 @@ func (template *Template) Include(element *html.Node) (err error) {
 	outerHTML(element, fragments)
 	return nil
 }
-func (template *Template) IncludeFragments(element *html.Node, path string) (fragment []*html.Node, err error) {
+func (template *Template) IncludeFragments(element *html.Node, path string) (fragments []*html.Node, err error) {
 	var includePath string = template.Theme.ResourcePath(path)
 	var fragmentBytes []byte
 	if fragmentBytes, err = os.ReadFile(includePath); err != nil {
@@ -139,10 +139,10 @@ func (template *Template) IncludeFragments(element *html.Node, path string) (fra
 	if len(fragmentBytes) == 0 {
 		return []*html.Node{}, nil // TODO: throw an error if fragment fragmentBytes is empty?
 	}
-	if fragment, err = html.ParseFragment(bytes.NewReader(fragmentBytes), element.Parent); err != nil {
+	if fragments, err = html.ParseFragment(bytes.NewReader(fragmentBytes), element.Parent); err != nil {
 		return nil, err
 	}
-	return fragment, nil
+	return fragments, nil
 }
 func (template *Template) IncludeFragment(element *html.Node, path string) (fragment *html.Node, err error) {
 	var fragments []*html.Node
@@ -154,7 +154,7 @@ func (template *Template) IncludeFragment(element *html.Node, path string) (frag
 	}
 	for _, fragment := range fragments {
 		if fragment.Type == html.ElementNode {
-			return fragment, nil
+			return fragment, nil // return the first element node found in the fragment
 		}
 	}
 	// TODO: select the first element from fragments that matches the target element tag name?
@@ -368,9 +368,11 @@ func (template *Template) RenderBlocks(element *html.Node) (err error) {
 		return err
 	}
 	template.ForwardAttributes(element, fragment)
-	fragmentData = template.AttributeData(element)
+	fragmentData = template.AttributeData(element) // TODO: should block template data attributes use the "block." namespace?
 	fragmentNodes = childNodes(element)
 	if len(fragmentNodes) > 0 {
+		// pass nested block content as the template data "content" property, so that 
+		// block templates can insert wrapped content into block layouts.
 		fragmentData["content"] = string(template.HTML(fragmentNodes...))
 	}
 	shortcode := Template{Layout: fragment, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig, BlockMode: true}

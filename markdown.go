@@ -27,6 +27,7 @@ type HyperMark struct {
 	Summary     string
 	More        string
 	Mentions    hypermark.Mentions
+	WordCount   int
 	goldmark    goldmark.Markdown
 }
 
@@ -39,6 +40,7 @@ func (md HyperMark) New(config *HyperMarkConfig) *HyperMark {
 	md.Content = ""
 	md.FrontMatter = TemplateData{}
 	md.Mentions = hypermark.Mentions{}
+	md.WordCount = 0
 	md.goldmark = goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
@@ -54,6 +56,7 @@ func (md HyperMark) New(config *HyperMarkConfig) *HyperMark {
 			),
 			hypermark.EntityMentionExtension(&md.Config.Mentions),
 			hypermark.HashtagMentionExtension(&md.Config.Mentions),
+			hypermark.WordCounterExtension(),
 		),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(
@@ -73,6 +76,7 @@ func (md *HyperMark) Parse(content []byte) error {
 	}
 	md.ExtractFrontmatter(context)
 	md.ExtractMentions(context)
+	md.ExtractWordCount(context)
 	md.SummarizeContent(buf.Bytes())
 	return nil
 }
@@ -88,6 +92,12 @@ func (md *HyperMark) ExtractMentions(context parser.Context) {
 	mentions, ok := context.Get(hypermark.MentionContext).(hypermark.Mentions)
 	if ok {
 		md.Mentions = mentions
+	}
+}
+func (md *HyperMark) ExtractWordCount(context parser.Context) {
+	count, ok := context.Get(hypermark.WordCounterContext).(int)
+	if ok {
+		md.WordCount = count
 	}
 }
 
@@ -118,6 +128,9 @@ func (md *HyperMark) Data() (data TemplateData) {
 	if len(md.Mentions) > 0 {
 		data.Set("mentions", md.Mentions)
 		md.ApplyMentions(&data, "tags")
+	}
+	if md.WordCount > 0 {
+		data.Set("wordcount", md.WordCount)
 	}
 	return data
 }

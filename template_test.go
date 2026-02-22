@@ -108,29 +108,72 @@ func TestAttributeForwarding(t *testing.T) {
 	}
 }
 
-// func TestHTMLAttributeParser(t *testing.T) {
-// 	tests := []struct {
-// 		name     string
-// 		fragment []byte
-// 	}{
-// 		{
-// 			name:     "duplicate attributes with the same key",
-// 			fragment: []byte("<div ht-if='a' ht-if='b'>Test</div>"),
-// 		},
-// 	}
-// 	for _, tc := range tests {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			var fragments []*html.Node
-// 			var err error
-// 			var parent *html.Node = &html.Node{Type: html.ElementNode, Data: "test-element"}
-// 			if fragments, err = html.ParseFragment(bytes.NewReader(tc.fragment), parent); err != nil {
-// 				t.Errorf("ParseFragment() error = %v", err)
-// 			}
-// 			for _, fragment := range fragments {
-// 				for i, attr := range fragment.Attr {
-// 					t.Logf("[%d] key: %s, value: %s", i, attr.Key, attr.Val)
-// 				}
-// 			}
-// 		})
-// 	}
-// }
+// TestConditionalParser
+// TODO: Ensure that ht-if attributes are properly parsed.
+
+// TestConditionalExists
+// TODO: Ensure that ht-if attribute's with no conditions check for existence.
+// <element ht-if="some.key.path"></element> should resolve true if { some: { key: { path: { x: null } } } } (i.e. even if path is a map with at least one key).
+
+// TestConditionalEvaluation
+// TODO: Ensure that ht-if attributes are properly compared against TemplateData values.
+
+// Template.RenderBlocks
+// Ensure that ht-block elements are properly rendered.
+func TestRenderBlocks(t *testing.T) {
+	tests := []struct {
+		name   string
+		theme  string
+		layout string
+		data   string
+		err    error
+	}{
+		{
+			name:   "resolve blocks",
+			theme:  "testdata/ht-block/theme.json",
+			layout: "layouts/ok.html",
+			data:   "testdata/ht-block/content/index.md",
+			err:    nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var theme *HyperTheme
+			var layout *html.Node
+			var data TemplateData
+			var template *Template
+			var htmlBytes []byte
+			var err error
+
+			// configure the theme
+			theme = &HyperTheme{URI: &url.URL{Path: tc.theme}}
+			theme.ResolveConfig()
+
+			// load the layout
+			if layout, err = theme.ResourceHTML(tc.layout); err != nil {
+				t.Fatalf("error loading layout %q: %v", tc.layout, err)
+			}
+
+			// initialize the template
+			template = &Template{
+				Theme:          theme,
+				Layout:         layout,
+				TidyMode:       true,
+				MarkdownConfig: nil,
+			}
+
+			// parse the template data
+			if data, err = ParseTemplateDataFile(tc.data, nil); err != nil {
+				t.Fatalf("error parsing template data file %q: %v", tc.data, err)
+			}
+
+			// render the template
+			if htmlBytes, err = template.Process(&data); err != nil {
+				t.Fatalf("error processing template: %v", err)
+			}
+
+			// print the rendered HTML for debugging
+			t.Logf("\n%s\n", string(htmlBytes))
+		})
+	}
+}

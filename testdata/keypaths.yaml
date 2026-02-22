@@ -1,0 +1,14 @@
+---
+site:
+  title: HyperTemplates Testing
+  description: A site for testing HyperTemplates features and functionalities.
+
+data:
+  a:
+    b:
+      c: deep value
+  users:
+    - name: Alice
+      role: admin
+    - name: Bob
+      role: user

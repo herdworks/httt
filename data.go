@@ -90,6 +90,28 @@ func (data TemplateData) Get(key string) (value any) {
 	return value
 }
 
+func (data TemplateData) Exists(path string) bool {
+	value := data.Get(path)
+	switch v := value.(type) {
+	case nil:
+		return false // nil values are non-existent
+	case bool, int, int8, int16, int32, int64, float32, float64:
+		return true // unconditionally true regardless of value
+	case string:
+		return len(v) > 0 // non-empty strings
+	case []any:
+		return len(v) > 0
+	case TemplateData:
+		return len(v.Keys()) > 0
+	case map[string]any:
+		return len(slices.Collect(maps.Keys(v))) > 0 // fallback for TemplateData
+	case map[any]any:
+		return len(slices.Collect(maps.Keys(v))) > 0 // backup workaround for https://github.com/go-yaml/yaml/issues/139
+	default:
+		return false
+	}
+}
+
 func (data TemplateData) GetValue(path []string) (value any) {
 	value = data // make a copy of data to avoid modifying the original
 	for _, k := range path {
