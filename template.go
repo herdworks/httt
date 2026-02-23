@@ -363,18 +363,18 @@ func (template *Template) RenderParams(element *html.Node, data *TemplateData) (
 func (template *Template) RenderBlocks(element *html.Node) (err error) {
 	var fragment *html.Node
 	var fragmentRef string = filepath.Join(template.Theme.Config.BlocksDirectory, element.Data)
-	var fragmentData TemplateData
+	var fragmentData TemplateData = TemplateData{}
 	var fragmentNodes []*html.Node
 	if fragment, err = template.IncludeFragment(element, fragmentRef); err != nil {
 		return err
 	}
 	template.ForwardAttributes(element, fragment)
-	fragmentData = template.AttributeData(element) // TODO: should block template data attributes use the "block." namespace?
+	fragmentData.Set("block", template.AttributeData(element))
 	fragmentNodes = childNodes(element)
 	if len(fragmentNodes) > 0 {
-		// pass nested block content as the template data "content" property, so that
+		// pass nested block content as the template data "block.content" property, so that
 		// block templates can insert wrapped content into block layouts.
-		fragmentData["content"] = string(template.HTML(fragmentNodes...))
+		fragmentData.SetKeyValue("block.content", string(template.HTML(fragmentNodes...)))
 	}
 	shortcode := Template{Layout: fragment, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig, BlockMode: true}
 	shortcode.Process(&fragmentData) // RECURSION!
@@ -727,6 +727,7 @@ func (template *Template) ForwardAttributes(placeholder *html.Node, fragments ..
 	}
 }
 
+// AttributeData returns the HTML element attributes as TemplateData
 func (template *Template) AttributeData(element *html.Node) (data TemplateData) {
 	data = TemplateData{}
 	for _, attr := range element.Attr {
