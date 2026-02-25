@@ -1,6 +1,7 @@
 package hypertemplates
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/herdworks/hyperfeed-go/types/opml"
+	"golang.org/x/net/html"
 
 	"gopkg.in/yaml.v3"
 )
@@ -452,13 +454,11 @@ func ParseTemplateDataBytes(bytes []byte, format string, config *HyperMarkConfig
 			return nil, err
 		}
 	case ".opml":
-		if data, err = ParseTemplateDataOPML(bytes); err != nil {
-			return nil, err
-		}
+		return ParseTemplateDataOPML(bytes)
 	case ".md":
-		if data, err = ParseTemplateDataMarkdown(bytes, config); err != nil {
-			return nil, err
-		}
+		return ParseTemplateDataMarkdown(bytes, config)
+	case ".html":
+		return ParseTemplateDataHTML(bytes)
 	default:
 		return nil, fmt.Errorf("unsupported file type: %s", format)
 	}
@@ -497,6 +497,26 @@ func ParseTemplateDataMarkdown(mdBytes []byte, config *HyperMarkConfig) (data Te
 		return nil, err
 	}
 	return md.Data(), nil
+}
+func ParseTemplateDataHTML(htmlBytes []byte) (data TemplateData, err error) {
+	var document *html.Node
+	data = TemplateData{}
+	if document, err = html.Parse(bytes.NewReader(htmlBytes)); err != nil {
+		return nil, err
+	}
+	if title := Query(document, "title"); title != nil {
+		data["title"] = title.FirstChild.Data // extract text content of title element
+	}
+	if description := Query(document, "meta[name=description]"); description != nil {
+		data["description"] = getAttributeString(description, "content")
+	}
+	if createdAt := Query(document, "meta[name=created_at]"); createdAt != nil {
+		data["created_at"] = getAttributeString(createdAt, "content")
+	}
+	if updatedAt := Query(document, "meta[name=updated_at]"); updatedAt != nil {
+		data["updated_at"] = getAttributeString(updatedAt, "content")
+	}
+	return data, nil
 }
 
 func wrappedValue(value any, path []string) any {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/andybalholm/cascadia"
@@ -122,7 +123,7 @@ func (template *Template) ResolveIncludes() (err error) {
 }
 func (template *Template) Include(element *html.Node) (err error) {
 	var fragments []*html.Node
-	path := getAttribute(element, HyperIncludeAttributeStrings...)
+	path := getAttributeString(element, HyperIncludeAttributeStrings...)
 	if fragments, err = template.IncludeFragments(element, path); err != nil {
 		return errors.Join(ErrInclude, err)
 	}
@@ -162,7 +163,7 @@ func (template *Template) IncludeFragment(element *html.Node, path string) (frag
 }
 
 func (template *Template) EvaluateElement(element *html.Node, data *TemplateData, inclusive bool) (err error) {
-	paramString := getAttribute(element, HyperConditionalAttributeStrings...)
+	paramString := getAttributeString(element, HyperConditionalAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, data) {
 		if param.Evaluate() == inclusive {
 			removeAttributes(element, "hidden") // remove "hidden" attribute if set
@@ -181,12 +182,17 @@ func (template *Template) EvaluateElement(element *html.Node, data *TemplateData
 
 func (template *Template) RenderTemplate(element *html.Node, data *TemplateData) (err error) {
 	var params Parameters
-	paramString := getAttribute(element, HyperTemplateAttributeStrings...)
+	var offset int = getAttributeInt(element, HyperTemplateOffsetAttributeStrings...)
+	var limit int = getAttributeInt(element, HyperTemplateLimitAttributeStrings...)
+	paramString := getAttributeString(element, HyperTemplateAttributeStrings...)
 	if params = template.ParseParameters(paramString, data); len(params) == 0 {
 		return nil // TODO: do we still need to handle tidy_mode for empty ht-template attributes?
 	}
 	for index, value := range params[0].ValueSet() {
 		index += 1 // one-indexed
+		if index <= offset || (limit > 0 && index > offset+limit) {
+			continue // skip items outside of the offset/limit range
+		}
 		count := len(params[0].ValueSet())
 		layoutTemplate := cloneElement(element)                            // element becomes the new/nested layout template
 		removeAttributes(layoutTemplate, HyperTemplateAttributeStrings...) // remove the ht-template attribute from the new layout template
@@ -212,6 +218,8 @@ func (template *Template) RenderTemplate(element *html.Node, data *TemplateData)
 		}
 	}
 	setAttribute(element, "hidden", "true") // hide placeholder template content
+	removeAttributes(element, HyperTemplateOffsetAttributeStrings...)
+	removeAttributes(element, HyperTemplateLimitAttributeStrings...)
 	if template.TidyMode {
 		removeElement(element) // cleanup
 	}
@@ -219,22 +227,37 @@ func (template *Template) RenderTemplate(element *html.Node, data *TemplateData)
 }
 
 func (template *Template) RenderAttributes(element *html.Node, data *TemplateData) (err error) {
-	paramString := getAttribute(element, HyperAttrsAttributeStrings...)
+	paramString := getAttributeString(element, HyperAttrsAttributeStrings...)
+	for _, param := range getAttributeStrings(element, HyperAttrAttributeStrings...) {
+		paramString = strings.TrimSpace(paramString) + fmt.Sprintf("; %s", param)
+	}
 	for _, param := range template.ParseParameters(paramString, data) {
-		if param.Value() == nil {
+		rawValue := param.Value()
+		if rawValue == nil {
 			continue // noop when no matching values found
 		}
-		paramValue := fmt.Sprintf("%v", param.Value())
-		setAttribute(element, param.Target, paramValue)
+		switch value := rawValue.(type) {
+		case TemplateData:
+			for k, v := range value {
+				setAttribute(element, k, fmt.Sprintf("%v", v))
+			}
+		case map[string]any:
+			for k, v := range value {
+				setAttribute(element, k, fmt.Sprintf("%v", v))
+			}
+		default:
+			setAttribute(element, param.Target, fmt.Sprintf("%v", value))
+		}
 		if template.TidyMode {
 			removeAttributes(element, HyperAttrsAttributeStrings...) // cleanup
+			removeAttributes(element, HyperAttrAttributeStrings...) // cleanup
 		}
 	}
 	return nil
 }
 
 func (template *Template) RenderBasedElement(element *html.Node, data *TemplateData) (err error) {
-	paramString := getAttribute(element, HyperBaseAttributeStrings...)
+	paramString := getAttributeString(element, HyperBaseAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, data) {
 		if len(param.Values) == 0 {
 			continue // noop when no matching values found
@@ -263,7 +286,7 @@ func (template *Template) ResolveBasedAttributes(element *html.Node, attribute s
 	}
 	for _, el := range QueryRoot(element, selectors) {
 		var resolvedHref string
-		targetHref := getAttribute(el, attribute)
+		targetHref := getAttributeString(el, attribute)
 		if debug {
 			fmt.Printf("base %s='%s' resolving\n", attribute, targetHref)
 		}
@@ -286,7 +309,7 @@ func (template *Template) ResolveBasedAttributes(element *html.Node, attribute s
 }
 
 func (template *Template) RenderContent(element *html.Node, data *TemplateData) (err error) {
-	paramString := getAttribute(element, HyperContentAttributeStrings...)
+	paramString := getAttributeString(element, HyperContentAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, data) {
 		if len(param.Values) == 0 {
 			continue // noop when no matching values found
@@ -327,8 +350,8 @@ func (template *Template) RenderContent(element *html.Node, data *TemplateData) 
 func (template *Template) RenderParams(element *html.Node, data *TemplateData) (err error) {
 	var fragment []*html.Node
 	var fragmentDiv *html.Node = &html.Node{Type: html.ElementNode, Data: "div", DataAtom: atom.Div}
-	var paramString string = getAttribute(element, HyperParamsAttributeStrings...)
-	outerText(element, getAttribute(element, "data-default", "default")) // set the default value, if provided
+	var paramString string = getAttributeString(element, HyperParamsAttributeStrings...)
+	outerText(element, getAttributeString(element, "data-default", "default")) // set the default value, if provided
 	for _, param := range template.ParseParameters(paramString, data) {
 		if len(param.Values) == 0 {
 			continue // guard
@@ -387,7 +410,7 @@ func (template *Template) RenderBlocks(element *html.Node) (err error) {
 
 func (template *Template) RenderPipe(element *html.Node) (err error) {
 	var destination *html.Node
-	paramString := getAttribute(element, HyperPipeAttributeStrings...)
+	paramString := getAttributeString(element, HyperPipeAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, &TemplateData{}) {
 		if destination = Query(template.Layout, param.Keys...); destination == nil {
 			continue
@@ -411,7 +434,7 @@ func (template *Template) RenderPipe(element *html.Node) (err error) {
 
 func (template *Template) RenderQueryParams(element *html.Node, data *TemplateData) (err error) {
 	debug := hasAttribute(element, HyperDebugAttributeStrings...)
-	paramString := getAttribute(element, HyperQueryAttributeStrings...)
+	paramString := getAttributeString(element, HyperQueryAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, data) {
 		var attributeName string
 		var attributeQuery string
@@ -432,7 +455,7 @@ func (template *Template) RenderQueryParams(element *html.Node, data *TemplateDa
 
 func (template *Template) Debug(element *html.Node, data *TemplateData) (err error) {
 	var modes []string
-	modesString := strings.ReplaceAll(getAttribute(element, HyperDebugAttributeStrings...), " ", "") // remove spaces
+	modesString := strings.ReplaceAll(getAttributeString(element, HyperDebugAttributeStrings...), " ", "") // remove spaces
 	if len(modesString) > 0 {
 		modes = strings.Split(modesString, ",")
 	}
@@ -495,6 +518,8 @@ func (template *Template) HyperNotElements() []*html.Node {
 }
 
 var HyperTemplateAttributeStrings = []string{"data-ht-template", "ht-template"}
+var HyperTemplateOffsetAttributeStrings = []string{"data-ht-offset", "ht-offset"}
+var HyperTemplateLimitAttributeStrings = []string{"data-ht-limit", "ht-limit"}
 
 func (template *Template) HyperTemplateElements() []*html.Node {
 	selectors := []string{"[data-ht-template]:not([data-ht-template] [data-ht-template])"}
@@ -506,15 +531,19 @@ func (template *Template) HyperTemplateElements() []*html.Node {
 	return QueryRoot(template.Layout, selectors...)
 }
 
+var HyperAttrAttributeStrings = []string{"data-ht-attr", "ht-attr"}
 var HyperAttrsAttributeStrings = []string{"data-ht-attrs", "ht-attrs"}
 
 func (template *Template) HyperAttrsElements() []*html.Node {
 	selectors := []string{"[data-ht-attrs]:not([data-ht-template] [data-ht-attrs], [data-ht-template][data-ht-attrs])"}
+	selectors = append(selectors, "[data-ht-attr]:not([data-ht-template] [data-ht-attr], [data-ht-template][data-ht-attr])")
 	if template.StrictMode {
 		return QueryRoot(template.Layout, selectors...)
 	}
 	selectors[0] += ":not([ht-template] [data-ht-attrs], [ht-template][data-ht-attrs])"
+	selectors[1] += ":not([ht-template] [data-ht-attr], [ht-template][data-ht-attr])"
 	selectors = append(selectors, "[ht-attrs]:not([ht-template] [ht-attrs], [ht-template][ht-attrs]):not([data-ht-template] [ht-attrs], [data-ht-template][ht-attrs])")
+	selectors = append(selectors, "[ht-attr]:not([ht-template] [ht-attr], [ht-template][ht-attr]):not([data-ht-template] [ht-attr], [data-ht-template][ht-attr])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
@@ -739,8 +768,8 @@ func (template *Template) AttributeData(element *html.Node) (data TemplateData) 
 func (template *Template) LayoutData() (data TemplateData) {
 	data = TemplateData{}
 	for _, element := range QueryAll(template.Layout, "meta[name^='layout:']") {
-		key := strings.Replace(getAttribute(element, "name"), "layout:", "", -1)
-		value := getAttribute(element, "content")
+		key := strings.Replace(getAttributeString(element, "name"), "layout:", "", -1)
+		value := getAttributeString(element, "content")
 		data.Set(key, value)
 	}
 	return data
@@ -758,7 +787,7 @@ func hasAttribute(element *html.Node, keys ...string) bool {
 	return false
 }
 
-func getAttribute(element *html.Node, keys ...string) (value string) {
+func getAttributeString(element *html.Node, keys ...string) (value string) {
 	value = ""
 	if element.Type != html.ElementNode {
 		return value
@@ -768,6 +797,24 @@ func getAttribute(element *html.Node, keys ...string) (value string) {
 			return attr.Val
 		}
 	}
+	return value
+}
+
+func getAttributeStrings(element *html.Node, keys ...string) (values []string) {
+	if element.Type != html.ElementNode {
+		return values
+	}
+	for _, attr := range element.Attr {
+		if slices.Contains(keys, attr.Key) {
+			values = append(values, attr.Val)
+		}
+	}
+	return values
+}
+
+func getAttributeInt(element *html.Node, keys ...string) (value int) {
+	stringValue := getAttributeString(element, keys...)
+	value, _ = strconv.Atoi(stringValue)
 	return value
 }
 
@@ -806,7 +853,7 @@ func setAttribute(element *html.Node, key string, value string) {
 
 func setAttributeQueryParam(element *html.Node, attribute string, queryParam string, value string, debug bool) (err error) {
 	var attributeURL *url.URL
-	attributeHref := getAttribute(element, attribute)
+	attributeHref := getAttributeString(element, attribute)
 	if attributeURL, err = url.Parse(attributeHref); err != nil {
 		return err // parse the attribute URL
 	}
@@ -837,13 +884,9 @@ func removeAttributes(element *html.Node, keys ...string) {
 	if element.Type != html.ElementNode {
 		return // guard
 	}
-	for i, attr := range element.Attr {
-		if !slices.Contains(keys, attr.Key) {
-			continue
-		}
-		element.Attr = append(element.Attr[:i], element.Attr[i+1:]...)
-		break
-	}
+	element.Attr = slices.DeleteFunc(element.Attr, func(attr html.Attribute) bool {
+		return slices.Contains(keys, attr.Key)		
+	})
 }
 
 func innerText(element *html.Node, text string) {

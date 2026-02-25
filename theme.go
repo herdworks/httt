@@ -270,6 +270,27 @@ func (theme *Theme) Archive(archive string) (err error) {
 		}
 	}()
 
+	// Create empty directory entries for all configured theme directories,
+	// ensuring they are present in the archive even if they contain no files.
+	var directories []string = []string{
+		theme.Config.ContentTypesDirectory,
+		theme.Config.BlocksDirectory,
+		theme.Config.LayoutsDirectory,
+		theme.Config.FragmentsDirectory,
+		theme.Config.DataDirectory,
+		theme.Config.StaticDirectory,
+	}
+	for _, dir := range directories {
+		var dirHeader *zip.FileHeader = &zip.FileHeader{
+			Name:   filepath.ToSlash(dir) + "/",
+			Method: zip.Store,
+		}
+		dirHeader.SetMode(os.ModeDir | 0755)
+		if _, err = zipper.CreateHeader(dirHeader); err != nil {
+			return fmt.Errorf("create directory entry %q: %w", dirHeader.Name, err)
+		}
+	}
+
 	for _, relPath := range paths {
 		var sourcePath string
 		var sourceFile *os.File
