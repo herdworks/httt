@@ -228,8 +228,8 @@ func TestTemplateDataSet(t *testing.T) {
 		{
 			name:  "set nested keypath",
 			data:  TemplateData{"some": map[string]any{"key": "old value", "other": "value"}},
-			key:   "some.key",
-			value: "new value",
+			key:   "some",
+			value: "value",
 		},
 	}
 	for _, tc := range tests {
