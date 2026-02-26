@@ -1,6 +1,7 @@
 package hypertemplates
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -10,7 +11,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/herdworks/hypertemplates-go/opml"
+	"github.com/herdworks/hyperfeed-go/types/opml"
+	"golang.org/x/net/html"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -87,6 +90,28 @@ func (data TemplateData) Get(key string) (value any) {
 		value = data.GetValue(path)
 	}
 	return value
+}
+
+func (data TemplateData) Exists(path string) bool {
+	value := data.Get(path)
+	switch v := value.(type) {
+	case nil:
+		return false // nil values are non-existent
+	case bool, int, int8, int16, int32, int64, float32, float64:
+		return true // unconditionally true regardless of value
+	case string:
+		return len(v) > 0 // non-empty strings
+	case []any:
+		return len(v) > 0
+	case TemplateData:
+		return len(v.Keys()) > 0
+	case map[string]any:
+		return len(slices.Collect(maps.Keys(v))) > 0 // fallback for TemplateData
+	case map[any]any:
+		return len(slices.Collect(maps.Keys(v))) > 0 // backup workaround for https://github.com/go-yaml/yaml/issues/139
+	default:
+		return false
+	}
 }
 
 func (data TemplateData) GetValue(path []string) (value any) {
@@ -206,13 +231,15 @@ func (data TemplateData) SetPathValue(path []string, value any) (err error) {
 	case nil:
 		data[key] = wrappedValue(value, subpath)
 		return nil
-	case TemplateData, map[string]any:
-		return data[key].(TemplateData).SetPathValue(subpath, value) // RECURSION!
+	case TemplateData:
+		return v.SetPathValue(subpath, value)
+	case map[string]any:
+		return TemplateData(v).SetPathValue(subpath, value)
 	case map[any]any:
 		m := TemplateData{}
 		for k := range v {
-			m[fmt.Sprintf("%v", k)] = v[k]
-		} // convert map[any]any to map[string]any
+			m[fmt.Sprintf("%v", k)] = v[k] // convert map[any]any to map[string]any
+		}
 		data[key] = m
 		return data[key].(TemplateData).SetPathValue(subpath, value) // RECURSION!
 	default:
@@ -342,7 +369,7 @@ func (data TemplateData) Clean(reserved []string) (cleaned TemplateData) {
 //	var data: TemplateData = TemplateData{ "key": "value" }
 //	yaml.Marshal(OrderedTemplateData(data))
 func (data OrderedTemplateData) MarshalYAML() (any, error) {
-	orderedFields := []string{"created_at", "updated_at", "layout", "path", "slug", "author", "contributors", "title", "description", "summary", "more", "tags", "unlisted", "redirect", "attachments"}
+	orderedFields := []string{"created_at", "updated_at", "layout", "path", "slug", "byline", "contributors", "title", "description", "summary", "more", "tags", "unlisted", "redirect", "attachments"}
 	output := &yaml.Node{Kind: yaml.MappingNode}
 
 	// Add known fields first in order
@@ -360,8 +387,8 @@ func (data OrderedTemplateData) MarshalYAML() (any, error) {
 	// Add remaining/unordered fields
 	for k, v := range data {
 		if slices.Contains(orderedFields, k) {
-			continue
-		} // skip ordered fields
+			continue // skip ordered fields
+		}
 		key := &yaml.Node{Kind: yaml.ScalarNode, Value: k}
 		value := &yaml.Node{}
 		if err := value.Encode(v); err != nil {
@@ -409,8 +436,8 @@ func ParseTemplateDataFile(path string, config *HyperMarkConfig) (data TemplateD
 		return TemplateData{}, err
 	}
 	if len(fileBytes) == 0 {
-		return TemplateData{}, err
-	} // skip empty files
+		return TemplateData{}, err // skip empty files
+	}
 	if fileData, err = ParseTemplateDataBytes(fileBytes, filepath.Ext(path), config); err != nil {
 		return TemplateData{}, err
 	}
@@ -427,13 +454,11 @@ func ParseTemplateDataBytes(bytes []byte, format string, config *HyperMarkConfig
 			return nil, err
 		}
 	case ".opml":
-		if data, err = ParseTemplateDataOPML(bytes); err != nil {
-			return nil, err
-		}
+		return ParseTemplateDataOPML(bytes)
 	case ".md":
-		if data, err = ParseTemplateDataMarkdown(bytes, config); err != nil {
-			return nil, err
-		}
+		return ParseTemplateDataMarkdown(bytes, config)
+	case ".html":
+		return ParseTemplateDataHTML(bytes)
 	default:
 		return nil, fmt.Errorf("unsupported file type: %s", format)
 	}
@@ -473,12 +498,31 @@ func ParseTemplateDataMarkdown(mdBytes []byte, config *HyperMarkConfig) (data Te
 	}
 	return md.Data(), nil
 }
+func ParseTemplateDataHTML(htmlBytes []byte) (data TemplateData, err error) {
+	var document *html.Node
+	data = TemplateData{}
+	if document, err = html.Parse(bytes.NewReader(htmlBytes)); err != nil {
+		return nil, err
+	}
+	if title := Query(document, "title"); title != nil {
+		data["title"] = title.FirstChild.Data // extract text content of title element
+	}
+	if description := Query(document, "meta[name=description]"); description != nil {
+		data["description"] = getAttributeString(description, "content")
+	}
+	if createdAt := Query(document, "meta[name=created_at]"); createdAt != nil {
+		data["created_at"] = getAttributeString(createdAt, "content")
+	}
+	if updatedAt := Query(document, "meta[name=updated_at]"); updatedAt != nil {
+		data["updated_at"] = getAttributeString(updatedAt, "content")
+	}
+	return data, nil
+}
 
 func wrappedValue(value any, path []string) any {
 	if len(path) == 0 {
 		return value
 	}
-	fmt.Printf("wrapping value %v with path %v\n", value, strings.Join(path, "."))
 	for len(path) > 0 {
 		key := path[len(path)-1]
 		path = path[:len(path)-1]        // remove last element
