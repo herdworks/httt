@@ -44,6 +44,11 @@ jobs:
           set -e
           go fmt ./...
 
+      - name: Test
+        run: |
+          set -e
+          go test -v ./...
+
       - name: Build
         run: |
           set -e
