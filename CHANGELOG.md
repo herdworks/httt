@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## v0.18.1 (2026-03-01)
+
+* Fixed a bug in `theme.Archive()` that failed to include the `theme.json` config file in the theme archive.
+
 ## v0.18.0 (2026-02-26)
 
 * Added regular expression conditionals for `ht-if` and `ht-not` parameters via the `~=` operator.
