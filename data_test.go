@@ -234,7 +234,7 @@ func TestTemplateDataSet(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			
+
 			tc.data.Set(tc.key, tc.value)
 			if value := tc.data.Get(tc.key); value != tc.value {
 				t.Fatalf("failed to set key value\n\texpected %q = %v\n\t     got %q = %v", tc.key, tc.value, tc.key, value)
@@ -262,7 +262,7 @@ func TestTemplateDataSetKeyPath(t *testing.T) {
 		},
 		{
 			name:  "set nested keypath",
-			data:  TemplateData{"some": map[string]any{"key": "value", "other": "value", "nested": map[string]any{ "values": []int{0, 1, 2}}}},
+			data:  TemplateData{"some": map[string]any{"key": "value", "other": "value", "nested": map[string]any{"values": []int{0, 1, 2}}}},
 			key:   "some.key",
 			value: "new value",
 		},

@@ -250,7 +250,7 @@ func (template *Template) RenderAttributes(element *html.Node, data *TemplateDat
 		}
 		if template.TidyMode {
 			removeAttributes(element, HyperAttrsAttributeStrings...) // cleanup
-			removeAttributes(element, HyperAttrAttributeStrings...) // cleanup
+			removeAttributes(element, HyperAttrAttributeStrings...)  // cleanup
 		}
 	}
 	return nil
@@ -885,7 +885,7 @@ func removeAttributes(element *html.Node, keys ...string) {
 		return // guard
 	}
 	element.Attr = slices.DeleteFunc(element.Attr, func(attr html.Attribute) bool {
-		return slices.Contains(keys, attr.Key)		
+		return slices.Contains(keys, attr.Key)
 	})
 }
 
