@@ -193,7 +193,7 @@ func (theme *Theme) Assets() (assets HyperFiles) {
 func (theme *Theme) FilePaths() (paths []string, err error) {
 	var root string
 	var rootAbs string
-	var seen map[string]struct{} = map[string]struct{}{}
+	var seen map[string]bool = map[string]bool{}
 
 	if err = theme.Validate(); err != nil {
 		return nil, err
@@ -204,7 +204,13 @@ func (theme *Theme) FilePaths() (paths []string, err error) {
 	if rootAbs, err = filepath.Abs(root); err != nil {
 		return nil, fmt.Errorf("resolve theme root %q: %w", root, err)
 	}
-
+	if absConfigPath, err := filepath.Abs(theme.URI.Path); err == nil {
+		if relConfigPath, err := filepath.Rel(rootAbs, absConfigPath); err == nil {
+			relConfigPath = filepath.ToSlash(relConfigPath)
+			seen[relConfigPath] = true
+			paths = append(paths, relConfigPath)
+		}
+	}
 	var directories []string = []string{
 		theme.Config.ContentTypesDirectory,
 		theme.Config.BlocksDirectory,
@@ -237,7 +243,7 @@ func (theme *Theme) FilePaths() (paths []string, err error) {
 			if _, ok := seen[relPath]; ok {
 				continue
 			}
-			seen[relPath] = struct{}{}
+			seen[relPath] = true
 			paths = append(paths, relPath)
 		}
 	}
