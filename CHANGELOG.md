@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## v0.18.2 (2026-03-30)
+
+* Added `version.go` with `hypertemplates.LibVersion` and `hypertemplates.LibReleaseDate` properties
+* Update `github.com/herdworks/hyperfeed-go` package to v0.19.1
+
+> **NOTE:** until now the `github.com/herdworks/hypertemplates-go` package has attempted to stay in sync with the full suite of HyperTexting packages: 
+> 
+> * `hypergraph-go`
+> * `hyperfeed-go`
+> * `hypertemplates-go`
+> * `hyperproviders-go`
+> * `hypertexting-go`
+> * `hyperctl`
+> * `libhypertexting`
+> * `HyperTextingKit`
+> * `hypertexting-app`
+> 
+> Starting with this release we will decouple the library package versions from the user-facing app versions. 
+
 ## v0.18.1 (2026-03-01)
 
 * Fixed a bug in `theme.Archive()` that failed to include the `theme.json` config file in the theme archive.
