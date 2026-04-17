@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## v0.19.0 (2026-04-17)
+
+* Added `TemplateData.Clone()` for deep-copying nested template data maps and slices without sharing mutable state.
+* Added `HyperFiles.Paths()` for returning slash-prefixed file paths from `HyperFiles`.
+
 ## v0.18.2 (2026-03-30)
 
 * Added `version.go` with `hypertemplates.LibVersion` and `hypertemplates.LibReleaseDate` properties

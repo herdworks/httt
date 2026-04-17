@@ -346,6 +346,22 @@ func (data TemplateData) Merge(incoming TemplateData, appendMode bool, verbose b
 	return merged
 }
 
+// Clone()
+//
+// Returns a deep copy of the TemplateData. Nested maps and slices are
+// recursively copied so that mutations to the clone do not affect the original.
+// Returns nil if the receiver is nil.
+func (data TemplateData) Clone() (cloned TemplateData) {
+	if data == nil {
+		return nil
+	}
+	cloned = TemplateData{}
+	for k, v := range data {
+		cloned[k] = cloneValue(v)
+	}
+	return cloned
+}
+
 func (data TemplateData) Clean(reserved []string) (cleaned TemplateData) {
 	cleaned = TemplateData{}
 	for k, v := range data {
@@ -529,4 +545,58 @@ func wrappedValue(value any, path []string) any {
 		value = TemplateData{key: value} // wrap the value in TemplateData
 	}
 	return value
+}
+
+func cloneValue(value any) any {
+	switch v := value.(type) {
+	case TemplateData:
+		return v.Clone()
+	case map[string]any:
+		m := make(map[string]any, len(v))
+		for k, vv := range v {
+			m[k] = cloneValue(vv)
+		}
+		return m
+	case map[any]any:
+		// workaround for https://github.com/go-yaml/yaml/issues/139
+		m := make(map[any]any, len(v))
+		for k, vv := range v {
+			m[k] = cloneValue(vv)
+		}
+		return m
+	case []any:
+		s := make([]any, len(v))
+		for i, vv := range v {
+			s[i] = cloneValue(vv)
+		}
+		return s
+	case []TemplateData:
+		s := make([]TemplateData, len(v))
+		for i, vv := range v {
+			s[i] = vv.Clone()
+		}
+		return s
+	case []map[string]any:
+		s := make([]map[string]any, len(v))
+		for i, vv := range v {
+			s[i] = cloneValue(vv).(map[string]any)
+		}
+		return s
+	case []map[any]any:
+		s := make([]map[any]any, len(v))
+		for i, vv := range v {
+			s[i] = cloneValue(vv).(map[any]any)
+		}
+		return s
+	case []string:
+		return slices.Clone(v)
+	case []int:
+		return slices.Clone(v)
+	case []float32:
+		return slices.Clone(v)
+	case []float64:
+		return slices.Clone(v)
+	default:
+		return value
+	}
 }

@@ -231,6 +231,12 @@ func (files HyperFiles) FilePaths() (paths []string) {
 	}
 	return paths
 }
+func (files HyperFiles) Paths() (paths []string) {
+	for _, file := range files {
+		paths = append(paths, filepath.Join("/", file.SubPath()))
+	}
+	return paths
+}
 func (files HyperFiles) ColumnValues(field string) (values []string) {
 	values = []string{}
 	for i := range files {

@@ -212,6 +212,109 @@ func TestTemplateDataExistsResolver(t *testing.T) {
 	}
 }
 
+func TestTemplateDataClone(t *testing.T) {
+	t.Run("nil receiver returns nil", func(t *testing.T) {
+		var data TemplateData
+		if clone := data.Clone(); clone != nil {
+			t.Fatalf("expected nil clone for nil receiver, got %v", clone)
+		}
+	})
+
+	t.Run("empty map returns non-nil empty map", func(t *testing.T) {
+		data := TemplateData{}
+		clone := data.Clone()
+		if clone == nil {
+			t.Fatalf("expected non-nil clone for empty map")
+		}
+		if len(clone) != 0 {
+			t.Fatalf("expected empty clone, got %v", clone)
+		}
+	})
+
+	t.Run("nested TemplateData is independent", func(t *testing.T) {
+		data := TemplateData{
+			"a": TemplateData{"b": "original"},
+		}
+		clone := data.Clone()
+		clone["a"].(TemplateData)["b"] = "mutated"
+		if got := data.Get("a.b"); got != "original" {
+			t.Fatalf("original mutated: expected %q, got %v", "original", got)
+		}
+	})
+
+	t.Run("nested map[string]any is independent", func(t *testing.T) {
+		data := TemplateData{
+			"a": map[string]any{"b": "original"},
+		}
+		clone := data.Clone()
+		clone["a"].(map[string]any)["b"] = "mutated"
+		if got := data.Get("a.b"); got != "original" {
+			t.Fatalf("original mutated: expected %q, got %v", "original", got)
+		}
+	})
+
+	t.Run("nested map[any]any is independent", func(t *testing.T) {
+		data := TemplateData{
+			"a": map[any]any{"b": "original"},
+		}
+		clone := data.Clone()
+		clone["a"].(map[any]any)["b"] = "mutated"
+		if got := data["a"].(map[any]any)["b"]; got != "original" {
+			t.Fatalf("original mutated: expected %q, got %v", "original", got)
+		}
+	})
+
+	t.Run("nested []any is independent", func(t *testing.T) {
+		data := TemplateData{
+			"items": []any{"x", "y"},
+		}
+		clone := data.Clone()
+		clone["items"] = append(clone["items"].([]any), "z")
+		clone["items"].([]any)[0] = "mutated"
+		orig := data["items"].([]any)
+		if len(orig) != 2 {
+			t.Fatalf("original slice length changed: got %d, expected 2", len(orig))
+		}
+		if orig[0] != "x" {
+			t.Fatalf("original slice element mutated: got %v, expected %q", orig[0], "x")
+		}
+	})
+
+	t.Run("nested []string is independent", func(t *testing.T) {
+		data := TemplateData{
+			"tags": []string{"a", "b"},
+		}
+		clone := data.Clone()
+		clone["tags"].([]string)[0] = "mutated"
+		if data["tags"].([]string)[0] != "a" {
+			t.Fatalf("original []string mutated")
+		}
+	})
+
+	t.Run("clone serializes to same JSON as original", func(t *testing.T) {
+		data := TemplateData{
+			"title": "hello",
+			"nested": TemplateData{
+				"n":    42,
+				"list": []any{"a", "b", "c"},
+			},
+			"tags": []string{"x", "y"},
+		}
+		clone := data.Clone()
+		orig, err := json.Marshal(data)
+		if err != nil {
+			t.Fatalf("failed to marshal original: %v", err)
+		}
+		cloned, err := json.Marshal(clone)
+		if err != nil {
+			t.Fatalf("failed to marshal clone: %v", err)
+		}
+		if string(orig) != string(cloned) {
+			t.Fatalf("clone JSON differs from original\n original: %s\n   cloned: %s", orig, cloned)
+		}
+	})
+}
+
 func TestTemplateDataSet(t *testing.T) {
 	tests := []struct {
 		name  string
