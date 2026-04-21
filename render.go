@@ -28,5 +28,5 @@ func Render(dataPath string, layoutPath string, themePath string, untidy bool, m
 		TidyMode:       !untidy,
 		MarkdownConfig: markdownConfig,
 	}
-	return template.Process(&data)
+	return template.Process(&data, nil)
 }

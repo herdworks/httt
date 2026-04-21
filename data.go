@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/herdworks/hyperfeed-go/types/opml"
@@ -117,6 +118,7 @@ func (data TemplateData) Exists(path string) bool {
 func (data TemplateData) GetValue(path []string) (value any) {
 	value = data // make a copy of data to avoid modifying the original
 	for _, k := range path {
+		n, _ := strconv.Atoi(k) // 0 if non-numeric; slice cases bounds-check
 		switch v := value.(type) {
 		case TemplateData:
 			value = v[k]
@@ -124,6 +126,24 @@ func (data TemplateData) GetValue(path []string) (value any) {
 			value = v[k] // fallback for TemplateData
 		case map[any]any:
 			value = v[k] // backup workaround for https://github.com/go-yaml/yaml/issues/139
+		case []any:
+			value = sliceAt(v, n)
+		case TemplateDataSet:
+			value = sliceAt(v, n)
+		case []TemplateData:
+			value = sliceAt(v, n)
+		case []map[string]any:
+			value = sliceAt(v, n)
+		case []map[any]any:
+			value = sliceAt(v, n)
+		case []string:
+			value = sliceAt(v, n)
+		case []int:
+			value = sliceAt(v, n)
+		case []float32:
+			value = sliceAt(v, n)
+		case []float64:
+			value = sliceAt(v, n)
 		default:
 			value = nil // not found
 		}
@@ -168,6 +188,8 @@ func (data TemplateData) GetLength(path []string) (length int) {
 	case map[any]any:
 		length = len(v) // backup workaround for https://github.com/go-yaml/yaml/issues/139
 	case []any:
+		length = len(v)
+	case TemplateDataSet:
 		length = len(v)
 	case []TemplateData:
 		length = len(v)
@@ -535,6 +557,17 @@ func ParseTemplateDataHTML(htmlBytes []byte) (data TemplateData, err error) {
 	return data, nil
 }
 
+// sliceAt returns the 1-indexed element of s, or nil if n is out of range.
+// Used by GetValue to resolve numeric path segments against slice values.
+// n is the already-parsed segment (0 for non-numeric, which naturally falls
+// out of range).
+func sliceAt[T any](s []T, n int) any {
+	if n < 1 || n > len(s) {
+		return nil
+	}
+	return s[n-1]
+}
+
 func wrappedValue(value any, path []string) any {
 	if len(path) == 0 {
 		return value
@@ -568,6 +601,12 @@ func cloneValue(value any) any {
 		s := make([]any, len(v))
 		for i, vv := range v {
 			s[i] = cloneValue(vv)
+		}
+		return s
+	case TemplateDataSet:
+		s := make(TemplateDataSet, len(v))
+		for i, vv := range v {
+			s[i] = vv.Clone()
 		}
 		return s
 	case []TemplateData:

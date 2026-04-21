@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+Added support for template data array accessors and user-generated template data in `ht-block` elements, so `ht-block` elements can access `page.*` template data properties.  
+Improved HyperMark support for detecting inline vs block-level `ht-block` elements and `<!-- more -->` comment detection.
+
+* Added support for 1-indexed array accessors to `TemplateData.Get()` (e.g. `foo.bar.1.example`); also handled `TemplateDataSet` in `GetValue`, `GetLength`, and `Clone`.
+* Added `userData *TemplateData` parameter to `Template.Process()`, `Template.RenderTemplate()`, and the renamed `Template.RenderBlock()` (was `RenderBlocks`); 
+  block fragments now seed their template data from a clone of `userData`, so callers can expose user-generated template data in `ht-block` elements.
+  _NOTE: this is a breaking API change for direct callers of `Template.Process()` — pass `nil` for `userData` to preserve previous behavior._
+* Added `hypermark.HTBlockHTMLParserExtension()` goldmark extension to promote `ht-block` elements to CommonMark type-6 HTML blocks;
+  this prevents `ht-block` elements from being wrapped in `<p>` tags when they appear on their own line.
+  _NOTE: Supports multi-line opening tags (the `ht-block` attribute can appear on any continuation line of the opening tag). Quoted attribute values are respected, so `ht-block` appearing as a substring inside a value does not trigger promotion. Inline usage of the same tags within prose is unaffected and remains in the surrounding paragraph._
+* Changed `<!--more-->` detection to allow for whitespace (e.g. `<!-- more -->`)
+* Updated transitive dependencies: `github.com/dlclark/regexp2` v1.7.0 → v1.11.4, `gopkg.in/yaml.v2` v2.3.0 → v2.4.0.
+
 ## v0.19.0 (2026-04-17)
 
 * Added `TemplateData.Clone()` for deep-copying nested template data maps and slices without sharing mutable state.

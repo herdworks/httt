@@ -3,8 +3,8 @@ package hypertemplates
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"slices"
-	"strings"
 
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 
@@ -19,6 +19,7 @@ import (
 	meta "github.com/yuin/goldmark-meta"
 )
 
+// TYPES =======================================================================
 // HyperMark is the markdown parser for HyperText documents.
 type HyperMark struct {
 	Config      *HyperMarkConfig
@@ -31,6 +32,16 @@ type HyperMark struct {
 	goldmark    goldmark.Markdown
 }
 
+type HyperMarkConfig struct {
+	Mentions hypermark.MentionConfig `json:"mentions" yaml:"mentions"`
+}
+
+// VARIABLES ===================================================================
+var (
+	moreDelimiter = regexp.MustCompile(`<!--\s*more\s*-->`)
+)
+
+// METHODS =====================================================================
 func (md HyperMark) New(config *HyperMarkConfig) *HyperMark {
 	if config == nil {
 		config = &DefaultHyperMarkConfig
@@ -57,6 +68,7 @@ func (md HyperMark) New(config *HyperMarkConfig) *HyperMark {
 			hypermark.EntityMentionExtension(&md.Config.Mentions),
 			hypermark.HashtagMentionExtension(&md.Config.Mentions),
 			hypermark.WordCounterExtension(),
+			hypermark.HTBlockHTMLParserExtension(),
 		),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(
@@ -103,14 +115,12 @@ func (md *HyperMark) ExtractWordCount(context parser.Context) {
 
 func (md *HyperMark) SummarizeContent(htmlBytes []byte) {
 	md.Content = string(htmlBytes)
-	delim := []byte("<!--more-->")
-	more := bytes.Index(htmlBytes, delim)
-	if more < 0 {
+	loc := moreDelimiter.FindIndex(htmlBytes)
+	if loc == nil {
 		return // no <!--more--> delimiter found
 	}
-	md.Summary = string(htmlBytes[:more])
-	md.More = string(htmlBytes[more:])
-	md.More = strings.Replace(md.More, string(delim), "", 1)
+	md.Summary = string(htmlBytes[:loc[0]])
+	md.More = string(htmlBytes[loc[1]:])
 }
 
 func (md *HyperMark) Data() (data TemplateData) {
@@ -161,13 +171,6 @@ func (md *HyperMark) DedupTags(incoming []any) []any {
 	return outgoing
 }
 
-// ============================================================================
-// Helper types, methods, and functions
-// ============================================================================
-type HyperMarkConfig struct {
-	Mentions hypermark.MentionConfig `json:"mentions" yaml:"mentions"`
-}
-
 func (config *HyperMarkConfig) Resolve() {
 	if config == nil {
 		config = &DefaultHyperMarkConfig
@@ -179,6 +182,8 @@ func (config *HyperMarkConfig) Resolve() {
 		config.Mentions.HrefSuffix = hypermark.DefaultMentionConfig.HrefSuffix
 	}
 }
+
+// FUNCTIONS ===================================================================
 
 var DefaultHyperMarkConfig = HyperMarkConfig{
 	Mentions: hypermark.DefaultMentionConfig,

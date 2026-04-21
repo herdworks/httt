@@ -66,7 +66,6 @@ func TestTemplateDataOPMLParser(t *testing.T) {
 // TODO: Ensure that Markdown, YAML, JSON, and OPML data are properly parsed into TemplateData.
 
 // TestTemplateDataKeypathResolver
-// TODO: Does TemplateData.Get support keypaths with array indices? e.g., "some.array.0.key"
 func TestTemplateDataKeypathResolver(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -89,13 +88,41 @@ func TestTemplateDataKeypathResolver(t *testing.T) {
 			value:   "deep value",
 			err:     nil,
 		},
-		// {
-		// 	name:     "array keypath",
-		// 	source:   "testdata/keypaths.yaml",
-		// 	keypath:  "users.0.name",
-		// 	value:    "Alice",
-		// 	err:      nil,
-		// },
+		{
+			name:    "array keypath (1-indexed, first)",
+			source:  "testdata/keypaths.yaml",
+			keypath: "data.users.1.name",
+			value:   "Alice",
+			err:     nil,
+		},
+		{
+			name:    "array keypath (1-indexed, second)",
+			source:  "testdata/keypaths.yaml",
+			keypath: "data.users.2.name",
+			value:   "Bob",
+			err:     nil,
+		},
+		{
+			name:    "array keypath zero segment returns nil",
+			source:  "testdata/keypaths.yaml",
+			keypath: "data.users.0.name",
+			value:   nil,
+			err:     nil,
+		},
+		{
+			name:    "array keypath out of range returns nil",
+			source:  "testdata/keypaths.yaml",
+			keypath: "data.users.3.name",
+			value:   nil,
+			err:     nil,
+		},
+		{
+			name:    "array keypath non-numeric segment returns nil",
+			source:  "testdata/keypaths.yaml",
+			keypath: "data.users.foo.name",
+			value:   nil,
+			err:     nil,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

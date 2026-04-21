@@ -29,6 +29,6 @@ require (
 
 // transitive dependencies
 require (
-	github.com/dlclark/regexp2 v1.7.0 // indirect
-	gopkg.in/yaml.v2 v2.3.0 // indirect
+	github.com/dlclark/regexp2 v1.11.4 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

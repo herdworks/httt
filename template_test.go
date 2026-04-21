@@ -168,12 +168,70 @@ func TestRenderBlocks(t *testing.T) {
 			}
 
 			// render the template
-			if htmlBytes, err = template.Process(&data); err != nil {
+			if htmlBytes, err = template.Process(&data, nil); err != nil {
 				t.Fatalf("error processing template: %v", err)
 			}
 
 			// print the rendered HTML for debugging
 			t.Logf("\n%s\n", string(htmlBytes))
 		})
+	}
+}
+
+// TestRenderBlockPageFallback reproduces the caller setup where the outer page
+// data is passed as userData under a "page" namespace, and a block template
+// references page.* paths via the ht-attrs / ht-content fallback chain.
+func TestRenderBlockPageFallback(t *testing.T) {
+	theme := &Theme{URI: &url.URL{Path: "testdata/ht-block/theme.json"}}
+	theme.ResolveConfig()
+
+	layout, err := theme.ResourceHTML("layouts/ok.html")
+	if err != nil {
+		t.Fatalf("error loading layout: %v", err)
+	}
+
+	pageData, err := ParseTemplateDataFile("testdata/ht-block/content/attachment.md", nil)
+	if err != nil {
+		t.Fatalf("error parsing page data: %v", err)
+	}
+
+	// Mirror hypertexting-go's Attachments.TemplateData() which returns
+	// the named type TemplateDataSet (not []TemplateData). Replace the
+	// YAML-parsed slice so we reproduce the real caller's shape.
+	pageData["attachments"] = TemplateDataSet{
+		TemplateData{
+			"kind": "link",
+			"href": "https://www.anker.com/products/a2345-anker-prime-charger-250w-6-ports-ganprime",
+			"data": TemplateData{
+				"hypergraph": TemplateData{
+					"href":        "https://www.anker.com/products/a2345-anker-prime-charger-250w-6-ports-ganprime",
+					"cover":       "https://example.com/cover.png",
+					"favicon":     "https://www.anker.com/favicon.png",
+					"title":       "Anker Prime Charger (250W, 6 Ports, GaNPrime) - Anker US",
+					"description": "Power up with the Anker Prime Desktop Charger.",
+				},
+			},
+		},
+	}
+
+	template := &Template{
+		Theme:          theme,
+		Layout:         layout,
+		TidyMode:       true,
+		MarkdownConfig: nil,
+	}
+
+	// Mirror the caller: outer data may or may not have page.*, but userData
+	// wraps the page data under the "page" key explicitly.
+	userData := &TemplateData{"page": pageData}
+
+	htmlBytes, err := template.Process(&pageData, userData)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+	t.Logf("\n%s\n", string(htmlBytes))
+
+	if !bytes.Contains(htmlBytes, []byte("anker.com/products/a2345")) {
+		t.Errorf("expected rendered output to include page.attachments.1.data.hypergraph.href; got:\n%s", htmlBytes)
 	}
 }

@@ -17,10 +17,10 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// HyperTemplate
+// Template
 //
-// A HyperTemplate is an HTML document.
-// HyperTemplates may contain templating instructions as HTML5 data attributes.
+// A Template is an HTML document.
+// Templates may contain templating instructions as HTML5 data attributes.
 type Template struct {
 	Layout         *html.Node
 	Theme          *Theme
@@ -33,7 +33,7 @@ type Template struct {
 }
 
 // TODO: add strict mode toggle (only process data-attributes)
-func (template *Template) Process(data *TemplateData) (htmlBytes []byte, err error) {
+func (template *Template) Process(data *TemplateData, userData *TemplateData) (htmlBytes []byte, err error) {
 	if template.Layout == nil {
 		return nil, errors.New("template layout empty, nothing to do") // guard
 	}
@@ -66,7 +66,7 @@ func (template *Template) Process(data *TemplateData) (htmlBytes []byte, err err
 		}
 	}
 	for _, element := range template.HyperTemplateElements() {
-		if err = template.RenderTemplate(element, data); err != nil {
+		if err = template.RenderTemplate(element, data, userData); err != nil {
 			return nil, err
 		}
 	}
@@ -91,7 +91,7 @@ func (template *Template) Process(data *TemplateData) (htmlBytes []byte, err err
 		}
 	}
 	for _, element := range template.HyperBlockElements() {
-		if err = template.RenderBlocks(element); err != nil {
+		if err = template.RenderBlock(element, userData); err != nil {
 			return nil, err
 		}
 	}
@@ -180,7 +180,7 @@ func (template *Template) EvaluateElement(element *html.Node, data *TemplateData
 	return nil
 }
 
-func (template *Template) RenderTemplate(element *html.Node, data *TemplateData) (err error) {
+func (template *Template) RenderTemplate(element *html.Node, data *TemplateData, userData *TemplateData) (err error) {
 	var params Parameters
 	var offset int = getAttributeInt(element, HyperTemplateOffsetAttributeStrings...)
 	var limit int = getAttributeInt(element, HyperTemplateLimitAttributeStrings...)
@@ -205,8 +205,8 @@ func (template *Template) RenderTemplate(element *html.Node, data *TemplateData)
 		nestedData.SetKeyValue("ht.count", count) // set template meta
 		nestedTemplate := Template{Layout: layoutTemplate, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig}
 
-		// RECURSION!
-		if _, err = nestedTemplate.Process(nestedData); err != nil {
+		// RECURSION — forward userData unchanged
+		if _, err = nestedTemplate.Process(nestedData, userData); err != nil {
 			return err
 		}
 		if layoutTemplate.Type == html.CommentNode {
@@ -383,11 +383,16 @@ func (template *Template) RenderParams(element *html.Node, data *TemplateData) (
 	return nil
 }
 
-func (template *Template) RenderBlocks(element *html.Node) (err error) {
+func (template *Template) RenderBlock(element *html.Node, userData *TemplateData) (err error) {
 	var fragment *html.Node
 	var fragmentRef string = filepath.Join(template.Theme.Config.BlocksDirectory, element.Data)
-	var fragmentData TemplateData = TemplateData{}
+	var fragmentData TemplateData
 	var fragmentNodes []*html.Node
+	if userData != nil {
+		fragmentData = userData.Clone() // seed from incoming data so block templates inherit caller context
+	} else {
+		fragmentData = TemplateData{}
+	}
 	if fragment, err = template.IncludeFragment(element, fragmentRef); err != nil {
 		return err
 	}
@@ -400,7 +405,7 @@ func (template *Template) RenderBlocks(element *html.Node) (err error) {
 		fragmentData.SetKeyValue("block.content", string(template.HTML(fragmentNodes...)))
 	}
 	shortcode := Template{Layout: fragment, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig, BlockMode: true}
-	shortcode.Process(&fragmentData) // RECURSION!
+	shortcode.Process(&fragmentData, userData) // RECURSION!
 	element.Parent.InsertBefore(shortcode.Layout, element)
 	if template.TidyMode {
 		removeElement(element) // cleanup
