@@ -4,15 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## v0.20.0 (2026-04-21)
 
-Added support for template data array accessors and user-generated template data in `ht-block` elements, so `ht-block` elements can access `page.*` template data properties.  
-Improved HyperMark support for detecting inline vs block-level `ht-block` elements and `<!-- more -->` comment detection.
+Added support for template data array accessors (e.g. `page.attachments.1.href`). 
+Added user-generated template data in `ht-block` elements, so `ht-block` elements can access `page.*` template data properties. 
+Improved HyperMark support for detecting inline vs block-level `ht-block` elements and `<!-- more -->` comment detection. 
 
-* Added support for 1-indexed array accessors to `TemplateData.Get()` (e.g. `foo.bar.1.example`); also handled `TemplateDataSet` in `GetValue`, `GetLength`, and `Clone`.
-* Added `userData *TemplateData` parameter to `Template.Process()`, `Template.RenderTemplate()`, and the renamed `Template.RenderBlock()` (was `RenderBlocks`); 
-  block fragments now seed their template data from a clone of `userData`, so callers can expose user-generated template data in `ht-block` elements.
-  _NOTE: this is a breaking API change for direct callers of `Template.Process()` — pass `nil` for `userData` to preserve previous behavior._
+* Added support for 1-indexed array accessors to `TemplateData.Get()` (e.g. `foo.bar.1.example`).
+* Added support for passing a discrete `userData *TemplateData` parameter to `Template.Process()`;
+  callers can now seed user-generated template data in `ht-block` elements.
+  _NOTE: this is a breaking API change for direct callers of `Template.Process()`._
 * Added `hypermark.HTBlockHTMLParserExtension()` goldmark extension to promote `ht-block` elements to CommonMark type-6 HTML blocks;
   this prevents `ht-block` elements from being wrapped in `<p>` tags when they appear on their own line.
   _NOTE: Supports multi-line opening tags (the `ht-block` attribute can appear on any continuation line of the opening tag). Quoted attribute values are respected, so `ht-block` appearing as a substring inside a value does not trigger promotion. Inline usage of the same tags within prose is unaffected and remains in the surrounding paragraph._
