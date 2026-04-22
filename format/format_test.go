@@ -62,7 +62,7 @@ func TestRewrite_DefaultHTTD(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := Rewrite(tc.source, tc.funcs)
+			got, err := Rewrite(tc.source, tc.funcs, SyntaxDefault)
 			if err != nil {
 				t.Fatalf("Rewrite() error = %v", err)
 			}
@@ -109,7 +109,7 @@ func TestValidate_RejectsUnsupportedActions(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := Validate(tc.source, nil)
+			err := Validate(tc.source, nil, SyntaxDefault)
 			if err == nil {
 				t.Fatal("Validate() error = nil")
 			}
@@ -128,7 +128,7 @@ func TestRender_UsesHTTDLookup(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render("title", `Title: ${ page.title | printf "%s" }`, data, nil)
+	rendered, err := Render("title", `Title: ${ page.title | printf "%s" }`, data, nil, SyntaxDefault)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -145,7 +145,7 @@ func TestRender_FallsBackAcrossCommaSeparatedKeypaths(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render("title", `${ site.title, page.title }`, data, nil)
+	rendered, err := Render("title", `${ site.title, page.title }`, data, nil, SyntaxDefault)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -156,7 +156,7 @@ func TestRender_FallsBackAcrossCommaSeparatedKeypaths(t *testing.T) {
 }
 
 func TestParse_ExposesNormalizedTemplate(t *testing.T) {
-	tmpl, err := Parse("title", `${ page.title }`, nil)
+	tmpl, err := Parse("title", `${ page.title }`, nil, SyntaxDefault)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}

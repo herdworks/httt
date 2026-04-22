@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+Added CSS-style `--ht-format("...")` surface syntax to the `format` package as an alternative to `${ ... }` for CSS templating contexts.
+The CSS form mirrors a CSS custom-property function call and supports an optional `var()`-style fallback: `--ht-format("theme.color", red)`.
+CSS syntax is auto-selected in `RenderFormatting` for `<style>` element text content and `style` attributes; the `${ ... }` syntax remains the default everywhere else.
+
+* Added `format.Syntax` type with `SyntaxDefault` and `SyntaxCSS` constants.
+* Added `format.ErrInvalidHTFormatCall` sentinel error for malformed `--ht-format(...)` calls.
+* Added a `default` template function for fallback pipelines (`${ page.title | default "Untitled" }`); it returns the default value when the piped value is `nil` or an empty string.
+* Changed `format.Parse`, `format.Render`, `format.Rewrite`, and `format.Validate` to accept a trailing `syntax Syntax` parameter.
+  _NOTE: this is a breaking API change for direct callers of these functions. Pass `format.SyntaxDefault` to preserve existing behavior._
+* Changed `Template.RenderFormatting` to dispatch `SyntaxCSS` for `<style>` element text and `style="..."` attribute values.
+
 ## v0.20.0 (2026-04-21)
 
 Added support for template data array accessors (e.g. `page.attachments.1.href`). 

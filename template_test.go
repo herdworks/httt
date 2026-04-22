@@ -392,3 +392,120 @@ func TestRenderFormattingNested(t *testing.T) {
 		t.Fatalf("expected nested ht-format attributes to be removed; got:\n%s", htmlBytes)
 	}
 }
+
+func TestRenderFormattingStyleElement(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<head>
+				<style ht-format>
+					.hero { color: --ht-format("theme.color"); background: --ht-format('theme.bg'); }
+				</style>
+			</head>
+			<body></body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"theme": TemplateData{
+			"color": "red",
+			"bg":    "black",
+		},
+	}
+
+	template := &Template{
+		Layout:   layout,
+		TidyMode: true,
+	}
+
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("color: red")) {
+		t.Fatalf("expected <style> --ht-format(\"theme.color\") to render as red; got:\n%s", htmlBytes)
+	}
+	if !bytes.Contains(htmlBytes, []byte("background: black")) {
+		t.Fatalf("expected <style> --ht-format('theme.bg') to render as black; got:\n%s", htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("--ht-format(")) {
+		t.Fatalf("expected --ht-format(...) calls to be fully substituted; got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderFormattingStyleElementFallback(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<head>
+				<style ht-format>
+					.hero { color: --ht-format("theme.color", red); padding: --ht-format("theme.pad", 10px); }
+				</style>
+			</head>
+			<body></body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{}
+
+	template := &Template{
+		Layout:   layout,
+		TidyMode: true,
+	}
+
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("color: red")) {
+		t.Fatalf("expected fallback 'red' to render when theme.color is missing; got:\n%s", htmlBytes)
+	}
+	if !bytes.Contains(htmlBytes, []byte("padding: 10px")) {
+		t.Fatalf("expected fallback '10px' to render when theme.pad is missing; got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderFormattingStyleAttribute(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<div ht-format style='color: --ht-format("theme.color");'></div>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"theme": TemplateData{
+			"color": "red",
+		},
+	}
+
+	template := &Template{
+		Layout:   layout,
+		TidyMode: true,
+	}
+
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	div := Query(layout, "div")
+	if div == nil {
+		t.Fatalf("expected rendered output to include div; got:\n%s", htmlBytes)
+	}
+
+	style := getAttributeString(div, "style")
+	if style != "color: red;" {
+		t.Fatalf("expected style=%q, got %q", "color: red;", style)
+	}
+}

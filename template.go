@@ -314,6 +314,15 @@ func (template *Template) ResolveBasedAttributes(element *html.Node, attribute s
 	return nil
 }
 
+func containsSyntaxMarker(source string, syntax htformat.Syntax) bool {
+	switch syntax {
+	case htformat.SyntaxCSS:
+		return strings.Contains(source, "--ht-format(")
+	default:
+		return strings.Contains(source, "${")
+	}
+}
+
 func (template *Template) RenderFormatting(element *html.Node, data *TemplateData) (err error) {
 	if element == nil {
 		return nil
@@ -326,24 +335,31 @@ func (template *Template) RenderFormatting(element *html.Node, data *TemplateDat
 		if slices.Contains(HyperFormatAttributeStrings, attribute.Key) {
 			continue
 		}
-		if !strings.Contains(attribute.Val, "${") {
+		syntax := htformat.SyntaxDefault
+		if attribute.Key == "style" {
+			syntax = htformat.SyntaxCSS
+		}
+		if !containsSyntaxMarker(attribute.Val, syntax) {
 			continue
 		}
-
-		if element.Attr[index].Val, err = htformat.Render("ht-format", attribute.Val, data, nil); err != nil {
+		if element.Attr[index].Val, err = htformat.Render("ht-format", attribute.Val, data, nil, syntax); err != nil {
 			return err
 		}
+	}
+
+	childSyntax := htformat.SyntaxDefault
+	if element.Data == "style" {
+		childSyntax = htformat.SyntaxCSS
 	}
 
 	for child := element.FirstChild; child != nil; child = child.NextSibling {
 		if child.Type != html.TextNode {
 			continue
 		}
-		if !strings.Contains(child.Data, "${") {
+		if !containsSyntaxMarker(child.Data, childSyntax) {
 			continue
 		}
-
-		if child.Data, err = htformat.Render("ht-format", child.Data, data, nil); err != nil {
+		if child.Data, err = htformat.Render("ht-format", child.Data, data, nil, childSyntax); err != nil {
 			return err
 		}
 	}

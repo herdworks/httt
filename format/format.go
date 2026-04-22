@@ -61,12 +61,13 @@ type Template struct {
 	name       string
 	source     string
 	normalized string
+	syntax     Syntax
 	funcs      texttemplate.FuncMap
 }
 
 // Parse validates and normalizes a format template.
-func Parse(name string, source string, funcs texttemplate.FuncMap) (*Template, error) {
-	normalized, err := Rewrite(source, funcs)
+func Parse(name string, source string, funcs texttemplate.FuncMap, syntax Syntax) (*Template, error) {
+	normalized, err := Rewrite(source, funcs, syntax)
 	if err != nil {
 		return nil, err
 	}
@@ -79,18 +80,30 @@ func Parse(name string, source string, funcs texttemplate.FuncMap) (*Template, e
 		name:       name,
 		source:     source,
 		normalized: normalized,
+		syntax:     syntax,
 		funcs:      cloneFuncMap(funcs),
 	}, nil
 }
 
 // Validate checks whether a format template can be normalized and parsed.
-func Validate(source string, funcs texttemplate.FuncMap) error {
-	_, err := Parse("validate", source, funcs)
+func Validate(source string, funcs texttemplate.FuncMap, syntax Syntax) error {
+	_, err := Parse("validate", source, funcs, syntax)
 	return err
 }
 
-// Rewrite rewrites bare keypath actions into explicit httd function calls.
-func Rewrite(source string, funcs texttemplate.FuncMap) (string, error) {
+// Rewrite normalizes a template source to default-syntax form and rewrites
+// bare keypath actions into explicit httd function calls. For SyntaxCSS, a
+// pre-pass translates htfmt(...) calls to ${ ... } actions before the main
+// rewrite loop runs.
+func Rewrite(source string, funcs texttemplate.FuncMap, syntax Syntax) (string, error) {
+	if syntax == SyntaxCSS {
+		translated, err := rewriteCSS(source)
+		if err != nil {
+			return "", err
+		}
+		source = translated
+	}
+
 	var builder strings.Builder
 	cursor := 0
 
@@ -133,8 +146,8 @@ func Rewrite(source string, funcs texttemplate.FuncMap) (string, error) {
 }
 
 // Render parses and executes a format template in one step.
-func Render(name string, source string, data Getter, funcs texttemplate.FuncMap) (string, error) {
-	tmpl, err := Parse(name, source, funcs)
+func Render(name string, source string, data Getter, funcs texttemplate.FuncMap, syntax Syntax) (string, error) {
+	tmpl, err := Parse(name, source, funcs, syntax)
 	if err != nil {
 		return "", err
 	}
@@ -182,6 +195,7 @@ func buildTemplate(name string, source string, funcs texttemplate.FuncMap, data 
 	compiledFuncs["httd"] = func(keypaths string) any {
 		return lookup(data, keypaths)
 	}
+	compiledFuncs["default"] = htDefault
 
 	tmpl := texttemplate.New(name).Delims("${", "}").Funcs(compiledFuncs)
 
@@ -199,6 +213,21 @@ func cloneFuncMap(funcs texttemplate.FuncMap) texttemplate.FuncMap {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+// htDefault returns defaultValue when value is nil or an empty string, and
+// returns value otherwise. It is registered in the template func map as
+// "default" and is intended as a pipeline terminator for cases where a
+// template body may resolve to nothing — particularly the CSS-syntax
+// --ht-format("<body>", <fallback>) form.
+func htDefault(defaultValue string, value any) any {
+	if value == nil {
+		return defaultValue
+	}
+	if s, ok := value.(string); ok && s == "" {
+		return defaultValue
+	}
+	return value
 }
 
 func lookup(data Getter, keypaths string) any {
@@ -452,7 +481,7 @@ func firstToken(source string) string {
 }
 
 func isReservedFunction(token string, funcs texttemplate.FuncMap) bool {
-	if token == "httd" {
+	if token == "httd" || token == "default" {
 		return true
 	}
 
