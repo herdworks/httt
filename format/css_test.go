@@ -87,14 +87,14 @@ func TestRewriteCSS_Pipeline(t *testing.T) {
 		funcs  texttemplate.FuncMap
 	}{
 		{
-			name:   "pipeline with builtin printf",
+			name:   "pipeline tail with text/template printf",
 			source: `--ht-format("page.title | printf \"[%s]\"")`,
 			want:   `${ httd "page.title" | printf "[%s]" }`,
 		},
 		{
-			name:   "single-quoted outer, double-quoted inner",
+			name:   "first-token non-reserved gets httd-wrapped",
 			source: `--ht-format('printf "%s" page.title')`,
-			want:   `${ printf "%s" page.title }`,
+			want:   `${ httd "printf \"%s\" page.title" }`,
 		},
 		{
 			name:   "pipeline with user func",
@@ -569,5 +569,53 @@ func TestHTFallback_InDefaultSyntax(t *testing.T) {
 	}
 	if rendered != "Untitled" {
 		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Untitled", rendered)
+	}
+}
+
+func TestRenderCSS_MissingRestoresCSSSource(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{name: "double-quoted bare call", source: `--ht-format("theme.color")`},
+		{name: "single-quoted bare call", source: `--ht-format('theme.color')`},
+		{name: "inside CSS rule", source: `.a { color: --ht-format("theme.color"); }`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rendered, err := Render("css", tc.source, testGetter{}, nil, SyntaxCSS)
+			if err != nil {
+				t.Fatalf("Render() error = %v", err)
+			}
+			if rendered != tc.source {
+				t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", tc.source, rendered)
+			}
+		})
+	}
+}
+
+func TestRenderCSS_DefaultOnMissPreventsRestore(t *testing.T) {
+	rendered, err := Render("css", `--ht-format("theme.color", red)`, testGetter{}, nil, SyntaxCSS)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if rendered != "red" {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "red", rendered)
+	}
+}
+
+func TestRenderCSS_MultiActionAnyMissRestoresWholeCSS(t *testing.T) {
+	data := testGetter{
+		"theme": map[string]any{"color": "red"},
+	}
+	source := `.a { color: --ht-format("theme.color"); bg: --ht-format("theme.bg"); }`
+
+	rendered, err := Render("css", source, data, nil, SyntaxCSS)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if rendered != source {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", source, rendered)
 	}
 }

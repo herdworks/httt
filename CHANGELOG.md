@@ -16,6 +16,8 @@ CSS syntax is auto-selected in `RenderFormatting` for `<style>` element text con
 * Changed `format.Parse`, `format.Render`, `format.Rewrite`, and `format.Validate` to accept a trailing `syntax Syntax` parameter.
   _NOTE: this is a breaking API change for direct callers of these functions. Pass `format.SyntaxDefault` to preserve existing behavior._
 * Changed `Template.RenderFormatting` to dispatch `SyntaxCSS` for `<style>` element text and `style="..."` attribute values.
+* Removed the `text/template` builtin whitelist (`printf`, `print`, `and`, `or`, `len`, `index`, `eq`, `ne`, `lt`, `gt`, `ge`, `le`, `not`, `html`, `js`, `urlquery`, `slice`, `call`) from the reserved-function set; only `httd`, `default`, and user-registered `FuncMap` entries are reserved. Templates that relied on unregistered builtins now fall into the miss-restoration path and render as their original source — register the function via `funcs` to restore previous behavior.
+* Changed `Template.Execute` to detect `text/template`'s `"<no value>"` marker in the rendered output and restore the original template source verbatim instead of leaking the marker. Any action that misses (without a `| default "..."` fallback) now surfaces the user's original template text in the output, making unresolved bindings visible as no-op placeholders rather than mysterious `<no value>` strings. This is all-or-nothing per `Render` call: one miss restores the whole source.
 
 ## v0.20.0 (2026-04-21)
 

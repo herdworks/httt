@@ -34,28 +34,6 @@ var reservedActionKeywords = map[string]struct{}{
 	"with":     {},
 }
 
-var builtinFuncNames = map[string]struct{}{
-	"and":      {},
-	"call":     {},
-	"eq":       {},
-	"ge":       {},
-	"gt":       {},
-	"html":     {},
-	"index":    {},
-	"js":       {},
-	"le":       {},
-	"len":      {},
-	"lt":       {},
-	"ne":       {},
-	"not":      {},
-	"or":       {},
-	"print":    {},
-	"printf":   {},
-	"println":  {},
-	"slice":    {},
-	"urlquery": {},
-}
-
 // Template wraps a normalized format template source string.
 type Template struct {
 	name       string
@@ -155,15 +133,31 @@ func Render(name string, source string, data Getter, funcs texttemplate.FuncMap,
 	return tmpl.ExecuteString(data)
 }
 
-// Execute renders a parsed format template.
+// Execute renders a parsed format template. If the rendered output contains
+// text/template's "<no value>" marker (indicating that at least one action
+// resolved to nil), the original user-visible template source is emitted
+// instead. This all-or-nothing behavior keeps unresolved templates visible in
+// the output rather than leaking "<no value>" placeholders; callers that need
+// partial resolution on multi-action templates should annotate individual
+// actions with "| default \"...\"".
 func (template *Template) Execute(writer io.Writer, data Getter) error {
 	compiled, err := buildTemplate(template.name, template.normalized, template.funcs, data)
 	if err != nil {
 		return err
 	}
 
-	if err = compiled.Execute(writer, data); err != nil {
+	var buffer bytes.Buffer
+	if err = compiled.Execute(&buffer, data); err != nil {
 		return fmt.Errorf("failed executing format template %q: %w", template.name, err)
+	}
+
+	result := buffer.String()
+	if strings.Contains(result, "<no value>") {
+		result = template.source
+	}
+
+	if _, err = io.WriteString(writer, result); err != nil {
+		return err
 	}
 
 	return nil
@@ -482,10 +476,6 @@ func firstToken(source string) string {
 
 func isReservedFunction(token string, funcs texttemplate.FuncMap) bool {
 	if token == "httd" || token == "default" {
-		return true
-	}
-
-	if _, ok := builtinFuncNames[token]; ok {
 		return true
 	}
 

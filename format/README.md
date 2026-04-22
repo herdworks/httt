@@ -17,7 +17,7 @@ It rewrites bare keypath actions to `httd` lookups.
 
 `${ page.title }` becomes `${ httd "page.title" }`.
 
-`${ site.title, page.title | printf "%s" }` becomes `${ httd "site.title, page.title" | printf "%s" }`.
+`${ site.title, page.title | default "Untitled" }` becomes `${ httd "site.title, page.title" | default "Untitled" }`.
 
 `httd` resolves keypaths through any type that implements `Get(string) any`.
 
@@ -26,6 +26,27 @@ Comma-separated keypaths are treated as fallbacks, so `httd` returns the first n
 Templates that start with a reserved function name are left unchanged.
 
 The validator rejects template comments and the `if`, `range`, `break`, `continue`, `template`, `block`, and `with` action keywords.
+
+## Reserved functions
+
+Only `httd` and `default` are reserved by this package. There is no whitelist of `text/template` builtins (`printf`, `print`, `and`, `or`, `len`, `eq`, `html`, `urlquery`, …) — callers register whatever functions they need via the `funcs` `FuncMap` argument to `Parse`, `Render`, `Rewrite`, and `Validate`. Registered names are also treated as reserved, so `${ myfunc arg }` passes through the rewrite unchanged.
+
+A template body whose first token is not `httd`, `default`, or a registered user function is treated as a keypath and wrapped in `httd`, so for example `${ printf "%s" x }` becomes `${ httd "printf \"%s\" x" }` — which will not resolve and fall into the miss-restoration path described below. Register `printf` as a user func if you actually want `text/template`'s formatter.
+
+## Miss handling: original source is restored
+
+If any action in a rendered template fails to resolve (the pipeline would produce `text/template`'s `"<no value>"` marker anywhere in the output), the entire rendered output is discarded and the original user-visible template source is emitted verbatim. That means a missing `${ page.title }` renders as the literal string `${ page.title }`, and a missing `--ht-format("theme.color")` renders as the literal `--ht-format("theme.color")`.
+
+This is intentionally all-or-nothing. For a multi-action template, any single miss causes the whole template source to be restored — partial resolution is not supported. If you want per-action fallback in multi-action templates, annotate each action with `| default "..."` to guarantee it resolves:
+
+```css
+.hero {
+    color: --ht-format("theme.color", red);
+    background: --ht-format("theme.bg", black);
+}
+```
+
+With explicit defaults on every action, no action ever misses, so the rendered output is always the substituted values.
 
 ## CSS syntax
 
