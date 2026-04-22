@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/andybalholm/cascadia"
+	htformat "github.com/herdworks/hypertemplates-go/format"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -82,6 +83,11 @@ func (template *Template) Process(data *TemplateData, userData *TemplateData) (h
 	}
 	for _, element := range template.HyperParamsElements() {
 		if err = template.RenderParams(element, data); err != nil {
+			return nil, err
+		}
+	}
+	for _, element := range template.HyperFormatElements() {
+		if err = template.RenderFormatting(element, data); err != nil {
 			return nil, err
 		}
 	}
@@ -305,6 +311,47 @@ func (template *Template) ResolveBasedAttributes(element *html.Node, attribute s
 		}
 		setAttribute(el, attribute, resolvedHref)
 	}
+	return nil
+}
+
+func (template *Template) RenderFormatting(element *html.Node, data *TemplateData) (err error) {
+	if element == nil {
+		return nil
+	}
+	if element.Type != html.ElementNode {
+		return nil
+	}
+
+	for index, attribute := range element.Attr {
+		if slices.Contains(HyperFormatAttributeStrings, attribute.Key) {
+			continue
+		}
+		if !strings.Contains(attribute.Val, "${") {
+			continue
+		}
+
+		if element.Attr[index].Val, err = htformat.Render("ht-format", attribute.Val, data, nil); err != nil {
+			return err
+		}
+	}
+
+	for child := element.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type != html.TextNode {
+			continue
+		}
+		if !strings.Contains(child.Data, "${") {
+			continue
+		}
+
+		if child.Data, err = htformat.Render("ht-format", child.Data, data, nil); err != nil {
+			return err
+		}
+	}
+
+	if template.TidyMode {
+		removeAttributes(element, HyperFormatAttributeStrings...)
+	}
+
 	return nil
 }
 
@@ -549,6 +596,18 @@ func (template *Template) HyperAttrsElements() []*html.Node {
 	selectors[1] += ":not([ht-template] [data-ht-attr], [ht-template][data-ht-attr])"
 	selectors = append(selectors, "[ht-attrs]:not([ht-template] [ht-attrs], [ht-template][ht-attrs]):not([data-ht-template] [ht-attrs], [data-ht-template][ht-attrs])")
 	selectors = append(selectors, "[ht-attr]:not([ht-template] [ht-attr], [ht-template][ht-attr]):not([data-ht-template] [ht-attr], [data-ht-template][ht-attr])")
+	return QueryRoot(template.Layout, selectors...)
+}
+
+var HyperFormatAttributeStrings = []string{"data-ht-format", "ht-format"}
+
+func (template *Template) HyperFormatElements() []*html.Node {
+	selectors := []string{"[data-ht-format]:not([data-ht-template] [data-ht-format], [data-ht-template][data-ht-format])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
+	selectors[0] += ":not([ht-template] [data-ht-format], [ht-template][data-ht-format])"
+	selectors = append(selectors, "[ht-format]:not([ht-template] [ht-format], [ht-template][ht-format]):not([data-ht-template] [ht-format], [data-ht-template][ht-attrs])")
 	return QueryRoot(template.Layout, selectors...)
 }
 

@@ -8,12 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 Added support for template data array accessors (e.g. `page.attachments.1.href`). 
 Added user-generated template data in `ht-block` elements, so `ht-block` elements can access `page.*` template data properties. 
+Added the `format` package and `ht-format` rendering support for `${ ... }` text templates backed by `TemplateData.Get()`. 
 Improved HyperMark support for detecting inline vs block-level `ht-block` elements and `<!-- more -->` comment detection. 
 
 * Added support for 1-indexed array accessors to `TemplateData.Get()` (e.g. `foo.bar.1.example`).
 * Added support for passing a discrete `userData *TemplateData` parameter to `Template.Process()`;
   callers can now seed user-generated template data in `ht-block` elements.
   _NOTE: this is a breaking API change for direct callers of `Template.Process()`._
+* Added the `format` package for `${ ... }` text templates with default `httd` lookups and unsupported-action validation.
+* Added `ht-format` rendering for formatting element text content with the new `format` package.
 * Added `hypermark.HTBlockHTMLParserExtension()` goldmark extension to promote `ht-block` elements to CommonMark type-6 HTML blocks;
   this prevents `ht-block` elements from being wrapped in `<p>` tags when they appear on their own line.
   _NOTE: Supports multi-line opening tags (the `ht-block` attribute can appear on any continuation line of the opening tag). Quoted attribute values are respected, so `ht-block` appearing as a substring inside a value does not trigger promotion. Inline usage of the same tags within prose is unaffected and remains in the surrounding paragraph._

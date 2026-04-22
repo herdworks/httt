@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"golang.org/x/net/html"
@@ -233,5 +234,161 @@ func TestRenderBlockPageFallback(t *testing.T) {
 
 	if !bytes.Contains(htmlBytes, []byte("anker.com/products/a2345")) {
 		t.Errorf("expected rendered output to include page.attachments.1.data.hypergraph.href; got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderFormatting(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<section ht-format data-href="${ page.href }">
+					Hello ${ page.title }
+					<span>${ page.slug }</span>
+				</section>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"title": "Hello, HyperTemplates",
+			"href":  "https://example.com/posts/hello",
+			"slug":  "hello-hypertemplates",
+		},
+	}
+
+	template := &Template{
+		Layout:   layout,
+		TidyMode: true,
+	}
+
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	renderedLayout, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	section := Query(renderedLayout, "section")
+	if section == nil {
+		t.Fatalf("expected rendered output to include section; got:\n%s", htmlBytes)
+	}
+
+	if href := getAttributeString(section, "data-href"); href != "https://example.com/posts/hello" {
+		t.Fatalf("expected rendered data-href %q, got %q", "https://example.com/posts/hello", href)
+	}
+
+	var directText string
+	for child := section.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type != html.TextNode {
+			continue
+		}
+		if !strings.Contains(child.Data, "Hello, HyperTemplates") {
+			continue
+		}
+		directText = strings.TrimSpace(child.Data)
+		break
+	}
+
+	if directText != "Hello Hello, HyperTemplates" {
+		t.Fatalf("expected rendered direct text %q, got %q", "Hello Hello, HyperTemplates", directText)
+	}
+
+	span := Query(renderedLayout, "section span")
+	if span == nil {
+		t.Fatalf("expected rendered output to include nested span; got:\n%s", htmlBytes)
+	}
+
+	if text := strings.TrimSpace(span.FirstChild.Data); text != "${ page.slug }" {
+		t.Fatalf("expected nested span text to remain unrendered, got %q", text)
+	}
+
+	if bytes.Contains(htmlBytes, []byte("ht-format")) {
+		t.Fatalf("expected ht-format attribute to be removed in tidy mode; got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderFormattingNested(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<section ht-format class="${ page.class }">
+					Hello ${ page.title }
+					<div>
+						<span ht-format data-slug="${ page.slug }">${ page.title }</span>
+					</div>
+				</section>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"class": "hero",
+			"slug":  "hello-hypertemplates",
+			"title": "Hello, HyperTemplates",
+		},
+	}
+
+	template := &Template{
+		Layout:   layout,
+		TidyMode: true,
+	}
+
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	renderedLayout, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	section := Query(renderedLayout, "section.hero")
+	if section == nil {
+		t.Fatalf("expected outer ht-format element to render attributes; got:\n%s", htmlBytes)
+	}
+
+	var directText string
+	for child := section.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type != html.TextNode {
+			continue
+		}
+		if !strings.Contains(child.Data, "Hello, HyperTemplates") {
+			continue
+		}
+		directText = strings.TrimSpace(child.Data)
+		break
+	}
+
+	if directText != "Hello Hello, HyperTemplates" {
+		t.Fatalf("expected rendered outer direct text %q, got %q", "Hello Hello, HyperTemplates", directText)
+	}
+
+	span := Query(renderedLayout, "section.hero div span")
+	if span == nil {
+		t.Fatalf("expected nested ht-format element to render on its own pass; got:\n%s", htmlBytes)
+	}
+
+	if slug := getAttributeString(span, "data-slug"); slug != "hello-hypertemplates" {
+		t.Fatalf("expected nested data-slug %q, got %q", "hello-hypertemplates", slug)
+	}
+
+	if text := strings.TrimSpace(span.FirstChild.Data); text != "Hello, HyperTemplates" {
+		t.Fatalf("expected nested span text %q, got %q", "Hello, HyperTemplates", text)
+	}
+
+	if bytes.Contains(htmlBytes, []byte("ht-format")) {
+		t.Fatalf("expected nested ht-format attributes to be removed; got:\n%s", htmlBytes)
 	}
 }
