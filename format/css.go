@@ -9,8 +9,8 @@ import (
 	"unicode/utf8"
 )
 
-// ErrInvalidHTFormatCall indicates a --ht-format(...) call is malformed.
-var ErrInvalidHTFormatCall = errors.New("invalid --ht-format call")
+// errInvalidHTFormatCall indicates a --ht-format(...) call is malformed.
+var errInvalidHTFormatCall = errors.New("invalid --ht-format call")
 
 const htFormatPrefix = "--ht-format("
 
@@ -238,5 +238,5 @@ func htFormatError(source string, start int, detail string) error {
 	if len(excerpt) > 40 {
 		excerpt = excerpt[:40] + "..."
 	}
-	return fmt.Errorf("%w: %w: %s: %q", ErrInvalidTemplate, ErrInvalidHTFormatCall, detail, excerpt)
+	return fmt.Errorf("%w: %w: %s: %q", errInvalidTemplate, errInvalidHTFormatCall, detail, excerpt)
 }

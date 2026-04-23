@@ -342,7 +342,7 @@ func (template *Template) RenderFormatting(element *html.Node, data *TemplateDat
 		if !containsSyntaxMarker(attribute.Val, syntax) {
 			continue
 		}
-		if element.Attr[index].Val, err = htformat.Render("ht-format", attribute.Val, data, nil, syntax); err != nil {
+		if element.Attr[index].Val, err = htformat.Render(attribute.Val, data, syntax); err != nil {
 			return err
 		}
 	}
@@ -359,7 +359,7 @@ func (template *Template) RenderFormatting(element *html.Node, data *TemplateDat
 		if !containsSyntaxMarker(child.Data, childSyntax) {
 			continue
 		}
-		if child.Data, err = htformat.Render("ht-format", child.Data, data, nil, childSyntax); err != nil {
+		if child.Data, err = htformat.Render(child.Data, data, childSyntax); err != nil {
 			return err
 		}
 	}

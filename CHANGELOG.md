@@ -11,13 +11,14 @@ The CSS form mirrors a CSS custom-property function call and supports an optiona
 CSS syntax is auto-selected in `RenderFormatting` for `<style>` element text content and `style` attributes; the `${ ... }` syntax remains the default everywhere else.
 
 * Added `format.Syntax` type with `SyntaxDefault` and `SyntaxCSS` constants.
-* Added `format.ErrInvalidHTFormatCall` sentinel error for malformed `--ht-format(...)` calls.
 * Added a `default` template function for fallback pipelines (`${ page.title | default "Untitled" }`); it returns the default value when the piped value is `nil` or an empty string.
-* Changed `format.Parse`, `format.Render`, `format.Rewrite`, and `format.Validate` to accept a trailing `syntax Syntax` parameter.
-  _NOTE: this is a breaking API change for direct callers of these functions. Pass `format.SyntaxDefault` to preserve existing behavior._
+* Changed `format.Render` to accept a trailing `syntax Syntax` parameter and dropped its leading `name string` parameter; the package now hard-codes `"ht-format"` internally since named sub-templates are not part of the DSL.
+  _NOTE: this is a breaking API change for direct callers. Drop the first argument and pass `format.SyntaxDefault` to preserve existing behavior._
+* Changed the `format` package to expose a minimal public surface: only `Render`, `Getter`, `Syntax`, `SyntaxDefault`, and `SyntaxCSS`. `Parse`, `Validate`, `Rewrite`, the `Template` type, and the `Err*` sentinels are now package-private.
+  _NOTE: this is a breaking API change for direct callers of the unexported symbols. `Render` covers the documented use cases._
 * Changed `Template.RenderFormatting` to dispatch `SyntaxCSS` for `<style>` element text and `style="..."` attribute values.
 * Removed the `text/template` builtin whitelist (`printf`, `print`, `and`, `or`, `len`, `index`, `eq`, `ne`, `lt`, `gt`, `ge`, `le`, `not`, `html`, `js`, `urlquery`, `slice`, `call`) from the reserved-function set; only `httd`, `default`, and user-registered `FuncMap` entries are reserved. Templates that relied on unregistered builtins now fall into the miss-restoration path and render as their original source — register the function via `funcs` to restore previous behavior.
-* Changed `Template.Execute` to detect `text/template`'s `"<no value>"` marker in the rendered output and restore the original template source verbatim instead of leaking the marker. Any action that misses (without a `| default "..."` fallback) now surfaces the user's original template text in the output, making unresolved bindings visible as no-op placeholders rather than mysterious `<no value>` strings. This is all-or-nothing per `Render` call: one miss restores the whole source.
+* Changed `format.Render` to detect `text/template`'s `"<no value>"` marker in the rendered output and restore the original template source verbatim instead of leaking the marker. Any action that misses (without a `| default "..."` fallback) now surfaces the user's original template text in the output, making unresolved bindings visible as no-op placeholders rather than mysterious `<no value>` strings. This is all-or-nothing per `Render` call: one miss restores the whole source.
 
 ## v0.20.0 (2026-04-21)
 
