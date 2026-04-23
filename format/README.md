@@ -5,7 +5,7 @@ The `format` package provides a small `text/template` wrapper for HyperTemplates
 It supports two surface syntaxes selected via a `Syntax` argument on `Parse`, `Render`, `Rewrite`, and `Validate`:
 
 * `SyntaxDefault` — `${ ... }` actions (the default).
-* `SyntaxCSS` — `--ht-format("...")` or `--ht-format('...')` function-call form, styled as a CSS custom-property function, intended for CSS contexts where `${ ... }` collides with JavaScript template literal conventions.
+* `SyntaxCSS` — `--ht-fmt("...")` or `--ht-fmt('...')` function-call form, styled as a CSS custom-property function, intended for CSS contexts where `${ ... }` collides with JavaScript template literal conventions.
 
 Both syntaxes share the same action grammar and are backed by the same `httd` keypath lookup.
 
@@ -35,14 +35,14 @@ A template body whose first token is not `httd`, `default`, or a registered user
 
 ## Miss handling: original source is restored
 
-If any action in a rendered template fails to resolve (the pipeline would produce `text/template`'s `"<no value>"` marker anywhere in the output), the entire rendered output is discarded and the original user-visible template source is emitted verbatim. That means a missing `${ page.title }` renders as the literal string `${ page.title }`, and a missing `--ht-format("theme.color")` renders as the literal `--ht-format("theme.color")`.
+If any action in a rendered template fails to resolve (the pipeline would produce `text/template`'s `"<no value>"` marker anywhere in the output), the entire rendered output is discarded and the original user-visible template source is emitted verbatim. That means a missing `${ page.title }` renders as the literal string `${ page.title }`, and a missing `--ht-fmt("theme.color")` renders as the literal `--ht-fmt("theme.color")`.
 
 This is intentionally all-or-nothing. For a multi-action template, any single miss causes the whole template source to be restored — partial resolution is not supported. If you want per-action fallback in multi-action templates, annotate each action with `| default "..."` to guarantee it resolves:
 
 ```css
 .hero {
-    color: --ht-format("theme.color", red);
-    background: --ht-format("theme.bg", black);
+    color: --ht-fmt("theme.color", red);
+    background: --ht-fmt("theme.bg", black);
 }
 ```
 
@@ -50,7 +50,7 @@ With explicit defaults on every action, no action ever misses, so the rendered o
 
 ## CSS syntax
 
-In `SyntaxCSS` mode, `--ht-format("<body>")` and `--ht-format('<body>')` calls are translated to `${ <body> }` actions before the default rewrite runs. The quoted argument is the action body — the same grammar as what lives inside `${ ... }`.
+In `SyntaxCSS` mode, `--ht-fmt("<body>")` and `--ht-fmt('<body>')` calls are translated to `${ <body> }` actions before the default rewrite runs. The quoted argument is the action body — the same grammar as what lives inside `${ ... }`.
 
 Single- and double-quoted strings are accepted and treated identically (CSS makes no distinction). Backslash escapes inside the string: `\\` → `\`, `\"` → `"`, `\'` → `'`. Other `\X` sequences pass through literally.
 
@@ -58,9 +58,9 @@ Examples:
 
 ```css
 .hero {
-    color: --ht-format("theme.color");
-    background: --ht-format("theme.bg, site.bg");
-    font-family: --ht-format('page.font | printf "%s, sans-serif"');
+    color: --ht-fmt("theme.color");
+    background: --ht-fmt("theme.bg, site.bg");
+    font-family: --ht-fmt('page.font | printf "%s, sans-serif"');
 }
 ```
 
@@ -70,60 +70,54 @@ An optional second argument provides a fallback value, mirroring the CSS `var(--
 
 ```css
 .hero {
-    color: --ht-format("theme.color", red);
-    padding: --ht-format("theme.pad", 10px);
-    font-family: --ht-format("page.font", "Arial, sans-serif");
-    accent: --ht-format("theme.accent", rgb(255, 0, 0));
+    color: --ht-fmt("theme.color", red);
+    padding: --ht-fmt("theme.pad", 10px);
+    font-family: --ht-fmt("page.font", "Arial, sans-serif");
+    accent: --ht-fmt("theme.accent", rgb(255, 0, 0));
 }
 ```
 
-The fallback may be any CSS token sequence. Quoted fallbacks have their outer quotes stripped (and the same backslash escapes applied); unquoted fallbacks are captured verbatim up to the balancing `)`, respecting nested parens and quoted strings. The fallback is wired in as a pipeline terminator: `--ht-format("x", red)` normalizes to `${ httd "x" | default "red" }`.
+The fallback may be any CSS token sequence. Quoted fallbacks have their outer quotes stripped (and the same backslash escapes applied); unquoted fallbacks are captured verbatim up to the balancing `)`, respecting nested parens and quoted strings. The fallback is wired in as a pipeline terminator: `--ht-fmt("x", red)` normalizes to `${ httd "x" | default "red" }`.
 
 The `default` function is registered in the template func map and may also be used directly in the default `${ ... }` syntax: `${ page.title | default "Untitled" }`.
 
 ### Match rules
 
-* The literal `--ht-format(` must be preceded by a non-identifier character (or appear at position 0). `my--ht-format(...)` and `---ht-format(...)` are left untouched.
-* Lowercase only — `--HT-FORMAT(...)` and `--Ht-Format(...)` are not matched.
+* The literal `--ht-fmt(` must be preceded by a non-identifier character (or appear at position 0). `my--ht-fmt(...)` and `---ht-fmt(...)` are left untouched.
+* Lowercase only — `--HT-FMT(...)` and `--Ht-Fmt(...)` are not matched.
 * The first argument must be a single quoted string. Unquoted arguments, multiple first arguments, and empty strings are rejected at parse time.
-* The second argument (fallback) is optional. When present, it must be non-empty (`--ht-format("x", )` is rejected).
+* The second argument (fallback) is optional. When present, it must be non-empty (`--ht-fmt("x", )` is rejected).
 
-Reserved keywords (`if`, `range`, `with`, etc.) and template comments are rejected inside `--ht-format(...)` the same way they are inside `${ ... }`.
+Reserved keywords (`if`, `range`, `with`, etc.) and template comments are rejected inside `--ht-fmt(...)` the same way they are inside `${ ... }`.
 
 ### Known limitation
 
-`--ht-format(...)` substitution is textual. It will expand even inside a CSS string literal like `content: "--ht-format(\"x\")"`. Avoid that pattern if you need a literal `--ht-format(...)` in your stylesheet output.
+`--ht-fmt(...)` substitution is textual. It will expand even inside a CSS string literal like `content: "--ht-fmt(\"x\")"`. Avoid that pattern if you need a literal `--ht-fmt(...)` in your stylesheet output.
 
-## Examples
+## Attributes
 
-```html
-<html lang='en-US'>
-    <head>
-        <!-- Global Defaults -->
-        <meta ht-include='fragments/head.html' />
+**ht-include** (unchanged)
+: <div ht-include='fragments/example'></div>
 
-        <!-- Layout Metadata, Links, Styles, and Scripts -->
-        <title ht-content='${site.title} | ${page.title}'>Placeholder Title</title>
-        <meta name='description' content='${page.description,site.description}' ht-attrs='content'>
-        <style>
-            /* Layout-specific styles */
-        </style>
-        <script src='/js/components/my-component.js' defer></script>
-    </head>
-    <body>
-        <header>
-            <nav>
-                <menu>
-                    <a href='${link.href}' ht-template='link:data.nav' ht-attrs='href' ht-content='${link.label,link.title}'>Placeholder</a>
-                </menu>
-            </nav>
-        </header>
-        <main>
-            <article ht-content='${page.content | markdown}'>
-                <p>Placeholder content...</p>
-            </article>
-        </main>
-        <footer ht-include='fragments/footer'></footer>
-    </body>
-</html>
-```
+**ht-template** (unchanged)
+: <div ht-template='attachment:page.attachments'>
+
+**ht-block** (unchanged)
+: <div ht-block='uni-form'></div>
+
+**ht-pipe** (unchanged)
+: <div ht-pipe=''></div>
+
+**ht-if** (improved)
+: <div ht-if='${page.title}==Hello world'></div>
+  <div ht-if='${page.title}!=${site.title}'></div>
+
+**ht-fmt** (NEW)
+: The `ht-fmt` 
+  <a href='tags/${page.byline.name}' ht-fmt>${page.byline.name}</a>
+
+**ht-attrs** (deprecated)
+**ht-param** (deprecated)
+**ht-not** (deprecated)
+**ht-base** (deprecated)
+**ht-query** (deprecated)

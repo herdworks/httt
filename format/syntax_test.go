@@ -14,47 +14,47 @@ func TestRewriteCSS_Basic(t *testing.T) {
 	}{
 		{
 			name:   "double-quoted keypath",
-			source: `--ht-format("theme.color")`,
+			source: `--ht-fmt("theme.color")`,
 			want:   `${ httd "theme.color" }`,
 		},
 		{
 			name:   "single-quoted keypath",
-			source: `--ht-format('theme.color')`,
+			source: `--ht-fmt('theme.color')`,
 			want:   `${ httd "theme.color" }`,
 		},
 		{
 			name:   "fallback keypaths in body",
-			source: `--ht-format("site.title, page.title")`,
+			source: `--ht-fmt("site.title, page.title")`,
 			want:   `${ httd "site.title, page.title" }`,
 		},
 		{
 			name:   "inside CSS rule",
-			source: `.hero { color: --ht-format("theme.color"); }`,
+			source: `.hero { color: --ht-fmt("theme.color"); }`,
 			want:   `.hero { color: ${ httd "theme.color" }; }`,
 		},
 		{
 			name:   "multiple calls in one rule",
-			source: `.a { color: --ht-format("theme.color"); bg: --ht-format("theme.bg"); }`,
+			source: `.a { color: --ht-fmt("theme.color"); bg: --ht-fmt("theme.bg"); }`,
 			want:   `.a { color: ${ httd "theme.color" }; bg: ${ httd "theme.bg" }; }`,
 		},
 		{
 			name:   "whitespace around argument",
-			source: `--ht-format(  "x"  )`,
+			source: `--ht-fmt(  "x"  )`,
 			want:   `${ httd "x" }`,
 		},
 		{
 			name:   "multiline whitespace",
-			source: "--ht-format(\n\t\"x\"\n)",
+			source: "--ht-fmt(\n\t\"x\"\n)",
 			want:   `${ httd "x" }`,
 		},
 		{
 			name:   "at position 0",
-			source: `--ht-format("x")`,
+			source: `--ht-fmt("x")`,
 			want:   `${ httd "x" }`,
 		},
 		{
 			name:   "unicode keypath",
-			source: `--ht-format("café.title")`,
+			source: `--ht-fmt("café.title")`,
 			want:   `${ httd "café.title" }`,
 		},
 		{
@@ -86,7 +86,7 @@ func TestRewriteCSS_Pipeline(t *testing.T) {
 	}{
 		{
 			name:   "pipeline tail with default",
-			source: `--ht-format("page.title | default \"Untitled\"")`,
+			source: `--ht-fmt("page.title | default \"Untitled\"")`,
 			want:   `${ httd "page.title" | default "Untitled" }`,
 		},
 	}
@@ -113,47 +113,47 @@ func TestRewriteCSS_Fallback(t *testing.T) {
 	}{
 		{
 			name:   "unquoted identifier fallback",
-			source: `--ht-format("theme.color", red)`,
+			source: `--ht-fmt("theme.color", red)`,
 			want:   `${ theme.color | default "red" }`,
 		},
 		{
 			name:   "quoted fallback",
-			source: `--ht-format("theme.color", "red")`,
+			source: `--ht-fmt("theme.color", "red")`,
 			want:   `${ theme.color | default "red" }`,
 		},
 		{
 			name:   "single-quoted fallback",
-			source: `--ht-format("theme.color", 'red')`,
+			source: `--ht-fmt("theme.color", 'red')`,
 			want:   `${ theme.color | default "red" }`,
 		},
 		{
 			name:   "fallback with internal commas and parens",
-			source: `--ht-format("theme.color", rgb(255, 0, 0))`,
+			source: `--ht-fmt("theme.color", rgb(255, 0, 0))`,
 			want:   `${ theme.color | default "rgb(255, 0, 0)" }`,
 		},
 		{
 			name:   "quoted fallback with internal comma",
-			source: `--ht-format("page.font", "Arial, sans-serif")`,
+			source: `--ht-fmt("page.font", "Arial, sans-serif")`,
 			want:   `${ page.font | default "Arial, sans-serif" }`,
 		},
 		{
 			name:   "whitespace around fallback",
-			source: `--ht-format("theme.color"  ,  red  )`,
+			source: `--ht-fmt("theme.color"  ,  red  )`,
 			want:   `${ theme.color | default "red" }`,
 		},
 		{
 			name:   "fallback with pipeline body",
-			source: `--ht-format("page.title | upper", "DEFAULT")`,
+			source: `--ht-fmt("page.title | upper", "DEFAULT")`,
 			want:   `${ page.title | upper | default "DEFAULT" }`,
 		},
 		{
 			name:   "CSS length value fallback",
-			source: `.a { padding: --ht-format("theme.pad", 10px); }`,
+			source: `.a { padding: --ht-fmt("theme.pad", 10px); }`,
 			want:   `.a { padding: ${ theme.pad | default "10px" }; }`,
 		},
 		{
 			name:   "explicit empty-string fallback",
-			source: `--ht-format("theme.color", "")`,
+			source: `--ht-fmt("theme.color", "")`,
 			want:   `${ theme.color | default "" }`,
 		},
 	}
@@ -179,22 +179,22 @@ func TestRewriteCSS_Escapes(t *testing.T) {
 	}{
 		{
 			name:   "escaped double quote inside double-quoted",
-			source: `--ht-format("printf \"%s\" page.title")`,
+			source: `--ht-fmt("printf \"%s\" page.title")`,
 			want:   `${ printf "%s" page.title }`,
 		},
 		{
 			name:   "escaped single quote inside single-quoted",
-			source: `--ht-format('it\'s')`,
+			source: `--ht-fmt('it\'s')`,
 			want:   `${ it's }`,
 		},
 		{
 			name:   "escaped backslash",
-			source: `--ht-format("a\\b")`,
+			source: `--ht-fmt("a\\b")`,
 			want:   `${ a\b }`,
 		},
 		{
 			name:   "unknown escape passes through",
-			source: `--ht-format("a\nb")`,
+			source: `--ht-fmt("a\nb")`,
 			want:   `${ a\nb }`,
 		},
 	}
@@ -220,27 +220,27 @@ func TestRewriteCSS_WordBoundary(t *testing.T) {
 	}{
 		{
 			name:   "identifier prefix passes through",
-			source: `my--ht-format("x")`,
-			want:   `my--ht-format("x")`,
+			source: `my--ht-fmt("x")`,
+			want:   `my--ht-fmt("x")`,
 		},
 		{
 			name:   "extra hyphen prefix passes through",
-			source: `---ht-format("x")`,
-			want:   `---ht-format("x")`,
+			source: `---ht-fmt("x")`,
+			want:   `---ht-fmt("x")`,
 		},
 		{
 			name:   "underscore prefix passes through",
-			source: `_--ht-format("x")`,
-			want:   `_--ht-format("x")`,
+			source: `_--ht-fmt("x")`,
+			want:   `_--ht-fmt("x")`,
 		},
 		{
 			name:   "dot prefix is a boundary",
-			source: `.--ht-format("x")`,
+			source: `.--ht-fmt("x")`,
 			want:   `.${ httd "x" }`,
 		},
 		{
 			name:   "colon prefix is a boundary",
-			source: `color:--ht-format("x")`,
+			source: `color:--ht-fmt("x")`,
 			want:   `color:${ httd "x" }`,
 		},
 	}
@@ -259,7 +259,7 @@ func TestRewriteCSS_WordBoundary(t *testing.T) {
 }
 
 func TestRewriteCSS_CaseSensitive(t *testing.T) {
-	source := `--HT-FORMAT("x"); --Ht-Format("y")`
+	source := `--HT-FMT("x"); --Ht-Fmt("y")`
 	got, err := rewriteCSS(source)
 	if err != nil {
 		t.Fatalf("rewriteCSS() error = %v", err)
@@ -270,7 +270,7 @@ func TestRewriteCSS_CaseSensitive(t *testing.T) {
 }
 
 func TestRewriteCSS_PassesThroughDollarBrace(t *testing.T) {
-	source := `.a { content: "${x}"; color: --ht-format("theme.color"); }`
+	source := `.a { content: "${x}"; color: --ht-fmt("theme.color"); }`
 	got, err := rewriteCSS(source)
 	if err != nil {
 		t.Fatalf("rewriteCSS() error = %v", err)
@@ -289,67 +289,67 @@ func TestRewriteCSS_Rejects(t *testing.T) {
 	}{
 		{
 			name:     "empty double-quoted",
-			source:   `--ht-format("")`,
+			source:   `--ht-fmt("")`,
 			contains: "empty template argument",
 		},
 		{
 			name:     "whitespace-only template arg",
-			source:   `--ht-format("   ")`,
+			source:   `--ht-fmt("   ")`,
 			contains: "empty template argument",
 		},
 		{
 			name:     "bareword template argument",
-			source:   `--ht-format(x)`,
+			source:   `--ht-fmt(x)`,
 			contains: "expected quoted argument",
 		},
 		{
 			name:     "keypath without quotes",
-			source:   `--ht-format(page.title)`,
+			source:   `--ht-fmt(page.title)`,
 			contains: "expected quoted argument",
 		},
 		{
 			name:     "unterminated double-quoted string",
-			source:   `--ht-format("x`,
+			source:   `--ht-fmt("x`,
 			contains: "unterminated string",
 		},
 		{
 			name:     "unterminated single-quoted string",
-			source:   `--ht-format('x`,
+			source:   `--ht-fmt('x`,
 			contains: "unterminated string",
 		},
 		{
 			name:     "missing close paren",
-			source:   `--ht-format("x"`,
+			source:   `--ht-fmt("x"`,
 			contains: "missing closing )",
 		},
 		{
 			name:     "junk before close paren",
-			source:   `--ht-format("x" y)`,
+			source:   `--ht-fmt("x" y)`,
 			contains: "expected , or )",
 		},
 		{
 			name:     "open paren alone",
-			source:   `--ht-format(`,
+			source:   `--ht-fmt(`,
 			contains: "end of input",
 		},
 		{
 			name:     "empty fallback",
-			source:   `--ht-format("x", )`,
+			source:   `--ht-fmt("x", )`,
 			contains: "empty fallback value",
 		},
 		{
 			name:     "trailing comma with nothing after",
-			source:   `--ht-format("x",`,
+			source:   `--ht-fmt("x",`,
 			contains: "missing fallback value",
 		},
 		{
 			name:     "unterminated fallback string",
-			source:   `--ht-format("x", "red`,
+			source:   `--ht-fmt("x", "red`,
 			contains: "unterminated string",
 		},
 		{
 			name:     "unterminated unquoted fallback",
-			source:   `--ht-format("x", rgb(255, 0, 0)`,
+			source:   `--ht-fmt("x", rgb(255, 0, 0)`,
 			contains: "missing closing )",
 		},
 	}
@@ -360,8 +360,8 @@ func TestRewriteCSS_Rejects(t *testing.T) {
 			if err == nil {
 				t.Fatal("rewriteCSS() error = nil, want error")
 			}
-			if !errors.Is(err, errInvalidHTFormatCall) {
-				t.Fatalf("rewriteCSS() error = %v, want errInvalidHTFormatCall", err)
+			if !errors.Is(err, errInvalidHTFmtCall) {
+				t.Fatalf("rewriteCSS() error = %v, want errInvalidHTFmtCall", err)
 			}
 			if !errors.Is(err, errInvalidTemplate) {
 				t.Fatalf("rewriteCSS() error should wrap errInvalidTemplate, got %v", err)
@@ -374,7 +374,7 @@ func TestRewriteCSS_Rejects(t *testing.T) {
 }
 
 func TestRewriteCSS_InheritsKeypathValidation(t *testing.T) {
-	_, err := rewrite(`--ht-format("if page.title")`, SyntaxCSS)
+	_, err := rewrite(`--ht-fmt("if page.title")`, SyntaxCSS)
 	if err == nil {
 		t.Fatal("rewrite() error = nil, want invalid-keypath error")
 	}
@@ -384,7 +384,7 @@ func TestRewriteCSS_InheritsKeypathValidation(t *testing.T) {
 }
 
 func TestRewriteCSS_InheritsCommentRejection(t *testing.T) {
-	_, err := rewrite(`--ht-format("/* hidden */")`, SyntaxCSS)
+	_, err := rewrite(`--ht-fmt("/* hidden */")`, SyntaxCSS)
 	if err == nil {
 		t.Fatal("rewrite() error = nil, want template-comment error")
 	}
@@ -400,7 +400,7 @@ func TestRenderCSS_EndToEnd(t *testing.T) {
 		},
 	}
 
-	source := `.hero { color: --ht-format("theme.color"); }`
+	source := `.hero { color: --ht-fmt("theme.color"); }`
 	rendered, err := Render(source, data, SyntaxCSS)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
@@ -415,7 +415,7 @@ func TestRenderCSS_EndToEnd(t *testing.T) {
 func TestRenderCSS_FallbackWhenNil(t *testing.T) {
 	data := testGetter{}
 
-	rendered, err := Render(`.a { color: --ht-format("theme.color", red); }`, data, SyntaxCSS)
+	rendered, err := Render(`.a { color: --ht-fmt("theme.color", red); }`, data, SyntaxCSS)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -433,7 +433,7 @@ func TestRenderCSS_FallbackWhenEmptyString(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`.a { color: --ht-format("theme.color", red); }`, data, SyntaxCSS)
+	rendered, err := Render(`.a { color: --ht-fmt("theme.color", red); }`, data, SyntaxCSS)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -451,7 +451,7 @@ func TestRenderCSS_FallbackSkippedWhenPresent(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`.a { color: --ht-format("theme.color", red); }`, data, SyntaxCSS)
+	rendered, err := Render(`.a { color: --ht-fmt("theme.color", red); }`, data, SyntaxCSS)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -465,7 +465,7 @@ func TestRenderCSS_FallbackSkippedWhenPresent(t *testing.T) {
 func TestRenderCSS_FallbackRGB(t *testing.T) {
 	data := testGetter{}
 
-	rendered, err := Render(`.a { color: --ht-format("theme.color", rgb(255, 0, 0)); }`, data, SyntaxCSS)
+	rendered, err := Render(`.a { color: --ht-fmt("theme.color", rgb(255, 0, 0)); }`, data, SyntaxCSS)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -483,7 +483,7 @@ func TestRenderCSS_FallbackResolution(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`--ht-format("site.title, page.title")`, data, SyntaxCSS)
+	rendered, err := Render(`--ht-fmt("site.title, page.title")`, data, SyntaxCSS)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -494,23 +494,23 @@ func TestRenderCSS_FallbackResolution(t *testing.T) {
 }
 
 func TestValidateCSS_PropagatesRewriterErrors(t *testing.T) {
-	err := validate(`--ht-format(x)`, SyntaxCSS)
+	err := validate(`--ht-fmt(x)`, SyntaxCSS)
 	if err == nil {
 		t.Fatal("validate() error = nil, want error")
 	}
-	if !errors.Is(err, errInvalidHTFormatCall) {
-		t.Fatalf("validate() error should wrap errInvalidHTFormatCall, got %v", err)
+	if !errors.Is(err, errInvalidHTFmtCall) {
+		t.Fatalf("validate() error should wrap errInvalidHTFmtCall, got %v", err)
 	}
 }
 
 func TestParseCSS_NormalizedExposesRewritten(t *testing.T) {
-	parsed, err := parse(`--ht-format("page.title")`, SyntaxCSS)
+	parsed, err := parse(`--ht-fmt("page.title")`, SyntaxCSS)
 	if err != nil {
 		t.Fatalf("parse() error = %v", err)
 	}
 
-	if parsed.source != `--ht-format("page.title")` {
-		t.Fatalf("source mismatch:\nwant: %q\n got: %q", `--ht-format("page.title")`, parsed.source)
+	if parsed.source != `--ht-fmt("page.title")` {
+		t.Fatalf("source mismatch:\nwant: %q\n got: %q", `--ht-fmt("page.title")`, parsed.source)
 	}
 
 	if parsed.normalized != `${ httd "page.title" }` {
@@ -519,13 +519,13 @@ func TestParseCSS_NormalizedExposesRewritten(t *testing.T) {
 }
 
 func TestRewriteCSS_DefaultModeIgnoresCalls(t *testing.T) {
-	source := `.a { color: --ht-format("theme.color"); }`
+	source := `.a { color: --ht-fmt("theme.color"); }`
 	got, err := rewrite(source, SyntaxDefault)
 	if err != nil {
 		t.Fatalf("rewrite() error = %v", err)
 	}
 	if got != source {
-		t.Fatalf("rewrite() in SyntaxDefault should leave --ht-format(...) untouched:\nwant: %q\n got: %q", source, got)
+		t.Fatalf("rewrite() in SyntaxDefault should leave --ht-fmt(...) untouched:\nwant: %q\n got: %q", source, got)
 	}
 }
 
@@ -545,9 +545,9 @@ func TestRenderCSS_MissingRestoresCSSSource(t *testing.T) {
 		name   string
 		source string
 	}{
-		{name: "double-quoted bare call", source: `--ht-format("theme.color")`},
-		{name: "single-quoted bare call", source: `--ht-format('theme.color')`},
-		{name: "inside CSS rule", source: `.a { color: --ht-format("theme.color"); }`},
+		{name: "double-quoted bare call", source: `--ht-fmt("theme.color")`},
+		{name: "single-quoted bare call", source: `--ht-fmt('theme.color')`},
+		{name: "inside CSS rule", source: `.a { color: --ht-fmt("theme.color"); }`},
 	}
 
 	for _, tc := range tests {
@@ -564,7 +564,7 @@ func TestRenderCSS_MissingRestoresCSSSource(t *testing.T) {
 }
 
 func TestRenderCSS_DefaultOnMissPreventsRestore(t *testing.T) {
-	rendered, err := Render(`--ht-format("theme.color", red)`, testGetter{}, SyntaxCSS)
+	rendered, err := Render(`--ht-fmt("theme.color", red)`, testGetter{}, SyntaxCSS)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -577,7 +577,7 @@ func TestRenderCSS_MultiActionAnyMissRestoresWholeCSS(t *testing.T) {
 	data := testGetter{
 		"theme": map[string]any{"color": "red"},
 	}
-	source := `.a { color: --ht-format("theme.color"); bg: --ht-format("theme.bg"); }`
+	source := `.a { color: --ht-fmt("theme.color"); bg: --ht-fmt("theme.bg"); }`
 
 	rendered, err := Render(source, data, SyntaxCSS)
 	if err != nil {

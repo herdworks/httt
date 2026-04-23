@@ -6,19 +6,64 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
-Added CSS-style `--ht-format("...")` surface syntax to the `format` package as an alternative to `${ ... }` for CSS templating contexts.
-The CSS form mirrors a CSS custom-property function call and supports an optional `var()`-style fallback: `--ht-format("theme.color", red)`.
-CSS syntax is auto-selected in `RenderFormatting` for `<style>` element text content and `style` attributes; the `${ ... }` syntax remains the default everywhere else.
+Added a new `ht-fmt` templating directive and all-new variable subtitution system with `${ ... }` style template variables.
 
-* Added `format.Syntax` type with `SyntaxDefault` and `SyntaxCSS` constants.
-* Added a `default` template function for fallback pipelines (`${ page.title | default "Untitled" }`); it returns the default value when the piped value is `nil` or an empty string.
-* Changed `format.Render` to accept a trailing `syntax Syntax` parameter and dropped its leading `name string` parameter; the package now hard-codes `"ht-format"` internally since named sub-templates are not part of the DSL.
-  _NOTE: this is a breaking API change for direct callers. Drop the first argument and pass `format.SyntaxDefault` to preserve existing behavior._
-* Changed the `format` package to expose a minimal public surface: only `Render`, `Getter`, `Syntax`, `SyntaxDefault`, and `SyntaxCSS`. `Parse`, `Validate`, `Rewrite`, the `Template` type, and the `Err*` sentinels are now package-private.
-  _NOTE: this is a breaking API change for direct callers of the unexported symbols. `Render` covers the documented use cases._
-* Changed `Template.RenderFormatting` to dispatch `SyntaxCSS` for `<style>` element text and `style="..."` attribute values.
-* Removed the `text/template` builtin whitelist (`printf`, `print`, `and`, `or`, `len`, `index`, `eq`, `ne`, `lt`, `gt`, `ge`, `le`, `not`, `html`, `js`, `urlquery`, `slice`, `call`) from the reserved-function set; only `httd`, `default`, and user-registered `FuncMap` entries are reserved. Templates that relied on unregistered builtins now fall into the miss-restoration path and render as their original source — register the function via `funcs` to restore previous behavior.
-* Changed `format.Render` to detect `text/template`'s `"<no value>"` marker in the rendered output and restore the original template source verbatim instead of leaking the marker. Any action that misses (without a `| default "..."` fallback) now surfaces the user's original template text in the output, making unresolved bindings visible as no-op placeholders rather than mysterious `<no value>` strings. This is all-or-nothing per `Render` call: one miss restores the whole source.
+_NOTE: variable substitution was designed to look and function similar to variable substitution in [Javascript template literals], but the HyperTemplates implementation is **not** based on Javascript._
+
+* Added new template variable declaration, with `${ ... }` delimiter. 
+  Template variables can be used in element attributes, _and_ text nodes. 
+
+  ```html
+  <title ht-fmt>${site.title} | ${page.title}</title>
+  <meta name='description' content='${page.description}' ht-fmt>
+  ```
+
+* Added new `ht-fmt` template directive that enables variable substitution on template element attributes and text nodes.
+
+  _NOTE: text node variable substitution is scoped to **direct descendents** of a template element. 
+  In the following example, the `${page.greeting.planet}` variable will be replaced, but the `${page.greeting.galaxy}` variable will not. The former is a a direct descendent text node of the parent `<a>` element, but the latter is a direct descendant text node of the nested `<span>` element (a grandchild of the parent `<a>` element)._
+
+  ```html
+  <a href='${page.path}' ht-fmt>
+    Hello, ${page.greeting.planet} world! Welcome to the <span>${page.greeting.galaxy}</span> galaxy.
+  </a>
+  ```
+
+* Added a CSS template variable declaration, with `--ht-fmt( ... )` delimiter. 
+  
+  > NOTE: variable subtitution in `<style>` elements and `style=''` attributes must use the CSS syntax. 
+  > 
+  > Example:
+  > 
+  > ```html
+  > <style ht-fmt>
+  >     :root article {
+  >         color: --ht-fmt("page.colors.text, page.colors.body", rgba(0,0,0,0.5));
+  >     }
+  > </style>
+  > ```
+  >
+  > HyperTemplates CSS variables support two arguments: 
+  > 
+  > * a comma-separated list of template data keys (see `"page.colors.text, page.colors.body"` above)
+  > * a fallback value (see `rgba(0,0,0,0.5)` above), which can be any valid CSS value
+  >
+  > NOTE: The variable substitution syntax for CSS conforms to the [CSS custom function] specification, 
+  > which means they are valid CSS. 
+  > Syntax highlighters rejoice!
+
+* Templating variables support functions. The only function that is currently supported is: `default`, for providing fallback values.
+
+  > **Example**
+  >
+  > ```html
+  > <meta name='description' content='${page.description | default "Lorem ipsum, placeholder page description."}' ht-fmt>
+  > ```
+
+
+<!-- Links -->
+[Javascript template literals]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals
+[CSS custom function]: https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Custom_functions_and_mixins/Using_custom_functions#function_basics
 
 ## v0.20.0 (2026-04-21)
 

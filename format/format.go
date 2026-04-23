@@ -182,7 +182,7 @@ func buildTemplate(source string, data Getter) (*texttemplate.Template, error) {
 // returns value otherwise. It is registered in the template func map as
 // "default" and is intended as a pipeline terminator for cases where a
 // template body may resolve to nothing — particularly the CSS-syntax
-// --ht-format("<body>", <fallback>) form.
+// --ht-fmt("<body>", <fallback>) form.
 func defaultFunc(defaultValue string, value any) any {
 	if value == nil {
 		return defaultValue

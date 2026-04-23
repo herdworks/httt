@@ -237,11 +237,11 @@ func TestRenderBlockPageFallback(t *testing.T) {
 	}
 }
 
-func TestRenderFormatting(t *testing.T) {
+func TestRenderVariables(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<section ht-format data-href="${ page.href }">
+				<section ht-fmt data-href="${ page.href }">
 					Hello ${ page.title }
 					<span>${ page.slug }</span>
 				</section>
@@ -309,19 +309,19 @@ func TestRenderFormatting(t *testing.T) {
 		t.Fatalf("expected nested span text to remain unrendered, got %q", text)
 	}
 
-	if bytes.Contains(htmlBytes, []byte("ht-format")) {
-		t.Fatalf("expected ht-format attribute to be removed in tidy mode; got:\n%s", htmlBytes)
+	if bytes.Contains(htmlBytes, []byte("ht-fmt")) {
+		t.Fatalf("expected ht-fmt attribute to be removed in tidy mode; got:\n%s", htmlBytes)
 	}
 }
 
-func TestRenderFormattingNested(t *testing.T) {
+func TestRenderVariablesNested(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<section ht-format class="${ page.class }">
+				<section ht-fmt class="${ page.class }">
 					Hello ${ page.title }
 					<div>
-						<span ht-format data-slug="${ page.slug }">${ page.title }</span>
+						<span ht-fmt data-slug="${ page.slug }">${ page.title }</span>
 					</div>
 				</section>
 			</body>
@@ -356,7 +356,7 @@ func TestRenderFormattingNested(t *testing.T) {
 
 	section := Query(renderedLayout, "section.hero")
 	if section == nil {
-		t.Fatalf("expected outer ht-format element to render attributes; got:\n%s", htmlBytes)
+		t.Fatalf("expected outer ht-fmt element to render attributes; got:\n%s", htmlBytes)
 	}
 
 	var directText string
@@ -377,7 +377,7 @@ func TestRenderFormattingNested(t *testing.T) {
 
 	span := Query(renderedLayout, "section.hero div span")
 	if span == nil {
-		t.Fatalf("expected nested ht-format element to render on its own pass; got:\n%s", htmlBytes)
+		t.Fatalf("expected nested ht-fmt element to render on its own pass; got:\n%s", htmlBytes)
 	}
 
 	if slug := getAttributeString(span, "data-slug"); slug != "hello-hypertemplates" {
@@ -388,17 +388,17 @@ func TestRenderFormattingNested(t *testing.T) {
 		t.Fatalf("expected nested span text %q, got %q", "Hello, HyperTemplates", text)
 	}
 
-	if bytes.Contains(htmlBytes, []byte("ht-format")) {
-		t.Fatalf("expected nested ht-format attributes to be removed; got:\n%s", htmlBytes)
+	if bytes.Contains(htmlBytes, []byte("ht-fmt")) {
+		t.Fatalf("expected nested ht-fmt attributes to be removed; got:\n%s", htmlBytes)
 	}
 }
 
-func TestRenderFormattingStyleElement(t *testing.T) {
+func TestRenderVariablesStyleElement(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<head>
-				<style ht-format>
-					.hero { color: --ht-format("theme.color"); background: --ht-format('theme.bg'); }
+				<style ht-fmt>
+					.hero { color: --ht-fmt("theme.color"); background: --ht-fmt('theme.bg'); }
 				</style>
 			</head>
 			<body></body>
@@ -426,22 +426,22 @@ func TestRenderFormattingStyleElement(t *testing.T) {
 	}
 
 	if !bytes.Contains(htmlBytes, []byte("color: red")) {
-		t.Fatalf("expected <style> --ht-format(\"theme.color\") to render as red; got:\n%s", htmlBytes)
+		t.Fatalf("expected <style> --ht-fmt(\"theme.color\") to render as red; got:\n%s", htmlBytes)
 	}
 	if !bytes.Contains(htmlBytes, []byte("background: black")) {
-		t.Fatalf("expected <style> --ht-format('theme.bg') to render as black; got:\n%s", htmlBytes)
+		t.Fatalf("expected <style> --ht-fmt('theme.bg') to render as black; got:\n%s", htmlBytes)
 	}
-	if bytes.Contains(htmlBytes, []byte("--ht-format(")) {
-		t.Fatalf("expected --ht-format(...) calls to be fully substituted; got:\n%s", htmlBytes)
+	if bytes.Contains(htmlBytes, []byte("--ht-fmt(")) {
+		t.Fatalf("expected --ht-fmt(...) calls to be fully substituted; got:\n%s", htmlBytes)
 	}
 }
 
-func TestRenderFormattingStyleElementFallback(t *testing.T) {
+func TestRenderVariablesStyleElementFallback(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<head>
-				<style ht-format>
-					.hero { color: --ht-format("theme.color", red); padding: --ht-format("theme.pad", 10px); }
+				<style ht-fmt>
+					.hero { color: --ht-fmt("theme.color", red); padding: --ht-fmt("theme.pad", 10px); }
 				</style>
 			</head>
 			<body></body>
@@ -471,11 +471,11 @@ func TestRenderFormattingStyleElementFallback(t *testing.T) {
 	}
 }
 
-func TestRenderFormattingStyleAttribute(t *testing.T) {
+func TestRenderVariablesStyleAttribute(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<div ht-format style='color: --ht-format("theme.color");'></div>
+				<div ht-fmt style='color: --ht-fmt("theme.color");'></div>
 			</body>
 		</html>
 	`))

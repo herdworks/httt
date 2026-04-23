@@ -71,6 +71,11 @@ func (template *Template) Process(data *TemplateData, userData *TemplateData) (h
 			return nil, err
 		}
 	}
+	for _, element := range template.HyperFormatElements() {
+		if err = template.RenderVariables(element, data); err != nil {
+			return nil, err
+		}
+	}
 	for _, element := range template.HyperAttrsElements() {
 		if err = template.RenderAttributes(element, data); err != nil {
 			return nil, err
@@ -83,11 +88,6 @@ func (template *Template) Process(data *TemplateData, userData *TemplateData) (h
 	}
 	for _, element := range template.HyperParamsElements() {
 		if err = template.RenderParams(element, data); err != nil {
-			return nil, err
-		}
-	}
-	for _, element := range template.HyperFormatElements() {
-		if err = template.RenderFormatting(element, data); err != nil {
 			return nil, err
 		}
 	}
@@ -317,13 +317,13 @@ func (template *Template) ResolveBasedAttributes(element *html.Node, attribute s
 func containsSyntaxMarker(source string, syntax htformat.Syntax) bool {
 	switch syntax {
 	case htformat.SyntaxCSS:
-		return strings.Contains(source, "--ht-format(")
+		return strings.Contains(source, "--ht-fmt(")
 	default:
 		return strings.Contains(source, "${")
 	}
 }
 
-func (template *Template) RenderFormatting(element *html.Node, data *TemplateData) (err error) {
+func (template *Template) RenderVariables(element *html.Node, data *TemplateData) (err error) {
 	if element == nil {
 		return nil
 	}
@@ -615,15 +615,18 @@ func (template *Template) HyperAttrsElements() []*html.Node {
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperFormatAttributeStrings = []string{"data-ht-format", "ht-format"}
+var HyperFormatAttributeStrings = []string{"data-hyper-template", "hyper-template", "data-ht-fmt", "ht-fmt"}
 
 func (template *Template) HyperFormatElements() []*html.Node {
-	selectors := []string{"[data-ht-format]:not([data-ht-template] [data-ht-format], [data-ht-template][data-ht-format])"}
+	selectors := []string{"[data-ht-fmt]:not([data-ht-template] [data-ht-fmt], [data-ht-template][data-ht-fmt])"}
+	selectors = append(selectors, "[data-hyper-template]:not([data-ht-template] [data-hyper-template], [data-ht-template][data-hyper-template])")
 	if template.StrictMode {
 		return QueryRoot(template.Layout, selectors...)
 	}
-	selectors[0] += ":not([ht-template] [data-ht-format], [ht-template][data-ht-format])"
-	selectors = append(selectors, "[ht-format]:not([ht-template] [ht-format], [ht-template][ht-format]):not([data-ht-template] [ht-format], [data-ht-template][ht-attrs])")
+	selectors[0] += ":not([ht-template] [data-ht-fmt], [ht-template][data-ht-fmt])"
+	selectors[1] += ":not([ht-template] [data-hyper-template], [ht-template][data-hyper-template])"
+	selectors = append(selectors, "[ht-fmt]:not([ht-template] [ht-fmt], [ht-template][ht-fmt]):not([data-ht-template] [ht-fmt], [data-ht-template][ht-fmt])")
+	selectors = append(selectors, "[hyper-template]:not([ht-template] [hyper-template], [ht-template][hyper-template]):not([data-ht-template] [hyper-template], [data-ht-template][hyper-template])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
