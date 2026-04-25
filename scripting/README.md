@@ -1,11 +1,11 @@
 # scripting
 
-`scripting` is a HyperTemplates subpackage for evaluating JavaScript expressions against caller-provided arguments.
+`scripting` is a HyperTemplates subpackage for evaluating JavaScript function bodies against caller-provided arguments.
 It is designed for concurrent use, so one `Engine` can be shared safely across many goroutines.
 
 ## Goals
 
-* Evaluate template literals and small JavaScript expressions against per-call inputs.
+* Evaluate small JavaScript scripts against per-call inputs.
 * Reuse compiled programs and pooled runtimes without leaking values between calls.
 * Keep the API small, Go-native, and predictable.
 
@@ -19,17 +19,21 @@ go get github.com/herdworks/hypertemplates-go
 
 The package import path is `github.com/herdworks/hypertemplates-go/scripting`, and the Go package name is `scripting`.
 `Engine` is the concurrency-safe evaluator for advanced use cases.
-`Eval` returns the exported Go value for an expression.
+`Eval` returns the exported Go value returned by a script.
 `EvalString` applies JavaScript string coercion and is the best fit for template-style rendering.
-`EvalStringStrict` requires the final JavaScript value to already be a string.
+`EvalStringStrict` requires the returned JavaScript value to already be a string.
 `Function`, `FunctionContext`, and `FunctionTimeout` compile reusable Go callables backed by a lazy package-default engine.
 Matching `Engine` methods are available when you want explicit engine ownership.
 `Options.EvalTimeout` applies an engine-level timeout to each evaluation.
 
 Binding is intentionally binary:
 
-* If the argument is `map[string]any`, its top-level keys become local constants inside the expression when those keys are valid strict-mode JavaScript binding names.
+* If the argument is `map[string]any`, its top-level keys become local constants inside the script when those keys are valid strict-mode JavaScript binding names.
 * Every other argument shape is exposed as a single local constant named `input`.
+
+Scripts are wrapped in a strict-mode function body.
+Use `return` to produce a value.
+If a script completes without returning, `Eval` and compiled functions return nil.
 
 The package uses [`goja`](https://github.com/dop251/goja), which provides standard JavaScript built-ins such as `Math`.
 It does not provide Node.js globals such as `require`, `process`, `Buffer`, or `setTimeout`.
@@ -53,7 +57,7 @@ func main() {
 
 	got, err := engine.EvalString(
 		context.Background(),
-		"`Hello ${user.name} from ${site}`",
+		"return `Hello ${user.name} from ${site}`",
 		map[string]any{
 			"user": map[string]any{"name": "Alice"},
 			"site": "HyperTemplates",
@@ -80,7 +84,7 @@ import (
 
 func main() {
 	formatGreeting, err := scripting.Function(
-		"`Hello ${user.name}`",
+		"return `Hello ${user.name}`",
 		map[string]any{"user": nil},
 	)
 	if err != nil {
@@ -101,7 +105,7 @@ func main() {
 
 ## Compile JavaScript Files
 
-`Function` accepts one JavaScript expression.
+`Function` accepts one JavaScript function body.
 To compile one reusable Go callable per JavaScript file, read each file and pass its contents to `scripting.Function` independently.
 
 ```go
@@ -169,7 +173,11 @@ Because pipeline input is passed as the function argument, JavaScript file plugi
 
 ```js
 // ht:plugin upper
-input.toUpperCase()
+if (typeof input !== "string") {
+	return input
+}
+
+return input.toUpperCase()
 ```
 
 ```go
@@ -184,16 +192,18 @@ if err != nil {
 }
 ```
 
-If a JavaScript file contains statements, make the file an expression by wrapping those statements in an IIFE:
+Plugin files can use ordinary JavaScript statements and top-level `return`:
 
 ```js
-(() => {
-	if (input == null) {
-		return input
-	}
+// ht:plugin title
+if (input == null) {
+	return input
+}
 
-	return String(input).toUpperCase()
-})()
+return String(input)
+	.split(/\s+/)
+	.map(word => word.charAt(0).toUpperCase() + word.slice(1))
+	.join(" ")
 ```
 
 If you need to install the plugins on a full HyperTemplates template, assign the map directly:
@@ -205,7 +215,7 @@ template.Plugins = plugins
 ## Concurrent Usage
 
 One `Engine` can be shared across goroutines.
-Each call receives its own argument, and compiled programs are cached by expression and binding shape.
+Each call receives its own argument, and compiled programs are cached by script source and binding shape.
 All non-map arguments share one `input` cache shape.
 Map arguments are cached by their sorted top-level keys.
 
@@ -236,7 +246,7 @@ func main() {
 
 			got, err := engine.EvalString(
 				context.Background(),
-				"`hi ${user.name}`",
+				"return `hi ${user.name}`",
 				map[string]any{"user": map[string]any{"name": name}},
 			)
 			if err != nil {
@@ -272,7 +282,7 @@ import (
 )
 
 func main() {
-	fn, err := scripting.FunctionContext("(()=>{while(true){}})()", nil)
+	fn, err := scripting.FunctionContext("while (true) {}", nil)
 	if err != nil {
 		panic(err)
 	}

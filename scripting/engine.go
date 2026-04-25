@@ -1,7 +1,7 @@
 // Package scripting embeds a pure-Go JavaScript runtime (goja) for evaluating
-// template-literal-style expressions against per-call Go arguments.
+// small JavaScript function bodies against per-call Go arguments.
 //
-// The engine compiles expressions into reusable bytecode wrappers that either
+// The engine compiles scripts into reusable bytecode wrappers that either
 // expose top-level map keys as local constants or bind a single local
 // `input` constant, so per-call values never leak across calls sharing the
 // same pooled runtime.
@@ -36,7 +36,7 @@ type Options struct {
 	EvalTimeout time.Duration
 }
 
-// Engine evaluates JavaScript expressions against per-call data contexts.
+// Engine evaluates JavaScript function bodies against per-call data contexts.
 // An Engine is safe for concurrent use by multiple goroutines.
 type Engine struct {
 	opts   Options
@@ -60,16 +60,16 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-// Eval executes expr as a JavaScript expression against arg.
+// Eval executes src as a JavaScript function body against arg.
 //
 // If arg is map[string]any, its top-level keys become local constants inside
-// the expression. Otherwise the expression receives a single local constant
+// the script. Otherwise the script receives a single local constant
 // named input.
 //
 // ctx cancellation or its deadline triggers Runtime.Interrupt on the borrowed
 // runtime, yielding ErrInterrupted.
-func (e *Engine) Eval(ctx context.Context, expr string, arg any) (any, error) {
-	v, err := e.evalValue(ctx, expr, arg)
+func (e *Engine) Eval(ctx context.Context, src string, arg any) (any, error) {
+	v, err := e.evalValue(ctx, src, arg)
 	if err != nil {
 		return nil, err
 	}
@@ -79,15 +79,15 @@ func (e *Engine) Eval(ctx context.Context, expr string, arg any) (any, error) {
 	return v.Export(), nil
 }
 
-// EvalString evaluates expr and returns its value as a Go string, applying
+// EvalString evaluates src and returns its value as a Go string, applying
 // JavaScript's ToString coercion (the same coercion template literals use
 // internally to stringify their ${…} slots). Numbers become "42", booleans
 // become "true"/"false", null becomes "null", undefined becomes "undefined",
 // plain objects become "[object Object]".
 //
 // This is the recommended entry point for template-literal-based rendering.
-func (e *Engine) EvalString(ctx context.Context, expr string, arg any) (string, error) {
-	v, err := e.evalValue(ctx, expr, arg)
+func (e *Engine) EvalString(ctx context.Context, src string, arg any) (string, error) {
+	v, err := e.evalValue(ctx, src, arg)
 	if err != nil {
 		return "", err
 	}
@@ -98,10 +98,10 @@ func (e *Engine) EvalString(ctx context.Context, expr string, arg any) (string, 
 }
 
 // EvalStringStrict behaves like EvalString but returns an error if the
-// expression did not evaluate to a JavaScript string. Use this when a
-// non-string result would indicate a bug in the expression or data shape.
-func (e *Engine) EvalStringStrict(ctx context.Context, expr string, arg any) (string, error) {
-	v, err := e.evalValue(ctx, expr, arg)
+// script did not return a JavaScript string. Use this when a non-string result
+// would indicate a bug in the script or data shape.
+func (e *Engine) EvalStringStrict(ctx context.Context, src string, arg any) (string, error) {
+	v, err := e.evalValue(ctx, src, arg)
 	if err != nil {
 		return "", err
 	}
@@ -119,16 +119,16 @@ func (e *Engine) EvalStringStrict(ctx context.Context, expr string, arg any) (st
 // Function returns a reusable evaluator that applies a fixed timeout to every
 // call. sampleArg defines the binding mode and top-level contract for later
 // invocations.
-func (e *Engine) Function(expr string, sampleArg any) (func(any) (any, error), error) {
-	return e.FunctionTimeout(expr, sampleArg, defaultFunctionTimeout)
+func (e *Engine) Function(src string, sampleArg any) (func(any) (any, error), error) {
+	return e.FunctionTimeout(src, sampleArg, defaultFunctionTimeout)
 }
 
 // FunctionContext returns a reusable evaluator that accepts a caller-owned
 // context on every invocation. sampleArg defines the binding mode and
 // top-level contract for later invocations.
-func (e *Engine) FunctionContext(expr string, sampleArg any) (func(context.Context, any) (any, error), error) {
+func (e *Engine) FunctionContext(src string, sampleArg any) (func(context.Context, any) (any, error), error) {
 	shape := bindingShapeForArg(sampleArg)
-	prog, err := e.programForShape(expr, shape)
+	prog, err := e.programForShape(src, shape)
 	if err != nil {
 		return nil, err
 	}
@@ -152,12 +152,12 @@ func (e *Engine) FunctionContext(expr string, sampleArg any) (func(context.Conte
 // FunctionTimeout returns a reusable evaluator that applies timeout to every
 // call. sampleArg defines the binding mode and top-level contract for later
 // invocations.
-func (e *Engine) FunctionTimeout(expr string, sampleArg any, timeout time.Duration) (func(any) (any, error), error) {
+func (e *Engine) FunctionTimeout(src string, sampleArg any, timeout time.Duration) (func(any) (any, error), error) {
 	if timeout <= 0 {
 		return nil, fmt.Errorf("scripting: FunctionTimeout: timeout must be greater than zero")
 	}
 
-	fn, err := e.FunctionContext(expr, sampleArg)
+	fn, err := e.FunctionContext(src, sampleArg)
 	if err != nil {
 		return nil, err
 	}
@@ -189,8 +189,8 @@ func (e *Engine) FunctionTimeout(expr string, sampleArg any, timeout time.Durati
 // value, true/false become 1/0, null becomes 0, undefined becomes NaN,
 // objects become NaN (unless they define valueOf() returning a number).
 //
-// func (e *Engine) EvalNumber(ctx context.Context, expr string, arg any) (float64, error) {
-// 	v, err := e.evalValue(ctx, expr, arg)
+// func (e *Engine) EvalNumber(ctx context.Context, src string, arg any) (float64, error) {
+// 	v, err := e.evalValue(ctx, src, arg)
 // 	if err != nil {
 // 		return 0, err
 // 	}
@@ -201,12 +201,12 @@ func (e *Engine) FunctionTimeout(expr string, sampleArg any, timeout time.Durati
 // }
 
 // EvalNumberStrict behaves like EvalNumber but returns an error if the
-// expression did not evaluate to a JavaScript number. JS numbers export
+// script did not return a JavaScript number. JS numbers export
 // to either int64 (when the value is an integer that fits) or float64,
 // so both are accepted here and normalized to float64.
 //
-// func (e *Engine) EvalNumberStrict(ctx context.Context, expr string, arg any) (float64, error) {
-// 	v, err := e.evalValue(ctx, expr, arg)
+// func (e *Engine) EvalNumberStrict(ctx context.Context, src string, arg any) (float64, error) {
+// 	v, err := e.evalValue(ctx, src, arg)
 // 	if err != nil {
 // 		return 0, err
 // 	}
@@ -228,8 +228,8 @@ func (e *Engine) FunctionTimeout(expr string, sampleArg any, timeout time.Durati
 // NaN. Everything else is truthy — including empty arrays and empty objects,
 // which is a JS quirk worth warning callers about.
 //
-// func (e *Engine) EvalBool(ctx context.Context, expr string, arg any) (bool, error) {
-// 	v, err := e.evalValue(ctx, expr, arg)
+// func (e *Engine) EvalBool(ctx context.Context, src string, arg any) (bool, error) {
+// 	v, err := e.evalValue(ctx, src, arg)
 // 	if err != nil {
 // 		return false, err
 // 	}
@@ -240,10 +240,10 @@ func (e *Engine) FunctionTimeout(expr string, sampleArg any, timeout time.Durati
 // }
 
 // EvalBoolStrict behaves like EvalBool but returns an error if the
-// expression did not evaluate to a JavaScript boolean.
+// script did not return a JavaScript boolean.
 //
-// func (e *Engine) EvalBoolStrict(ctx context.Context, expr string, arg any) (bool, error) {
-// 	v, err := e.evalValue(ctx, expr, arg)
+// func (e *Engine) EvalBoolStrict(ctx context.Context, src string, arg any) (bool, error) {
+// 	v, err := e.evalValue(ctx, src, arg)
 // 	if err != nil {
 // 		return false, err
 // 	}
@@ -263,8 +263,8 @@ func (e *Engine) FunctionTimeout(expr string, sampleArg any, timeout time.Durati
 // Arrays — which goja exports as []any — will fail the type assertion;
 // callers that want arrays should use Eval and type-assert themselves.
 //
-// func (e *Engine) EvalObject(ctx context.Context, expr string, arg any) (map[string]any, error) {
-// 	v, err := e.evalValue(ctx, expr, arg)
+// func (e *Engine) EvalObject(ctx context.Context, src string, arg any) (map[string]any, error) {
+// 	v, err := e.evalValue(ctx, src, arg)
 // 	if err != nil {
 // 		return nil, err
 // 	}
@@ -285,8 +285,8 @@ func (e *Engine) FunctionTimeout(expr string, sampleArg any, timeout time.Durati
 // EvalObjectStrict behaves like EvalObject but rejects null/undefined and
 // anything else that isn't a plain JS object.
 //
-// func (e *Engine) EvalObjectStrict(ctx context.Context, expr string, arg any) (map[string]any, error) {
-// 	v, err := e.evalValue(ctx, expr, arg)
+// func (e *Engine) EvalObjectStrict(ctx context.Context, src string, arg any) (map[string]any, error) {
+// 	v, err := e.evalValue(ctx, src, arg)
 // 	if err != nil {
 // 		return nil, err
 // 	}
@@ -315,12 +315,12 @@ func (e *Engine) ensureUsable(ctx context.Context) error {
 // evalValue is the shared core: compile (or reuse), borrow a runtime, run,
 // and return the raw goja.Value. Public methods wrap this with the
 // appropriate unwrap strategy (Export, String, strict assertion, etc.).
-func (e *Engine) evalValue(ctx context.Context, expr string, arg any) (goja.Value, error) {
+func (e *Engine) evalValue(ctx context.Context, src string, arg any) (goja.Value, error) {
 	if err := e.ensureUsable(ctx); err != nil {
 		return nil, err
 	}
 
-	prog, err := e.programForArg(expr, arg)
+	prog, err := e.programForArg(src, arg)
 	if err != nil {
 		return nil, err
 	}

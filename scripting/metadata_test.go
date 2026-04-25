@@ -15,7 +15,7 @@ func TestPluginName(t *testing.T) {
 	}{
 		{
 			name:      "line comment with space",
-			source:    "// ht:plugin upper\ninput.toUpperCase()",
+			source:    "// ht:plugin upper\nreturn input.toUpperCase()",
 			want:      "upper",
 			wantFound: true,
 		},
@@ -98,8 +98,8 @@ input`,
 	}
 }
 
-func TestPluginName_MetadataCommentCompilesAsExpression(t *testing.T) {
-	fn, err := Function("// ht:plugin upper\ninput.toUpperCase()", "")
+func TestPluginName_MetadataCommentCompilesAsScriptBody(t *testing.T) {
+	fn, err := Function("// ht:plugin upper\nreturn input.toUpperCase()", "")
 	if err != nil {
 		t.Fatalf("Function() error = %v", err)
 	}

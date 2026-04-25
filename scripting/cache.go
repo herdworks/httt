@@ -6,16 +6,16 @@ import (
 	"github.com/dop251/goja"
 )
 
-// programForArg returns the compiled *goja.Program for (expr, arg-shape),
+// programForArg returns the compiled *goja.Program for (src, arg-shape),
 // compiling and caching it on a miss.
-func (e *Engine) programForArg(expr string, arg any) (*goja.Program, error) {
-	return e.programForShape(expr, bindingShapeForArg(arg))
+func (e *Engine) programForArg(src string, arg any) (*goja.Program, error) {
+	return e.programForShape(src, bindingShapeForArg(arg))
 }
 
-// programForShape returns the compiled *goja.Program for (expr, binding-shape),
+// programForShape returns the compiled *goja.Program for (src, binding-shape),
 // compiling and caching it on a miss.
-func (e *Engine) programForShape(expr string, shape bindingShape) (*goja.Program, error) {
-	key := shape.cacheKey(expr)
+func (e *Engine) programForShape(src string, shape bindingShape) (*goja.Program, error) {
+	key := shape.cacheKey(src)
 
 	if cached, ok := e.cache.Load(key); ok {
 		return cached.(*goja.Program), nil
@@ -25,10 +25,10 @@ func (e *Engine) programForShape(expr string, shape bindingShape) (*goja.Program
 		return nil, err
 	}
 
-	wrapped := shape.wrapperSource(expr)
+	wrapped := shape.wrapperSource(src)
 	prog, err := goja.Compile("cache.go", wrapped, true)
 	if err != nil {
-		return nil, compileError(expr, err)
+		return nil, compileError(src, err)
 	}
 
 	actual, _ := e.cache.LoadOrStore(key, prog)
@@ -36,7 +36,7 @@ func (e *Engine) programForShape(expr string, shape bindingShape) (*goja.Program
 }
 
 // compileError wraps a goja compile error with a short source excerpt so
-// callers can identify which expression failed without leaking an
+// callers can identify which script failed without leaking an
 // unbounded amount of user-supplied text.
 func compileError(src string, err error) error {
 	const max = 80

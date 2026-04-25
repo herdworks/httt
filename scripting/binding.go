@@ -34,10 +34,10 @@ func bindingShapeForArg(arg any) bindingShape {
 	}
 }
 
-func (s bindingShape) cacheKey(expr string) string {
+func (s bindingShape) cacheKey(src string) string {
 	var b strings.Builder
-	b.Grow(len(expr) + len(inputBindingCacheToken) + 16)
-	b.WriteString(expr)
+	b.Grow(len(src) + len(inputBindingCacheToken) + 16)
+	b.WriteString(src)
 	b.WriteByte(0)
 
 	if s.mode == bindingModeInput {
@@ -54,9 +54,9 @@ func (s bindingShape) cacheKey(expr string) string {
 	return b.String()
 }
 
-func (s bindingShape) wrapperSource(expr string) string {
+func (s bindingShape) wrapperSource(src string) string {
 	var b strings.Builder
-	b.Grow(len(expr) + 64)
+	b.Grow(len(src) + 64)
 	b.WriteString(`(function(__arg){ "use strict"; `)
 
 	switch s.mode {
@@ -70,9 +70,8 @@ func (s bindingShape) wrapperSource(expr string) string {
 		}
 	}
 
-	b.WriteString(`return (`)
-	b.WriteString(expr)
-	b.WriteString(`); })`)
+	b.WriteString(src)
+	b.WriteString(` })`)
 	return b.String()
 }
 

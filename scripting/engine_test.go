@@ -34,37 +34,37 @@ func TestEval_Basics(t *testing.T) {
 	}{
 		{
 			name: "template literal with one variable",
-			src:  "`Hello ${name}`",
+			src:  "return `Hello ${name}`",
 			data: map[string]any{"name": "World"},
 			want: "Hello World",
 		},
 		{
 			name: "template literal with nested property",
-			src:  "`Hello ${user.name}`",
+			src:  "return `Hello ${user.name}`",
 			data: map[string]any{"user": map[string]any{"name": "Alice"}},
 			want: "Hello Alice",
 		},
 		{
-			name: "arithmetic expression",
-			src:  "x + y",
+			name: "arithmetic return",
+			src:  "return x + y",
 			data: map[string]any{"x": 2, "y": 3},
 			want: int64(5),
 		},
 		{
 			name: "object literal return",
-			src:  "({a: x, b: y})",
+			src:  "return {a: x, b: y}",
 			data: map[string]any{"x": 1, "y": 2},
 			want: map[string]any{"a": int64(1), "b": int64(2)},
 		},
 		{
 			name: "no data",
-			src:  "1 + 1",
+			src:  "return 1 + 1",
 			data: nil,
 			want: int64(2),
 		},
 		{
 			name: "built-in globals available",
-			src:  "Math.max(a, b)",
+			src:  "return Math.max(a, b)",
 			data: map[string]any{"a": 3, "b": 7},
 			want: int64(7),
 		},
@@ -87,7 +87,7 @@ func TestEval_InputBinding(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	got, err := e.Eval(context.Background(), "input + 1", 41)
+	got, err := e.Eval(context.Background(), "return input + 1", 41)
 	if err != nil {
 		t.Fatalf("Eval: unexpected error: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestEval_InputBinding(t *testing.T) {
 		t.Fatalf("Eval: got %#v; want %#v", got, int64(42))
 	}
 
-	got, err = e.Eval(context.Background(), "typeof name", "Alice")
+	got, err = e.Eval(context.Background(), "return typeof name", "Alice")
 	if err != nil {
 		t.Fatalf("Eval: unexpected error: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestEval_InputBinding(t *testing.T) {
 		t.Fatalf("Eval: got %#v; want %#v", got, "undefined")
 	}
 
-	got, err = e.Eval(context.Background(), "input === null", nil)
+	got, err = e.Eval(context.Background(), "return input === null", nil)
 	if err != nil {
 		t.Fatalf("Eval: unexpected error: %v", err)
 	}
@@ -112,11 +112,52 @@ func TestEval_InputBinding(t *testing.T) {
 	}
 }
 
+func TestEval_StatementBody(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	src := `
+		if (typeof input !== "string") {
+			return input
+		}
+		return input.toUpperCase()
+	`
+
+	got, err := e.Eval(context.Background(), src, "hello")
+	if err != nil {
+		t.Fatalf("Eval: unexpected error: %v", err)
+	}
+	if got != "HELLO" {
+		t.Fatalf("Eval: got %#v; want %#v", got, "HELLO")
+	}
+
+	got, err = e.Eval(context.Background(), src, 42)
+	if err != nil {
+		t.Fatalf("Eval: unexpected error: %v", err)
+	}
+	if got != int64(42) {
+		t.Fatalf("Eval: got %#v; want %#v", got, int64(42))
+	}
+}
+
+func TestEval_NoReturnExportsNil(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	got, err := e.Eval(context.Background(), "const value = input", "hello")
+	if err != nil {
+		t.Fatalf("Eval: unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("Eval: got %#v; want nil", got)
+	}
+}
+
 func TestEval_MapBindingDoesNotExposeInput(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	got, err := e.Eval(context.Background(), "typeof input", map[string]any{"name": "Alice"})
+	got, err := e.Eval(context.Background(), "return typeof input", map[string]any{"name": "Alice"})
 	if err != nil {
 		t.Fatalf("Eval: unexpected error: %v", err)
 	}
@@ -137,43 +178,43 @@ func TestEvalString_Coercion(t *testing.T) {
 	}{
 		{
 			name: "template literal",
-			src:  "`Hello ${name}`",
+			src:  "return `Hello ${name}`",
 			data: map[string]any{"name": "World"},
 			want: "Hello World",
 		},
 		{
 			name: "bare string identifier",
-			src:  "name",
+			src:  "return name",
 			data: map[string]any{"name": "Alice"},
 			want: "Alice",
 		},
 		{
 			name: "number coerces to decimal string",
-			src:  "age",
+			src:  "return age",
 			data: map[string]any{"age": 42},
 			want: "42",
 		},
 		{
 			name: "boolean coerces",
-			src:  "true",
+			src:  "return true",
 			data: nil,
 			want: "true",
 		},
 		{
 			name: "null coerces",
-			src:  "null",
+			src:  "return null",
 			data: nil,
 			want: "null",
 		},
 		{
 			name: "undefined coerces",
-			src:  "undefined",
+			src:  "return undefined",
 			data: nil,
 			want: "undefined",
 		},
 		{
 			name: "plain object coerces",
-			src:  "({a: 1})",
+			src:  "return {a: 1}",
 			data: nil,
 			want: "[object Object]",
 		},
@@ -198,7 +239,7 @@ func TestEvalStringStrict(t *testing.T) {
 
 	t.Run("accepts strings", func(t *testing.T) {
 		got, err := e.EvalStringStrict(context.Background(),
-			"`Hello ${name}`", map[string]any{"name": "World"})
+			"return `Hello ${name}`", map[string]any{"name": "World"})
 		if err != nil {
 			t.Fatalf("EvalStringStrict: unexpected error: %v", err)
 		}
@@ -211,11 +252,11 @@ func TestEvalStringStrict(t *testing.T) {
 		name string
 		src  string
 	}{
-		{"number", "42"},
-		{"boolean", "true"},
-		{"null", "null"},
-		{"undefined", "undefined"},
-		{"object", "({a: 1})"},
+		{"number", "return 42"},
+		{"boolean", "return true"},
+		{"null", "return null"},
+		{"undefined", "return undefined"},
+		{"object", "return {a: 1}"},
 	}
 	for _, tc := range nonStrings {
 		t.Run("rejects "+tc.name, func(t *testing.T) {
@@ -228,6 +269,16 @@ func TestEvalStringStrict(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("rejects no return", func(t *testing.T) {
+		_, err := e.EvalStringStrict(context.Background(), "const value = 'hello'", nil)
+		if err == nil {
+			t.Fatal("EvalStringStrict: expected error for no return, got nil")
+		}
+		if !strings.Contains(err.Error(), "EvalStringStrict") {
+			t.Errorf("EvalStringStrict: error should name the method: %v", err)
+		}
+	})
 }
 
 func TestEvalString_SharesCacheWithEval(t *testing.T) {
@@ -237,7 +288,7 @@ func TestEvalString_SharesCacheWithEval(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	src := "`Hello ${name}`"
+	src := "return `Hello ${name}`"
 	data := map[string]any{"name": "World"}
 
 	if _, err := e.Eval(context.Background(), src, data); err != nil {
@@ -259,7 +310,7 @@ func TestEval_CompileError(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, err := e.Eval(context.Background(), "`unterminated", nil)
+	_, err := e.Eval(context.Background(), "return `unterminated", nil)
 	if err == nil {
 		t.Fatal("Eval: expected compile error, got nil")
 	}
@@ -273,7 +324,7 @@ func TestEval_RuntimeError(t *testing.T) {
 	t.Cleanup(func() { e.Close() })
 
 	// Referencing a property on undefined throws at runtime.
-	_, err := e.Eval(context.Background(), "missing.foo", nil)
+	_, err := e.Eval(context.Background(), "return missing.foo", nil)
 	if err == nil {
 		t.Fatal("Eval: expected runtime error, got nil")
 	}
@@ -283,7 +334,7 @@ func TestEval_ClosedEngine(t *testing.T) {
 	e := NewEngine(Options{})
 	e.Close()
 
-	_, err := e.Eval(context.Background(), "1", nil)
+	_, err := e.Eval(context.Background(), "return 1", nil)
 	if !errors.Is(err, ErrClosed) {
 		t.Errorf("Eval after Close: got %v; want ErrClosed", err)
 	}
@@ -302,7 +353,7 @@ func TestEval_ContextCancellation(t *testing.T) {
 	}()
 
 	start := time.Now()
-	_, err := e.Eval(ctx, "(()=>{while(true){}})()", nil)
+	_, err := e.Eval(ctx, "while (true) {}", nil)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -321,7 +372,7 @@ func TestEval_EvalTimeout(t *testing.T) {
 	t.Cleanup(func() { e.Close() })
 
 	start := time.Now()
-	_, err := e.Eval(context.Background(), "(()=>{while(true){}})()", nil)
+	_, err := e.Eval(context.Background(), "while (true) {}", nil)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -342,7 +393,7 @@ func TestFunctionTimeout_DoesNotPoisonLaterEval(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionTimeout("1 + 1", nil, 25*time.Millisecond)
+	fn, err := e.FunctionTimeout("return 1 + 1", nil, 25*time.Millisecond)
 	if err != nil {
 		t.Fatalf("FunctionTimeout: unexpected error: %v", err)
 	}
@@ -356,7 +407,7 @@ func TestFunctionTimeout_DoesNotPoisonLaterEval(t *testing.T) {
 			t.Fatalf("FunctionTimeout iteration %d: got %#v; want %#v", i, got, int64(2))
 		}
 
-		got, err = e.Eval(context.Background(), "1 + 1", nil)
+		got, err = e.Eval(context.Background(), "return 1 + 1", nil)
 		if err != nil {
 			t.Fatalf("Eval iteration %d: unexpected error after FunctionTimeout call: %v", i, err)
 		}
@@ -377,7 +428,7 @@ func TestEval_DataLifetime(t *testing.T) {
 
 	// Prime a pooled runtime with data containing `user`.
 	for i := 0; i < 100; i++ {
-		_, err := e.Eval(context.Background(), "`Hi ${user.name}`",
+		_, err := e.Eval(context.Background(), "return `Hi ${user.name}`",
 			map[string]any{"user": map[string]any{"name": "Alice"}})
 		if err != nil {
 			t.Fatalf("prime: %v", err)
@@ -387,7 +438,7 @@ func TestEval_DataLifetime(t *testing.T) {
 	// Now call without any data: `user` must not be visible as a global.
 	// `typeof` on an undeclared identifier yields "undefined" without
 	// throwing, which is the cleanest way to assert non-presence.
-	got, err := e.Eval(context.Background(), "typeof user", nil)
+	got, err := e.Eval(context.Background(), "return typeof user", nil)
 	if err != nil {
 		t.Fatalf("typeof user: %v", err)
 	}
@@ -400,7 +451,7 @@ func TestEval_CacheReuseSameShape(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	src := "`Hi ${user.name}`"
+	src := "return `Hi ${user.name}`"
 	for _, name := range []string{"Alice", "Bob", "Zara", "Eve"} {
 		_, err := e.Eval(context.Background(), src,
 			map[string]any{"user": map[string]any{"name": name}})
@@ -418,7 +469,7 @@ func TestEval_CacheReuseInputShape(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	src := "input"
+	src := "return input"
 
 	if _, err := e.Eval(context.Background(), src, "Alice"); err != nil {
 		t.Fatal(err)
@@ -439,7 +490,7 @@ func TestEval_CacheDiffersByShape(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	src := "`Hi ${user.name}`"
+	src := "return `Hi ${user.name}`"
 
 	if _, err := e.Eval(context.Background(), src,
 		map[string]any{"user": map[string]any{"name": "A"}}); err != nil {
@@ -475,7 +526,7 @@ func TestEval_ConcurrentNoLeakage(t *testing.T) {
 			for i := 0; i < iterations; i++ {
 				name := fmt.Sprintf("g%d-i%d", g, i)
 				got, err := e.Eval(context.Background(),
-					"`hi ${user.name}`",
+					"return `hi ${user.name}`",
 					map[string]any{"user": map[string]any{"name": name}})
 				if err != nil {
 					errs <- fmt.Errorf("g%d i%d: %w", g, i, err)
@@ -504,7 +555,7 @@ func TestEval_SandboxDefaults(t *testing.T) {
 	// We check them via `typeof` so the runtime doesn't throw.
 	forbidden := []string{"require", "process", "console", "setTimeout", "setInterval", "Buffer"}
 	for _, name := range forbidden {
-		got, err := e.Eval(context.Background(), "typeof "+name, nil)
+		got, err := e.Eval(context.Background(), "return typeof "+name, nil)
 		if err != nil {
 			t.Fatalf("typeof %s: %v", name, err)
 		}
@@ -520,33 +571,33 @@ func TestEval_GlobalHardeningBlocksBroadSideEffects(t *testing.T) {
 
 	cases := []struct {
 		name string
-		expr string
+		src  string
 	}{
 		{
 			name: "global object extension",
-			expr: "globalThis.shared = 1",
+			src:  "globalThis.shared = 1",
 		},
 		{
 			name: "global constructor reassignment",
-			expr: "Object = 123",
+			src:  "Object = 123",
 		},
 		{
 			name: "object prototype extension",
-			expr: "Object.prototype.shared = 1",
+			src:  "Object.prototype.shared = 1",
 		},
 		{
 			name: "array prototype mutation",
-			expr: "Array.prototype.push = function() { return 0 }",
+			src:  "Array.prototype.push = function() { return 0 }",
 		},
 		{
 			name: "function prototype mutation",
-			expr: "Function.prototype.call = function() { return 0 }",
+			src:  "Function.prototype.call = function() { return 0 }",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := e.Eval(context.Background(), tc.expr, nil)
+			_, err := e.Eval(context.Background(), tc.src, nil)
 			if err == nil {
 				t.Fatal("Eval: expected hardening error, got nil")
 			}
@@ -561,7 +612,7 @@ func TestEval_GlobalHardeningPreservesBuiltins(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	got, err := e.Eval(context.Background(), "[1, 2, 3].map(n => n + 1).join(',')", nil)
+	got, err := e.Eval(context.Background(), "return [1, 2, 3].map(n => n + 1).join(',')", nil)
 	if err != nil {
 		t.Fatalf("Eval: unexpected error: %v", err)
 	}
@@ -569,7 +620,7 @@ func TestEval_GlobalHardeningPreservesBuiltins(t *testing.T) {
 		t.Fatalf("Eval: got %#v; want %#v", got, "2,3,4")
 	}
 
-	got, err = e.Eval(context.Background(), "Object.keys({a: 1, b: 2}).join(',')", nil)
+	got, err = e.Eval(context.Background(), "return Object.keys({a: 1, b: 2}).join(',')", nil)
 	if err != nil {
 		t.Fatalf("Eval: unexpected error: %v", err)
 	}
@@ -582,7 +633,7 @@ func TestEval_MapBindingRejectsInvalidTopLevelKeys(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, err := e.Eval(context.Background(), "`hi`", map[string]any{
+	_, err := e.Eval(context.Background(), "return `hi`", map[string]any{
 		"default":   "value",
 		"full-name": "Alice",
 	})
@@ -606,12 +657,12 @@ func TestEval_NoGlobalLeakFromScript(t *testing.T) {
 
 	// "use strict" + function scope prevent top-level `var` and bare
 	// assignment from creating globals.
-	_, err := e.Eval(context.Background(), "(function(){ var leaked = 1; return leaked; })()", nil)
+	_, err := e.Eval(context.Background(), "var leaked = 1; return leaked", nil)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 
-	got, err := e.Eval(context.Background(), "typeof leaked", nil)
+	got, err := e.Eval(context.Background(), "return typeof leaked", nil)
 	if err != nil {
 		t.Fatalf("typeof leaked: %v", err)
 	}
@@ -624,7 +675,7 @@ func TestFunctionContext_MapBindingContract(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionContext("typeof site", map[string]any{"user": nil})
+	fn, err := e.FunctionContext("return typeof site", map[string]any{"user": nil})
 	if err != nil {
 		t.Fatalf("FunctionContext: unexpected error: %v", err)
 	}
@@ -648,7 +699,7 @@ func TestFunctionContext_MapBindingContract(t *testing.T) {
 		t.Fatalf("FunctionContext: got %q; want map validation error", err)
 	}
 
-	fn, err = e.FunctionContext("user.name", map[string]any{"user": nil, "site": nil})
+	fn, err = e.FunctionContext("return user.name", map[string]any{"user": nil, "site": nil})
 	if err != nil {
 		t.Fatalf("FunctionContext: unexpected error: %v", err)
 	}
@@ -666,7 +717,7 @@ func TestFunctionContext_InputBindingContract(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionContext("typeof name", "")
+	fn, err := e.FunctionContext("return typeof name", "")
 	if err != nil {
 		t.Fatalf("FunctionContext: unexpected error: %v", err)
 	}
@@ -679,7 +730,7 @@ func TestFunctionContext_InputBindingContract(t *testing.T) {
 		t.Fatalf("FunctionContext: got %#v; want %#v", got, "undefined")
 	}
 
-	fn, err = e.FunctionContext("input + 1", 0)
+	fn, err = e.FunctionContext("return input + 1", 0)
 	if err != nil {
 		t.Fatalf("FunctionContext: unexpected error: %v", err)
 	}
@@ -701,11 +752,29 @@ func TestFunctionContext_InputBindingContract(t *testing.T) {
 	}
 }
 
+func TestFunction_NoReturnExportsNil(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	fn, err := e.Function("const value = input", nil)
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+
+	got, err := fn("hello")
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("Function: got %#v; want nil", got)
+	}
+}
+
 func TestFunctionContext_RespectsCancellation(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionContext("(()=>{while(true){}})()", nil)
+	fn, err := e.FunctionContext("while (true) {}", nil)
 	if err != nil {
 		t.Fatalf("FunctionContext: unexpected error: %v", err)
 	}
@@ -735,7 +804,7 @@ func TestFunctionTimeout_HonorsTimeout(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionTimeout("(()=>{while(true){}})()", nil, 25*time.Millisecond)
+	fn, err := e.FunctionTimeout("while (true) {}", nil, 25*time.Millisecond)
 	if err != nil {
 		t.Fatalf("FunctionTimeout: unexpected error: %v", err)
 	}
@@ -759,7 +828,7 @@ func TestFunction_UsesDefaultTimeout(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.Function("(()=>{while(true){}})()", nil)
+	fn, err := e.Function("while (true) {}", nil)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
 	}
@@ -786,8 +855,8 @@ func TestFunction_DefaultEngineDelegatesAndReusesSingleton(t *testing.T) {
 	engine := shared()
 	before := engine.cacheLen()
 
-	expr := fmt.Sprintf("`%s ${name}`", t.Name())
-	fn, err := Function(expr, map[string]any{"name": nil})
+	src := fmt.Sprintf("return `%s ${name}`", t.Name())
+	fn, err := Function(src, map[string]any{"name": nil})
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
 	}
@@ -813,8 +882,8 @@ func TestFunctionContextAndFunctionTimeout_DefaultEngineDelegates(t *testing.T) 
 	engine := shared()
 	before := engine.cacheLen()
 
-	exprContext := fmt.Sprintf("`%s ${name}`", t.Name())
-	fnContext, err := FunctionContext(exprContext, map[string]any{"name": nil})
+	srcContext := fmt.Sprintf("return `%s ${name}`", t.Name())
+	fnContext, err := FunctionContext(srcContext, map[string]any{"name": nil})
 	if err != nil {
 		t.Fatalf("FunctionContext: unexpected error: %v", err)
 	}
@@ -827,8 +896,8 @@ func TestFunctionContextAndFunctionTimeout_DefaultEngineDelegates(t *testing.T) 
 		t.Fatalf("FunctionContext: got %#v; want %#v", got, t.Name()+" Alice")
 	}
 
-	exprTimeout := fmt.Sprintf("`%s ${input}`", t.Name())
-	fnTimeout, err := FunctionTimeout(exprTimeout, "", 100*time.Millisecond)
+	srcTimeout := fmt.Sprintf("return `%s ${input}`", t.Name())
+	fnTimeout, err := FunctionTimeout(srcTimeout, "", 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("FunctionTimeout: unexpected error: %v", err)
 	}
@@ -854,7 +923,7 @@ func TestFunction_SharesCacheWithEval(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	src := fmt.Sprintf("`%s ${user.name}`", t.Name())
+	src := fmt.Sprintf("return `%s ${user.name}`", t.Name())
 	before := e.cacheLen()
 
 	fn, err := e.FunctionContext(src, map[string]any{"user": nil})

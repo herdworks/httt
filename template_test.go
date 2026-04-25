@@ -330,7 +330,7 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 		t.Fatalf("error parsing layout html: %v", err)
 	}
 
-	upper, err := scripting.Function(`input.toUpperCase()`, "")
+	upper, err := scripting.Function(`return input.toUpperCase()`, nil)
 	if err != nil {
 		t.Fatalf("error compiling scripting function: %v", err)
 	}
