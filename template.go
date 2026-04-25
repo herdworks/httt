@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/andybalholm/cascadia"
-	htformat "github.com/herdworks/hypertemplates-go/format"
+	htvalue "github.com/herdworks/hypertemplates-go/value"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -28,6 +28,7 @@ type Template struct {
 	StrictMode     bool // enforce HTML5 custom attribute syntax (data-ht-*)
 	TidyMode       bool
 	MarkdownConfig *HyperMarkConfig
+	Plugins        htvalue.Plugins
 
 	// Internal state
 	BlockMode bool
@@ -71,8 +72,8 @@ func (template *Template) Process(data *TemplateData, userData *TemplateData) (h
 			return nil, err
 		}
 	}
-	for _, element := range template.HyperFormatElements() {
-		if err = template.RenderVariables(element, data); err != nil {
+	for _, element := range template.HyperValueElements() {
+		if err = template.RenderValues(element, data); err != nil {
 			return nil, err
 		}
 	}
@@ -209,7 +210,13 @@ func (template *Template) RenderTemplate(element *html.Node, data *TemplateData,
 		}
 		nestedData.SetKeyValue("ht.index", index) // set template meta
 		nestedData.SetKeyValue("ht.count", count) // set template meta
-		nestedTemplate := Template{Layout: layoutTemplate, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig}
+		nestedTemplate := Template{
+			Layout:         layoutTemplate,
+			Theme:          template.Theme,
+			TidyMode:       template.TidyMode,
+			MarkdownConfig: template.MarkdownConfig,
+			Plugins:        template.Plugins,
+		}
 
 		// RECURSION — forward userData unchanged
 		if _, err = nestedTemplate.Process(nestedData, userData); err != nil {
@@ -314,16 +321,16 @@ func (template *Template) ResolveBasedAttributes(element *html.Node, attribute s
 	return nil
 }
 
-func containsSyntaxMarker(source string, syntax htformat.Syntax) bool {
+func containsSyntaxMarker(source string, syntax htvalue.Syntax) bool {
 	switch syntax {
-	case htformat.SyntaxCSS:
-		return strings.Contains(source, "--ht-fmt(")
+	case htvalue.SyntaxCSS:
+		return strings.Contains(source, "--ht-value(")
 	default:
 		return strings.Contains(source, "${")
 	}
 }
 
-func (template *Template) RenderVariables(element *html.Node, data *TemplateData) (err error) {
+func (template *Template) RenderValues(element *html.Node, data *TemplateData) (err error) {
 	if element == nil {
 		return nil
 	}
@@ -331,25 +338,27 @@ func (template *Template) RenderVariables(element *html.Node, data *TemplateData
 		return nil
 	}
 
+	funcs := template.Plugins.FuncMap()
+
 	for index, attribute := range element.Attr {
-		if slices.Contains(HyperFormatAttributeStrings, attribute.Key) {
+		if slices.Contains(HyperValueAttributeStrings, attribute.Key) {
 			continue
 		}
-		syntax := htformat.SyntaxDefault
+		syntax := htvalue.SyntaxDefault
 		if attribute.Key == "style" {
-			syntax = htformat.SyntaxCSS
+			syntax = htvalue.SyntaxCSS
 		}
 		if !containsSyntaxMarker(attribute.Val, syntax) {
 			continue
 		}
-		if element.Attr[index].Val, err = htformat.Render(attribute.Val, data, syntax); err != nil {
+		if element.Attr[index].Val, err = htvalue.Render(attribute.Val, data, syntax, funcs); err != nil {
 			return err
 		}
 	}
 
-	childSyntax := htformat.SyntaxDefault
+	childSyntax := htvalue.SyntaxDefault
 	if element.Data == "style" {
-		childSyntax = htformat.SyntaxCSS
+		childSyntax = htvalue.SyntaxCSS
 	}
 
 	for child := element.FirstChild; child != nil; child = child.NextSibling {
@@ -359,13 +368,13 @@ func (template *Template) RenderVariables(element *html.Node, data *TemplateData
 		if !containsSyntaxMarker(child.Data, childSyntax) {
 			continue
 		}
-		if child.Data, err = htformat.Render(child.Data, data, childSyntax); err != nil {
+		if child.Data, err = htvalue.Render(child.Data, data, childSyntax, funcs); err != nil {
 			return err
 		}
 	}
 
 	if template.TidyMode {
-		removeAttributes(element, HyperFormatAttributeStrings...)
+		removeAttributes(element, HyperValueAttributeStrings...)
 	}
 
 	return nil
@@ -467,7 +476,14 @@ func (template *Template) RenderBlock(element *html.Node, userData *TemplateData
 		// block templates can insert wrapped content into block layouts.
 		fragmentData.SetKeyValue("block.content", string(template.HTML(fragmentNodes...)))
 	}
-	shortcode := Template{Layout: fragment, Theme: template.Theme, TidyMode: template.TidyMode, MarkdownConfig: template.MarkdownConfig, BlockMode: true}
+	shortcode := Template{
+		Layout:         fragment,
+		Theme:          template.Theme,
+		TidyMode:       template.TidyMode,
+		MarkdownConfig: template.MarkdownConfig,
+		Plugins:        template.Plugins,
+		BlockMode:      true,
+	}
 	shortcode.Process(&fragmentData, userData) // RECURSION!
 	element.Parent.InsertBefore(shortcode.Layout, element)
 	if template.TidyMode {
@@ -585,6 +601,7 @@ func (template *Template) HyperNotElements() []*html.Node {
 	return QueryRoot(template.Layout, selectors...)
 }
 
+var HyperForAttributeStrings = []string{"data-ht-for", "ht-for"} // NEW!
 var HyperTemplateAttributeStrings = []string{"data-ht-template", "ht-template"}
 var HyperTemplateOffsetAttributeStrings = []string{"data-ht-offset", "ht-offset"}
 var HyperTemplateLimitAttributeStrings = []string{"data-ht-limit", "ht-limit"}
@@ -596,6 +613,15 @@ func (template *Template) HyperTemplateElements() []*html.Node {
 	}
 	selectors[0] += ":not([ht-template] [data-ht-template])"
 	selectors = append(selectors, "[ht-template]:not([ht-template] [ht-template]):not([data-ht-template] [ht-template])")
+	return QueryRoot(template.Layout, selectors...)
+}
+func (template *Template) HyperLoopElements() []*html.Node {
+	selectors := []string{"[data-ht-for]:not([data-ht-for] [data-ht-for])"}
+	if template.StrictMode {
+		return QueryRoot(template.Layout, selectors...)
+	}
+	selectors[0] += ":not([ht-for] [data-ht-for])"
+	selectors = append(selectors, "[ht-for]:not([ht-for] [ht-for]):not([data-ht-for] [ht-template])")
 	return QueryRoot(template.Layout, selectors...)
 }
 
@@ -615,17 +641,17 @@ func (template *Template) HyperAttrsElements() []*html.Node {
 	return QueryRoot(template.Layout, selectors...)
 }
 
-var HyperFormatAttributeStrings = []string{"data-hyper-template", "hyper-template", "data-ht-fmt", "ht-fmt"}
+var HyperValueAttributeStrings = []string{"data-hyper-template", "hyper-template", "data-ht-apply", "ht-apply"}
 
-func (template *Template) HyperFormatElements() []*html.Node {
-	selectors := []string{"[data-ht-fmt]:not([data-ht-template] [data-ht-fmt], [data-ht-template][data-ht-fmt])"}
+func (template *Template) HyperValueElements() []*html.Node {
+	selectors := []string{"[data-ht-apply]:not([data-ht-template] [data-ht-apply], [data-ht-template][data-ht-apply])"}
 	selectors = append(selectors, "[data-hyper-template]:not([data-ht-template] [data-hyper-template], [data-ht-template][data-hyper-template])")
 	if template.StrictMode {
 		return QueryRoot(template.Layout, selectors...)
 	}
-	selectors[0] += ":not([ht-template] [data-ht-fmt], [ht-template][data-ht-fmt])"
+	selectors[0] += ":not([ht-template] [data-ht-apply], [ht-template][data-ht-apply])"
 	selectors[1] += ":not([ht-template] [data-hyper-template], [ht-template][data-hyper-template])"
-	selectors = append(selectors, "[ht-fmt]:not([ht-template] [ht-fmt], [ht-template][ht-fmt]):not([data-ht-template] [ht-fmt], [data-ht-template][ht-fmt])")
+	selectors = append(selectors, "[ht-apply]:not([ht-template] [ht-apply], [ht-template][ht-apply]):not([data-ht-template] [ht-apply], [data-ht-template][ht-apply])")
 	selectors = append(selectors, "[hyper-template]:not([ht-template] [hyper-template], [ht-template][hyper-template]):not([data-ht-template] [hyper-template], [data-ht-template][hyper-template])")
 	return QueryRoot(template.Layout, selectors...)
 }

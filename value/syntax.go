@@ -1,4 +1,4 @@
-package format
+package value
 
 import (
 	"errors"
@@ -16,29 +16,29 @@ const (
 	// SyntaxDefault recognizes ${ ... } actions.
 	SyntaxDefault Syntax = iota
 
-	// SyntaxCSS recognizes --ht-fmt("...") and --ht-fmt('...') calls.
+	// SyntaxCSS recognizes --ht-value("...") and --ht-value('...') calls.
 	// The quoted argument is the action body and follows the same grammar
 	// as a default-syntax action (bare keypaths, comma-separated fallbacks,
 	// pipelines to reserved or user functions).
 	SyntaxCSS
 )
 
-// errInvalidHTFmtCall indicates a --ht-fmt(...) call is malformed.
-var errInvalidHTFmtCall = errors.New("invalid --ht-fmt call")
+// errInvalidHTValueCall indicates a --ht-value(...) call is malformed.
+var errInvalidHTValueCall = errors.New("invalid --ht-value call")
 
-const htFmtPrefix = "--ht-fmt("
+const htValuePrefix = "--ht-value("
 
-// rewriteCSS replaces --ht-fmt("<body>") and --ht-fmt('<body>') calls with
+// rewriteCSS replaces --ht-value("<body>") and --ht-value('<body>') calls with
 // ${ <body> } actions. An optional second argument provides a fallback value
 // used when the template body evaluates to nil or an empty string; when
 // present, the emission becomes ${ <body> | default "<fallback>" }.
-// Text outside of --ht-fmt(...) calls passes through unchanged.
+// Text outside of --ht-value(...) calls passes through unchanged.
 func rewriteCSS(source string) (string, error) {
 	var builder strings.Builder
 	cursor := 0
 
 	for cursor < len(source) {
-		offset := strings.Index(source[cursor:], htFmtPrefix)
+		offset := strings.Index(source[cursor:], htValuePrefix)
 		if offset < 0 {
 			builder.WriteString(source[cursor:])
 			break
@@ -47,7 +47,7 @@ func rewriteCSS(source string) (string, error) {
 		start := cursor + offset
 
 		if !atWordBoundary(source, start) {
-			end := start + len(htFmtPrefix)
+			end := start + len(htValuePrefix)
 			builder.WriteString(source[cursor:end])
 			cursor = end
 			continue
@@ -55,7 +55,7 @@ func rewriteCSS(source string) (string, error) {
 
 		builder.WriteString(source[cursor:start])
 
-		body, fallback, hasFallback, end, err := readHTFmtCall(source, start)
+		body, fallback, hasFallback, end, err := readHTValueCall(source, start)
 		if err != nil {
 			return "", err
 		}
@@ -76,8 +76,8 @@ func rewriteCSS(source string) (string, error) {
 
 // atWordBoundary reports whether the rune preceding start is a non-identifier
 // rune (or start is at position 0). Identifier runes are letters, digits,
-// underscore, and hyphen (the latter so that "---ht-fmt(" does not match
-// the embedded "--ht-fmt(").
+// underscore, and hyphen (the latter so that "---ht-value(" does not match
+// the embedded "--ht-value(").
 func atWordBoundary(source string, start int) bool {
 	if start == 0 {
 		return true
@@ -89,37 +89,37 @@ func atWordBoundary(source string, start int) bool {
 	return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-')
 }
 
-// readHTFmtCall parses a --ht-fmt(...) call starting at start, which
-// points at the first '-' of "--ht-fmt(". It returns the decoded body, the
+// readHTValueCall parses a --ht-value(...) call starting at start, which
+// points at the first '-' of "--ht-value(". It returns the decoded body, the
 // decoded fallback (empty if absent), whether a fallback was present, the byte
 // index just past the closing ')', and an error.
-func readHTFmtCall(source string, start int) (string, string, bool, int, error) {
-	cursor := start + len(htFmtPrefix)
+func readHTValueCall(source string, start int) (string, string, bool, int, error) {
+	cursor := start + len(htValuePrefix)
 	cursor = skipCSSWhitespace(source, cursor)
 
 	if cursor >= len(source) {
-		return "", "", false, 0, htFmtError(source, start, "expected quoted argument, found end of input")
+		return "", "", false, 0, htValueError(source, start, "expected quoted argument, found end of input")
 	}
 
 	quote := source[cursor]
 	if quote != '"' && quote != '\'' {
-		return "", "", false, 0, htFmtError(source, start, fmt.Sprintf("expected quoted argument, found %q", string(source[cursor])))
+		return "", "", false, 0, htValueError(source, start, fmt.Sprintf("expected quoted argument, found %q", string(source[cursor])))
 	}
 
 	body, closeQuote, err := readQuotedBody(source, cursor, quote)
 	if err != nil {
-		return "", "", false, 0, htFmtError(source, start, err.Error())
+		return "", "", false, 0, htValueError(source, start, err.Error())
 	}
 
 	if strings.TrimSpace(body) == "" {
-		return "", "", false, 0, htFmtError(source, start, "empty template argument")
+		return "", "", false, 0, htValueError(source, start, "empty template argument")
 	}
 
 	cursor = closeQuote + 1
 	cursor = skipCSSWhitespace(source, cursor)
 
 	if cursor >= len(source) {
-		return "", "", false, 0, htFmtError(source, start, "missing closing )")
+		return "", "", false, 0, htValueError(source, start, "missing closing )")
 	}
 
 	switch source[cursor] {
@@ -128,18 +128,18 @@ func readHTFmtCall(source string, start int) (string, string, bool, int, error) 
 	case ',':
 		cursor += 1
 	default:
-		return "", "", false, 0, htFmtError(source, start, fmt.Sprintf("expected , or ), found %q", string(source[cursor])))
+		return "", "", false, 0, htValueError(source, start, fmt.Sprintf("expected , or ), found %q", string(source[cursor])))
 	}
 
 	fallback, end, err := readFallback(source, cursor)
 	if err != nil {
-		return "", "", false, 0, htFmtError(source, start, err.Error())
+		return "", "", false, 0, htValueError(source, start, err.Error())
 	}
 
 	return body, fallback, true, end, nil
 }
 
-// readFallback reads the second argument of a --ht-fmt(...) call starting
+// readFallback reads the second argument of a --ht-value(...) call starting
 // just after the comma. A quoted argument is decoded the same way as the first
 // argument. An unquoted argument is read verbatim up to the balancing ')',
 // respecting nested parens and quoted strings. Returns the fallback text, the
@@ -247,10 +247,10 @@ func readQuotedBody(source string, openQuote int, quote byte) (string, int, erro
 	return "", 0, errors.New("unterminated string")
 }
 
-func htFmtError(source string, start int, detail string) error {
+func htValueError(source string, start int, detail string) error {
 	excerpt := source[start:]
 	if len(excerpt) > 40 {
 		excerpt = excerpt[:40] + "..."
 	}
-	return fmt.Errorf("%w: %w: %s: %q", errInvalidTemplate, errInvalidHTFmtCall, detail, excerpt)
+	return fmt.Errorf("%w: %w: %s: %q", errInvalidValue, errInvalidHTValueCall, detail, excerpt)
 }

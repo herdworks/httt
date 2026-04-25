@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## v0.21.0 (2026-04-23)
 
-Added a new `ht-fmt` templating directive and all-new variable subtitution system with `${ ... }` style template variables.
+Added a new `ht-apply` templating directive and all-new variable subtitution system with `${ ... }` style template variables.
 
 _NOTE: variable substitution was designed to look and function similar to variable substitution in [Javascript template literals], but the HyperTemplates implementation is **not** based on Javascript._
 
@@ -14,31 +14,31 @@ _NOTE: variable substitution was designed to look and function similar to variab
   Template variables can be used in element attributes, _and_ text nodes. 
 
   ```html
-  <title ht-fmt>${site.title} | ${page.title}</title>
-  <meta name='description' content='${page.description}' ht-fmt>
+  <title ht-apply>${site.title} | ${page.title}</title>
+  <meta name='description' content='${page.description}' ht-apply>
   ```
 
-* Added new `ht-fmt` template directive that enables variable substitution on template element attributes and text nodes.
+* Added new `ht-apply` template directive that enables variable substitution on template element attributes and text nodes.
 
   _NOTE: text node variable substitution is scoped to **direct descendents** of a template element. 
   In the following example, the `${page.greeting.planet}` variable will be replaced, but the `${page.greeting.galaxy}` variable will not. The former is a a direct descendent text node of the parent `<a>` element, but the latter is a direct descendant text node of the nested `<span>` element (a grandchild of the parent `<a>` element)._
 
   ```html
-  <a href='${page.path}' ht-fmt>
+  <a href='${page.path}' ht-apply>
     Hello, ${page.greeting.planet} world! Welcome to the <span>${page.greeting.galaxy}</span> galaxy.
   </a>
   ```
 
-* Added a CSS template variable declaration, with `--ht-fmt( ... )` delimiter. 
+* Added a CSS template variable declaration, with `--ht-value( ... )` delimiter. 
   
   > NOTE: variable subtitution in `<style>` elements and `style=''` attributes must use the CSS syntax. 
   > 
   > Example:
   > 
   > ```html
-  > <style ht-fmt>
+  > <style ht-apply>
   >     :root article {
-  >         color: --ht-fmt("page.colors.text, page.colors.body", rgba(0,0,0,0.5));
+  >         color: --ht-value("page.colors.text, page.colors.body", rgba(0,0,0,0.5));
   >     }
   > </style>
   > ```
@@ -57,7 +57,7 @@ _NOTE: variable substitution was designed to look and function similar to variab
   > **Example**
   >
   > ```html
-  > <meta name='description' content='${page.description | default "Lorem ipsum, placeholder page description."}' ht-fmt>
+  > <meta name='description' content='${page.description | default "Lorem ipsum, placeholder page description."}' ht-apply>
   > ```
 
 
@@ -69,15 +69,15 @@ _NOTE: variable substitution was designed to look and function similar to variab
 
 Added support for template data array accessors (e.g. `page.attachments.1.href`). 
 Added user-generated template data in `ht-block` elements, so `ht-block` elements can access `page.*` template data properties. 
-Added the `format` package and `ht-format` rendering support for `${ ... }` text templates backed by `TemplateData.Get()`. 
+Added the `value` package and template value rendering support for `${ ... }` template values backed by `TemplateData.Get()`.
 Improved HyperMark support for detecting inline vs block-level `ht-block` elements and `<!-- more -->` comment detection. 
 
 * Added support for 1-indexed array accessors to `TemplateData.Get()` (e.g. `foo.bar.1.example`).
 * Added support for passing a discrete `userData *TemplateData` parameter to `Template.Process()`;
   callers can now seed user-generated template data in `ht-block` elements.
   _NOTE: this is a breaking API change for direct callers of `Template.Process()`._
-* Added the `format` package for `${ ... }` text templates with default `httd` lookups and unsupported-action validation.
-* Added `ht-format` rendering for formatting element text content with the new `format` package.
+* Added the `value` package for `${ ... }` template values with default `httd` lookups and unsupported-action validation.
+* Added template value rendering for element text content with the new `value` package.
 * Added `hypermark.HTBlockHTMLParserExtension()` goldmark extension to promote `ht-block` elements to CommonMark type-6 HTML blocks;
   this prevents `ht-block` elements from being wrapped in `<p>` tags when they appear on their own line.
   _NOTE: Supports multi-line opening tags (the `ht-block` attribute can appear on any continuation line of the opening tag). Quoted attribute values are respected, so `ht-block` appearing as a substring inside a value does not trigger promotion. Inline usage of the same tags within prose is unaffected and remains in the surrounding paragraph._

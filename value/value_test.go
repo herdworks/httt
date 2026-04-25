@@ -1,4 +1,4 @@
-package format
+package value
 
 import (
 	"strings"
@@ -236,6 +236,36 @@ func TestRender_DefaultWinsOnMissPreventsRestore(t *testing.T) {
 	}
 	if rendered != "Untitled" {
 		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Untitled", rendered)
+	}
+}
+
+func TestRender_UserFunctionPipeline(t *testing.T) {
+	data := testGetter{
+		"page": map[string]any{
+			"title": "Hello, HyperTemplates",
+		},
+	}
+	funcs := FuncMap{
+		"upper": strings.ToUpper,
+	}
+
+	rendered, err := Render(`${ page.title | upper }`, data, SyntaxDefault, funcs)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	if rendered != "HELLO, HYPERTEMPLATES" {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "HELLO, HYPERTEMPLATES", rendered)
+	}
+}
+
+func TestValidate_UserFunctionPipeline(t *testing.T) {
+	funcs := FuncMap{
+		"upper": strings.ToUpper,
+	}
+
+	if err := validateWithFuncs(`${ page.title | upper }`, SyntaxDefault, funcs); err != nil {
+		t.Fatalf("validateWithFuncs() error = %v", err)
 	}
 }
 

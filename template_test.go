@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/herdworks/hypertemplates-go/scripting"
+	htvalue "github.com/herdworks/hypertemplates-go/value"
 	"golang.org/x/net/html"
 )
 
@@ -237,11 +239,11 @@ func TestRenderBlockPageFallback(t *testing.T) {
 	}
 }
 
-func TestRenderVariables(t *testing.T) {
+func TestRenderValues(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<section ht-fmt data-href="${ page.href }">
+				<section ht-apply data-href="${ page.href }">
 					Hello ${ page.title }
 					<span>${ page.slug }</span>
 				</section>
@@ -309,19 +311,61 @@ func TestRenderVariables(t *testing.T) {
 		t.Fatalf("expected nested span text to remain unrendered, got %q", text)
 	}
 
-	if bytes.Contains(htmlBytes, []byte("ht-fmt")) {
-		t.Fatalf("expected ht-fmt attribute to be removed in tidy mode; got:\n%s", htmlBytes)
+	if bytes.Contains(htmlBytes, []byte("ht-apply")) {
+		t.Fatalf("expected ht-apply attribute to be removed in tidy mode; got:\n%s", htmlBytes)
 	}
 }
 
-func TestRenderVariablesNested(t *testing.T) {
+func TestRenderValuesJavascriptPlugin(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<section ht-fmt class="${ page.class }">
+				<section ht-apply>
+					${ page.title | upper }
+				</section>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	upper, err := scripting.Function(`input.toUpperCase()`, "")
+	if err != nil {
+		t.Fatalf("error compiling scripting function: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"title": "Hello, HyperTemplates",
+		},
+	}
+	template := &Template{
+		Layout:   layout,
+		TidyMode: true,
+		Plugins: htvalue.Plugins{
+			"upper": upper,
+		},
+	}
+
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("HELLO, HYPERTEMPLATES")) {
+		t.Fatalf("expected JavaScript plugin output; got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderValuesNested(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<section ht-apply class="${ page.class }">
 					Hello ${ page.title }
 					<div>
-						<span ht-fmt data-slug="${ page.slug }">${ page.title }</span>
+						<span ht-apply data-slug="${ page.slug }">${ page.title }</span>
 					</div>
 				</section>
 			</body>
@@ -356,7 +400,7 @@ func TestRenderVariablesNested(t *testing.T) {
 
 	section := Query(renderedLayout, "section.hero")
 	if section == nil {
-		t.Fatalf("expected outer ht-fmt element to render attributes; got:\n%s", htmlBytes)
+		t.Fatalf("expected outer ht-apply element to render attributes; got:\n%s", htmlBytes)
 	}
 
 	var directText string
@@ -377,7 +421,7 @@ func TestRenderVariablesNested(t *testing.T) {
 
 	span := Query(renderedLayout, "section.hero div span")
 	if span == nil {
-		t.Fatalf("expected nested ht-fmt element to render on its own pass; got:\n%s", htmlBytes)
+		t.Fatalf("expected nested ht-apply element to render on its own pass; got:\n%s", htmlBytes)
 	}
 
 	if slug := getAttributeString(span, "data-slug"); slug != "hello-hypertemplates" {
@@ -388,17 +432,17 @@ func TestRenderVariablesNested(t *testing.T) {
 		t.Fatalf("expected nested span text %q, got %q", "Hello, HyperTemplates", text)
 	}
 
-	if bytes.Contains(htmlBytes, []byte("ht-fmt")) {
-		t.Fatalf("expected nested ht-fmt attributes to be removed; got:\n%s", htmlBytes)
+	if bytes.Contains(htmlBytes, []byte("ht-apply")) {
+		t.Fatalf("expected nested ht-apply attributes to be removed; got:\n%s", htmlBytes)
 	}
 }
 
-func TestRenderVariablesStyleElement(t *testing.T) {
+func TestRenderValuesStyleElement(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<head>
-				<style ht-fmt>
-					.hero { color: --ht-fmt("theme.color"); background: --ht-fmt('theme.bg'); }
+				<style ht-apply>
+					.hero { color: --ht-value("theme.color"); background: --ht-value('theme.bg'); }
 				</style>
 			</head>
 			<body></body>
@@ -426,22 +470,22 @@ func TestRenderVariablesStyleElement(t *testing.T) {
 	}
 
 	if !bytes.Contains(htmlBytes, []byte("color: red")) {
-		t.Fatalf("expected <style> --ht-fmt(\"theme.color\") to render as red; got:\n%s", htmlBytes)
+		t.Fatalf("expected <style> --ht-value(\"theme.color\") to render as red; got:\n%s", htmlBytes)
 	}
 	if !bytes.Contains(htmlBytes, []byte("background: black")) {
-		t.Fatalf("expected <style> --ht-fmt('theme.bg') to render as black; got:\n%s", htmlBytes)
+		t.Fatalf("expected <style> --ht-value('theme.bg') to render as black; got:\n%s", htmlBytes)
 	}
-	if bytes.Contains(htmlBytes, []byte("--ht-fmt(")) {
-		t.Fatalf("expected --ht-fmt(...) calls to be fully substituted; got:\n%s", htmlBytes)
+	if bytes.Contains(htmlBytes, []byte("--ht-value(")) {
+		t.Fatalf("expected --ht-value(...) calls to be fully substituted; got:\n%s", htmlBytes)
 	}
 }
 
-func TestRenderVariablesStyleElementFallback(t *testing.T) {
+func TestRenderValuesStyleElementFallback(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<head>
-				<style ht-fmt>
-					.hero { color: --ht-fmt("theme.color", red); padding: --ht-fmt("theme.pad", 10px); }
+				<style ht-apply>
+					.hero { color: --ht-value("theme.color", red); padding: --ht-value("theme.pad", 10px); }
 				</style>
 			</head>
 			<body></body>
@@ -471,11 +515,11 @@ func TestRenderVariablesStyleElementFallback(t *testing.T) {
 	}
 }
 
-func TestRenderVariablesStyleAttribute(t *testing.T) {
+func TestRenderValuesStyleAttribute(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<div ht-fmt style='color: --ht-fmt("theme.color");'></div>
+				<div ht-apply style='color: --ht-value("theme.color");'></div>
 			</body>
 		</html>
 	`))
