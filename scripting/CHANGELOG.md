@@ -12,6 +12,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 * Added concurrency-safe caching, cancellation, and timeout behavior for expression evaluation.
 * Added README documentation with installation instructions and usage examples.
 * Added compiled-function APIs on `Engine` and package-level `Function`, `FunctionContext`, and `FunctionTimeout` helpers backed by a lazy default engine.
+* Added `PluginName` for parsing leading `ht:plugin` JavaScript metadata comments.
 
 ### Changed
 

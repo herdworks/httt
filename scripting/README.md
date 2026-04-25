@@ -99,6 +99,109 @@ func main() {
 }
 ```
 
+## Compile JavaScript Files
+
+`Function` accepts one JavaScript expression.
+To compile one reusable Go callable per JavaScript file, read each file and pass its contents to `scripting.Function` independently.
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/herdworks/hypertemplates-go/scripting"
+	htvalue "github.com/herdworks/hypertemplates-go/value"
+)
+
+func pluginsFromFiles(paths []string) (plugins htvalue.Plugins, err error) {
+	plugins = make(htvalue.Plugins, len(paths))
+
+	for _, path := range paths {
+		var name, source string
+		var ok bool
+		var fn func(any) (any, error)
+		if src, err := os.ReadFile(path); err == nil {
+			source = string(src)
+		} else {
+			return nil, fmt.Errorf("read script %q: %w", path, err)
+		}
+
+		if name, ok, err = scripting.PluginName(source); err != nil {
+			return nil, fmt.Errorf("parse plugin name %q: %w", path, err)
+		} else if !ok {
+			basename := filepath.Base(path)
+			name = strings.TrimSuffix(basename, filepath.Ext(basename))
+		}
+		if name == "httd" || name == "default" {
+			return nil, fmt.Errorf("reserved plugin name %q from %q", name, path)
+		}
+		if _, exists := plugins[name]; exists {
+			return nil, fmt.Errorf("duplicate plugin name %q from %q", name, path)
+		}
+		if fn, err = scripting.Function(source, nil); err != nil {
+			return nil, fmt.Errorf("compile script %q: %w", path, err)
+		}
+		plugins[name] = fn
+	}
+
+	return plugins, nil
+}
+
+func main() {
+	plugins, err := pluginsFromFiles([]string{"scripts/upper.js", "scripts/title.js"})
+	if err != nil {
+		panic(err)
+	}
+
+	// Use plugins with Template.Plugins, or pass plugins.FuncMap() to value.Render.
+	_ = plugins
+}
+```
+
+Each leading `ht:plugin` comment becomes the value pipeline function name.
+If a file does not declare a name, the helper falls back to the filename stem.
+For example, `scripts/upper.js` registers an `upper` plugin usable as `${ page.title | upper }`.
+Because pipeline input is passed as the function argument, JavaScript file plugins usually read from `input`:
+
+```js
+// ht:plugin upper
+input.toUpperCase()
+```
+
+```go
+rendered, err := htvalue.Render(
+	`${ page.title | upper }`,
+	data,
+	htvalue.SyntaxDefault,
+	plugins.FuncMap(),
+)
+if err != nil {
+	panic(err)
+}
+```
+
+If a JavaScript file contains statements, make the file an expression by wrapping those statements in an IIFE:
+
+```js
+(() => {
+	if (input == null) {
+		return input
+	}
+
+	return String(input).toUpperCase()
+})()
+```
+
+If you need to install the plugins on a full HyperTemplates template, assign the map directly:
+
+```go
+template.Plugins = plugins
+```
+
 ## Concurrent Usage
 
 One `Engine` can be shared across goroutines.
