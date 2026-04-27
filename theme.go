@@ -32,6 +32,7 @@ type ThemeConfig struct {
 	LayoutsDirectory      string `json:"layouts_dir,omitempty" yaml:"layouts_dir,omitempty"`
 	FragmentsDirectory    string `json:"fragments_dir,omitempty" yaml:"fragments_dir,omitempty"`
 	DataDirectory         string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
+	PluginsDirectory      string `json:"plugins_dir,omitempty" yaml:"plugins_dir,omitempty"`
 	StaticDirectory       string `json:"static_dir,omitempty" yaml:"static_dir,omitempty"`
 }
 
@@ -82,6 +83,13 @@ func (theme *Theme) FragmentsDir() string {
 		theme.Config.FragmentsDirectory = "fragments"
 	}
 	return filepath.Join(theme.RootDir(), theme.Config.FragmentsDirectory)
+}
+
+func (theme *Theme) PluginsDir() string {
+	if len(theme.Config.PluginsDirectory) == 0 {
+		theme.Config.PluginsDirectory = "plugins"
+	}
+	return filepath.Join(theme.RootDir(), theme.Config.PluginsDirectory)
 }
 
 func (theme *Theme) StaticDir() string {
@@ -187,6 +195,10 @@ func (theme *Theme) LayoutHTML(layoutRef string) (*html.Node, error) {
 
 func (theme *Theme) Assets() (assets HyperFiles) {
 	return GetFiles(theme.StaticDir(), true)
+}
+
+func (theme *Theme) Plugins() (assets HyperFiles) {
+	return GetFiles(theme.PluginsDir(), true)
 }
 
 // List all theme files with their paths relative to the theme root directory.

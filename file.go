@@ -219,6 +219,12 @@ func (files HyperFiles) Sort(recursive bool) {
 	})
 }
 
+func (files HyperFiles) RelPaths() (paths []string) {
+	for _, file := range files {
+		paths = append(paths, file.URI.Path)
+	}
+	return paths
+}
 func (files HyperFiles) FileNames() (paths []string) {
 	for _, file := range files {
 		paths = append(paths, filepath.Base(file.URI.Path))
