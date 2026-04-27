@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## v0.21.1 (2026-04-27)
+
+Added `theme.plugins_dir` config and `Theme.Plugins()` helper for listing installed plugins files.
+
 ## v0.21.0 (2026-04-23)
 
 Added a new `ht-apply` templating directive and all-new variable subtitution system with `${ ... }` style template variables.
