@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/andybalholm/cascadia"
+	htplugins "github.com/herdworks/hypertemplates-go/plugins"
 	htvalue "github.com/herdworks/hypertemplates-go/value"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -28,7 +29,7 @@ type Template struct {
 	StrictMode     bool // enforce HTML5 custom attribute syntax (data-ht-*)
 	TidyMode       bool
 	MarkdownConfig *HyperMarkConfig
-	Plugins        htvalue.Plugins
+	Plugins        htplugins.Plugins
 
 	// Internal state
 	BlockMode bool
@@ -457,7 +458,7 @@ func (template *Template) RenderParams(element *html.Node, data *TemplateData) (
 
 func (template *Template) RenderBlock(element *html.Node, userData *TemplateData) (err error) {
 	var fragment *html.Node
-	var fragmentRef string = filepath.Join(template.Theme.Config.BlocksDirectory, element.Data)
+	var fragmentRef string = filepath.Join(template.Theme.BlocksDirName(), element.Data)
 	var fragmentData TemplateData
 	var fragmentNodes []*html.Node
 	if userData != nil {

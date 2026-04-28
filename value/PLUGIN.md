@@ -26,8 +26,8 @@ registered as plugins under the same plugin rules.
 
 ## Plugin Semantics
 
-Plugins are downstream transformers. A plugin accepts one or more arguments, and
-the piped value is always passed as the final argument.
+Plugins are downstream transformers. A compiled `plugins.Plugin` accepts the
+upstream pipeline value as its only argument.
 
 ```gotemplate
 ${ page.title | upper }
@@ -39,31 +39,19 @@ is equivalent to:
 upper(httd("page.title"))
 ```
 
-```gotemplate
-${ page.title | truncate 80 }
-```
-
-is equivalent to:
-
-```go
-truncate(80, httd("page.title"))
-```
-
-These examples show value flow. If any pipeline step returns `(value, error)`
+This example shows value flow. If any pipeline step returns `(value, error)`
 with a non-nil error, `text/template` aborts execution before the next step
 runs.
 
-A plugin may return either:
+A registered `plugins.Plugin` uses this Go function shape:
 
 ```go
-func(...) any
+func(any) (any, error)
 ```
 
-or:
-
-```go
-func(...) (any, error)
-```
+The `plugins` package adapts plugin functions into a `text/template.FuncMap`.
+Callers that bypass the plugin registry and pass a raw `value.FuncMap` may still
+use any function signature accepted by `text/template`.
 
 ## Values And Errors
 
@@ -86,11 +74,13 @@ errors.
 ## Reserved Names
 
 `httd` and `default` are reserved plugin names. Plugin registration should reject
-reserved-name collisions and duplicate plugin names before templates are parsed
-or executed.
+reserved-name collisions before templates are parsed or executed. When plugins
+are loaded from an ordered file list, later files with the same resolved plugin
+name replace earlier files.
 
 ## Implementation Boundary
 
-The plugin registry belongs to the `value` package. The `scripting` package
-does not need to know about plugins; it can simply produce Go functions that are
-registered as value plugins by callers.
+The plugin registry belongs to the `plugins` package. The `value` package only
+needs the `text/template` function map produced by plugins, and the `scripting`
+package only needs to produce Go functions that can be registered as plugins by
+callers.

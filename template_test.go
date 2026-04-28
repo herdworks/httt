@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	htplugins "github.com/herdworks/hypertemplates-go/plugins"
 	"github.com/herdworks/hypertemplates-go/scripting"
-	htvalue "github.com/herdworks/hypertemplates-go/value"
 	"golang.org/x/net/html"
 )
 
@@ -343,8 +343,8 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 	template := &Template{
 		Layout:   layout,
 		TidyMode: true,
-		Plugins: htvalue.Plugins{
-			"upper": upper,
+		Plugins: htplugins.Plugins{
+			"upper": {Name: "upper", Func: htplugins.Func(upper)},
 		},
 	}
 

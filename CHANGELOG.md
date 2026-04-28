@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+Added new plugins package with formalized HyperTemplates plugin spec, and redesigned HyperTemplates internals around relative paths, replacing the overly complex HyperFile struct with a collection of helper methods that require callers to provider root directories as context for relative path []string slices. 
+
+* Added `ListFiles`, `ListFilesByPattern`, `CleanRelativeFilePath`, `LocalFilePath`, `LocalFilePaths`, and `RelativeFilePath` for file discovery, validation, and root-relative path conversion.
+* Added the `plugins` package for scripting-backed plugin loading, metadata, merging, and `text/template` function-map adapters.
+* Added validation for unsafe configured theme directory paths.
+* Changed theme directory accessors to use side-effect-free `XDirName()` and `XDirPath()` getters instead of mutating config defaults while resolving paths.
+* Changed theme asset discovery to populate `Theme.Assets` with paths relative to the theme static directory.
+* Changed theme plugin discovery to compile plugins from the theme plugins directory and store them in `Theme.Plugins`.
+* Removed the `HyperFile` and `HyperFiles` API in favor of root-scoped path helpers that return sorted, slash-separated relative paths.
+
 ## v0.21.1 (2026-04-27)
 
 Added `theme.plugins_dir` config and `Theme.Plugins()` helper for listing installed plugins files.

@@ -1,6 +1,7 @@
 package value
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -39,9 +40,19 @@ func TestRewrite_DefaultHTTD(t *testing.T) {
 			want:   `${ httd "site.title, page.title" | default "Untitled" }`,
 		},
 		{
+			name:   "pipeline with single-quoted default",
+			source: `${ page.title | default 'Untitled' }`,
+			want:   `${ httd "page.title" | default "Untitled" }`,
+		},
+		{
 			name:   "reserved httd passes through",
 			source: `${ httd "page.title" }`,
 			want:   `${ httd "page.title" }`,
+		},
+		{
+			name:   "reserved httd with single-quoted strings",
+			source: `${ httd 'page.title' | default 'Untitled' }`,
+			want:   `${ httd "page.title" | default "Untitled" }`,
 		},
 		{
 			name:   "trim markers",
@@ -239,6 +250,32 @@ func TestRender_DefaultWinsOnMissPreventsRestore(t *testing.T) {
 	}
 }
 
+func TestRender_SingleQuotedDefaultWinsOnMiss(t *testing.T) {
+	data := testGetter{
+		"site": map[string]any{
+			"title": "Caleb Hailey",
+		},
+	}
+
+	rendered, err := Render(`${ site.title } | ${ page.title | default '✱' }`, data, SyntaxDefault)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if rendered != "Caleb Hailey | ✱" {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Caleb Hailey | ✱", rendered)
+	}
+}
+
+func TestRender_SingleQuotedDefaultDecodesEscapes(t *testing.T) {
+	rendered, err := Render(`${ page.title | default 'Caleb\'s site' }`, testGetter{}, SyntaxDefault)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if rendered != "Caleb's site" {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Caleb's site", rendered)
+	}
+}
+
 func TestRender_UserFunctionPipeline(t *testing.T) {
 	data := testGetter{
 		"page": map[string]any{
@@ -256,6 +293,28 @@ func TestRender_UserFunctionPipeline(t *testing.T) {
 
 	if rendered != "HELLO, HYPERTEMPLATES" {
 		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "HELLO, HYPERTEMPLATES", rendered)
+	}
+}
+
+func TestRender_UserFunctionPipelineWithSingleQuotedArgument(t *testing.T) {
+	data := testGetter{
+		"page": map[string]any{
+			"title": "Hello",
+		},
+	}
+	funcs := FuncMap{
+		"suffix": func(suffix string, value any) string {
+			return fmt.Sprint(value) + suffix
+		},
+	}
+
+	rendered, err := Render(`${ page.title | suffix '!' }`, data, SyntaxDefault, funcs)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	if rendered != "Hello!" {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Hello!", rendered)
 	}
 }
 

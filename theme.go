@@ -13,16 +13,20 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
+
+	htplugins "github.com/herdworks/hypertemplates-go/plugins"
 )
 
 type Theme struct {
-	URI          *url.URL     `json:"-" yaml:"-"`
-	Href         string       `json:"href,omitempty" yaml:"href,omitempty"`
-	Name         string       `json:"name,omitempty" yaml:"name,omitempty"`
-	Description  string       `json:"description,omitempty" yaml:"description,omitempty"`
-	Version      string       `json:"version,omitempty" yaml:"version,omitempty"`
-	Config       ThemeConfig  `json:"config,omitempty" yaml:"config,omitempty"`
-	TemplateData TemplateData `json:"data,omitempty" yaml:"data,omitempty"`
+	URI          *url.URL          `json:"-" yaml:"-"`
+	Href         string            `json:"href,omitempty" yaml:"href,omitempty"`
+	Name         string            `json:"name,omitempty" yaml:"name,omitempty"`
+	Description  string            `json:"description,omitempty" yaml:"description,omitempty"`
+	Version      string            `json:"version,omitempty" yaml:"version,omitempty"`
+	Config       ThemeConfig       `json:"config,omitempty" yaml:"config,omitempty"`
+	TemplateData TemplateData      `json:"data,omitempty" yaml:"data,omitempty"`
+	Assets       []string          `json:"-" yaml:"-"` // paths relative to StaticDirName()
+	Plugins      htplugins.Plugins `json:"-" yaml:"-"`
 }
 
 type ThemeConfig struct {
@@ -31,8 +35,8 @@ type ThemeConfig struct {
 	BlocksDirectory       string `json:"blocks_dir,omitempty" yaml:"blocks_dir,omitempty"`
 	LayoutsDirectory      string `json:"layouts_dir,omitempty" yaml:"layouts_dir,omitempty"`
 	FragmentsDirectory    string `json:"fragments_dir,omitempty" yaml:"fragments_dir,omitempty"`
-	DataDirectory         string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
 	PluginsDirectory      string `json:"plugins_dir,omitempty" yaml:"plugins_dir,omitempty"`
+	DataDirectory         string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
 	StaticDirectory       string `json:"static_dir,omitempty" yaml:"static_dir,omitempty"`
 }
 
@@ -50,6 +54,30 @@ func (theme *Theme) Validate() error {
 	if theme.URI == nil {
 		return fmt.Errorf("website.theme.uri is required")
 	}
+	if err := theme.Config.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (config *ThemeConfig) Validate() error {
+	fields := []struct {
+		name string
+		path string
+	}{
+		{name: "theme.config.contenttypes_dir", path: config.ContentTypesDirectory},
+		{name: "theme.config.blocks_dir", path: config.BlocksDirectory},
+		{name: "theme.config.layouts_dir", path: config.LayoutsDirectory},
+		{name: "theme.config.fragments_dir", path: config.FragmentsDirectory},
+		{name: "theme.config.plugins_dir", path: config.PluginsDirectory},
+		{name: "theme.config.data_dir", path: config.DataDirectory},
+		{name: "theme.config.static_dir", path: config.StaticDirectory},
+	}
+	for _, field := range fields {
+		if err := ValidateRelativeFilePath(field.name, field.path); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -57,53 +85,72 @@ func (theme *Theme) RootDir() string {
 	return filepath.Dir(theme.URI.Path)
 }
 
-func (theme *Theme) ContentTypesDir() string {
-	if len(theme.Config.ContentTypesDirectory) == 0 {
-		theme.Config.ContentTypesDirectory = "types"
-	}
-	return filepath.Join(theme.RootDir(), theme.Config.ContentTypesDirectory)
+func (theme *Theme) ContentTypesDirName() string {
+	return ResourceDirectoryName(theme.Config.ContentTypesDirectory, "types")
 }
 
-func (theme *Theme) BlocksDir() string {
-	if len(theme.Config.BlocksDirectory) == 0 {
-		theme.Config.BlocksDirectory = "blocks"
-	}
-	return filepath.Join(theme.RootDir(), theme.Config.BlocksDirectory)
+func (theme *Theme) ContentTypesDirPath() string {
+	return filepath.Join(theme.RootDir(), theme.ContentTypesDirName())
 }
 
-func (theme *Theme) LayoutsDir() string {
-	if len(theme.Config.LayoutsDirectory) == 0 {
-		theme.Config.LayoutsDirectory = "layouts"
-	}
-	return filepath.Join(theme.RootDir(), theme.Config.LayoutsDirectory)
+func (theme *Theme) BlocksDirName() string {
+	return ResourceDirectoryName(theme.Config.BlocksDirectory, "blocks")
 }
 
-func (theme *Theme) FragmentsDir() string {
-	if len(theme.Config.FragmentsDirectory) == 0 {
-		theme.Config.FragmentsDirectory = "fragments"
-	}
-	return filepath.Join(theme.RootDir(), theme.Config.FragmentsDirectory)
+func (theme *Theme) BlocksDirPath() string {
+	return filepath.Join(theme.RootDir(), theme.BlocksDirName())
 }
 
-func (theme *Theme) PluginsDir() string {
-	if len(theme.Config.PluginsDirectory) == 0 {
-		theme.Config.PluginsDirectory = "plugins"
-	}
-	return filepath.Join(theme.RootDir(), theme.Config.PluginsDirectory)
+func (theme *Theme) LayoutsDirName() string {
+	return ResourceDirectoryName(theme.Config.LayoutsDirectory, "layouts")
 }
 
-func (theme *Theme) StaticDir() string {
-	if len(theme.Config.StaticDirectory) == 0 {
-		theme.Config.StaticDirectory = "static"
-	}
-	return filepath.Join(theme.RootDir(), theme.Config.StaticDirectory)
+func (theme *Theme) LayoutsDirPath() string {
+	return filepath.Join(theme.RootDir(), theme.LayoutsDirName())
 }
 
-func (theme *Theme) DataDir() string {
-	if len(theme.Config.DataDirectory) == 0 {
-		theme.Config.DataDirectory = "data"
+func (theme *Theme) FragmentsDirName() string {
+	return ResourceDirectoryName(theme.Config.FragmentsDirectory, "fragments")
+}
+
+func (theme *Theme) FragmentsDirPath() string {
+	return filepath.Join(theme.RootDir(), theme.FragmentsDirName())
+}
+
+func (theme *Theme) PluginsDirName() string {
+	return ResourceDirectoryName(theme.Config.PluginsDirectory, "plugins")
+}
+
+func (theme *Theme) PluginsDirPath() string {
+	return filepath.Join(theme.RootDir(), theme.PluginsDirName())
+}
+
+func (theme *Theme) StaticDirName() string {
+	return ResourceDirectoryName(theme.Config.StaticDirectory, "static")
+}
+
+func (theme *Theme) StaticDirPath() string {
+	return filepath.Join(theme.RootDir(), theme.StaticDirName())
+}
+
+func (theme *Theme) DataDirName() string {
+	return ResourceDirectoryName(theme.Config.DataDirectory, "data")
+}
+
+func (theme *Theme) DataDirPath() string {
+	return filepath.Join(theme.RootDir(), theme.DataDirName())
+}
+
+func (theme *Theme) Directories() []string {
+	return []string{
+		theme.ContentTypesDirPath(),
+		theme.BlocksDirPath(),
+		theme.LayoutsDirPath(),
+		theme.FragmentsDirPath(),
+		theme.PluginsDirPath(),
+		theme.DataDirPath(),
+		theme.StaticDirPath(),
 	}
-	return filepath.Join(theme.RootDir(), theme.Config.DataDirectory)
 }
 
 func (theme *Theme) ResolveConfig() {
@@ -112,24 +159,6 @@ func (theme *Theme) ResolveConfig() {
 	}
 	if len(theme.Version) == 0 {
 		theme.Version = "0.0.0"
-	}
-	if len(theme.Config.ContentTypesDirectory) == 0 {
-		theme.Config.ContentTypesDirectory = "types"
-	}
-	if len(theme.Config.BlocksDirectory) == 0 {
-		theme.Config.BlocksDirectory = "blocks"
-	}
-	if len(theme.Config.LayoutsDirectory) == 0 {
-		theme.Config.LayoutsDirectory = "layouts"
-	}
-	if len(theme.Config.FragmentsDirectory) == 0 {
-		theme.Config.FragmentsDirectory = "fragments"
-	}
-	if len(theme.Config.StaticDirectory) == 0 {
-		theme.Config.StaticDirectory = "static"
-	}
-	if len(theme.Config.DataDirectory) == 0 {
-		theme.Config.DataDirectory = "data"
 	}
 }
 
@@ -162,8 +191,12 @@ func (theme *Theme) ResourceExists(path string) (status bool, err error) {
 //	theme.ResourceHTML("layouts/default")
 //	theme.ResourceHTML("layouts/default.html")
 func (theme *Theme) ResourceHTML(resourceRef string) (*html.Node, error) {
+	resourceRef = filepath.ToSlash(resourceRef)
 	if filepath.Ext(resourceRef) == "" {
 		resourceRef += ".html"
+	}
+	if _, err := CleanRelativeFilePath(resourceRef); err != nil {
+		return nil, err
 	}
 	if filepath.Ext(resourceRef) != ".html" {
 		return nil, fmt.Errorf("template resource \"%s\" is not an HTML file", resourceRef)
@@ -183,25 +216,47 @@ func (theme *Theme) ResourceHTML(resourceRef string) (*html.Node, error) {
 	return html.Parse(bytes.NewReader(resourceBytes))
 }
 func (theme *Theme) LayoutHTML(layoutRef string) (*html.Node, error) {
-	if len(theme.Config.LayoutsDirectory) == 0 {
-		theme.ResolveConfig()
-	}
-	var layoutPrefix = theme.Config.LayoutsDirectory
-	if !strings.HasPrefix(layoutRef, layoutPrefix) {
-		layoutRef = filepath.Join(layoutPrefix, layoutRef)
+	layoutDir := theme.LayoutsDirName()
+	layoutRef = filepath.ToSlash(layoutRef)
+	layoutRef = strings.TrimPrefix(layoutRef, "/")
+	if !strings.HasPrefix(layoutRef, layoutDir+"/") {
+		layoutRef = path.Join(layoutDir, layoutRef)
 	}
 	return theme.ResourceHTML(layoutRef)
 }
 
-func (theme *Theme) Assets() (assets HyperFiles) {
-	return GetFiles(theme.StaticDir(), true)
+func (theme *Theme) DiscoverAssets() error {
+	if err := theme.Config.Validate(); err != nil {
+		return err
+	}
+	assets, err := ListFiles(theme.StaticDirPath(), true)
+	if err != nil {
+		return err
+	}
+	theme.Assets = assets
+	return nil
 }
 
-func (theme *Theme) Plugins() (assets HyperFiles) {
-	return GetFiles(theme.PluginsDir(), true)
+func (theme *Theme) DiscoverPlugins() error {
+	if err := theme.Config.Validate(); err != nil {
+		return err
+	}
+	pluginPaths, err := ListFiles(theme.PluginsDirPath(), true)
+	if err != nil {
+		return err
+	}
+	paths, err := LocalFilePaths(theme.PluginsDirPath(), pluginPaths)
+	if err != nil {
+		return err
+	}
+	theme.Plugins, err = htplugins.LoadPlugins(paths)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-// List all theme files with their paths relative to the theme root directory.
+// FilePaths lists all theme files with paths relative to the theme root directory.
 func (theme *Theme) FilePaths() (paths []string, err error) {
 	var root string
 	var rootAbs string
@@ -211,7 +266,6 @@ func (theme *Theme) FilePaths() (paths []string, err error) {
 		return nil, err
 	}
 
-	theme.ResolveConfig()
 	root = theme.RootDir()
 	if rootAbs, err = filepath.Abs(root); err != nil {
 		return nil, fmt.Errorf("resolve theme root %q: %w", root, err)
@@ -223,29 +277,20 @@ func (theme *Theme) FilePaths() (paths []string, err error) {
 			paths = append(paths, relConfigPath)
 		}
 	}
-	var directories []string = []string{
-		theme.Config.ContentTypesDirectory,
-		theme.Config.BlocksDirectory,
-		theme.Config.LayoutsDirectory,
-		theme.Config.FragmentsDirectory,
-		theme.Config.DataDirectory,
-		theme.Config.StaticDirectory,
-	}
-	for _, dir := range directories {
-		dirPath := filepath.Join(rootAbs, dir)
-		for _, p := range GetPaths(dirPath, true) {
-			var absPath string
+	for _, dirPath := range theme.Directories() {
+		dir, err := RelativeFilePath(rootAbs, dirPath)
+		if err != nil {
+			return nil, err
+		}
+		dir = filepath.ToSlash(dir)
+		var files []string
+		if files, err = ListFiles(dirPath, true); err != nil {
+			return nil, err
+		}
+		for _, p := range files {
 			var relPath string
 
-			if absPath, err = filepath.Abs(p); err != nil {
-				return nil, fmt.Errorf("resolve theme file path %q: %w", p, err)
-			}
-
-			if relPath, err = filepath.Rel(rootAbs, absPath); err != nil {
-				return nil, fmt.Errorf("resolve relative theme file path %q: %w", p, err)
-			}
-
-			relPath = filepath.ToSlash(relPath)
+			relPath = filepath.ToSlash(filepath.Join(dir, p))
 			if relPath == "." || relPath == "" {
 				continue
 			}
@@ -262,7 +307,7 @@ func (theme *Theme) FilePaths() (paths []string, err error) {
 	return paths, nil
 }
 
-// Archive uses theme.FilePaths() to list all theme files, then create a zip archive containing those files at the specified path.
+// Archive writes a zip archive containing every file returned by theme.FilePaths().
 func (theme *Theme) Archive(archive string) (err error) {
 	var paths []string
 	var archiveFile *os.File
@@ -290,15 +335,12 @@ func (theme *Theme) Archive(archive string) (err error) {
 
 	// Create empty directory entries for all configured theme directories,
 	// ensuring they are present in the archive even if they contain no files.
-	var directories []string = []string{
-		theme.Config.ContentTypesDirectory,
-		theme.Config.BlocksDirectory,
-		theme.Config.LayoutsDirectory,
-		theme.Config.FragmentsDirectory,
-		theme.Config.DataDirectory,
-		theme.Config.StaticDirectory,
-	}
-	for _, dir := range directories {
+	for _, dirPath := range theme.Directories() {
+		dir, err := RelativeFilePath(root, dirPath)
+		if err != nil {
+			return err
+		}
+		dir = filepath.ToSlash(dir)
 		var dirHeader *zip.FileHeader = &zip.FileHeader{
 			Name:   filepath.ToSlash(dir) + "/",
 			Method: zip.Store,

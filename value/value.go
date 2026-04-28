@@ -2,6 +2,7 @@ package value
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -32,31 +33,6 @@ type Getter interface {
 // text/template.FuncMap so callers can pass ordinary template functions
 // directly.
 type FuncMap = texttemplate.FuncMap
-
-// Plugin is a user-defined value pipeline transformer. The value must be a
-// function accepted by text/template: it returns either one value or one value
-// plus an error.
-type Plugin = any
-
-// Plugins maps DSL function names to user-defined value pipeline
-// transformers.
-type Plugins map[string]Plugin
-
-// FuncMap returns the plugins as text/template-compatible functions.
-func (plugins Plugins) FuncMap() FuncMap {
-	if len(plugins) == 0 {
-		return nil
-	}
-
-	funcs := FuncMap{}
-	for name, plugin := range plugins {
-		if plugin == nil {
-			continue
-		}
-		funcs[name] = plugin
-	}
-	return funcs
-}
 
 // METHODS =====================================================================
 
@@ -418,6 +394,11 @@ func rewriteAction(source string, funcs FuncMap) (string, error) {
 		return "", fmt.Errorf("%w: %s: %q", errInvalidValue, errTemplateComment, body)
 	}
 
+	body, err := normalizeSingleQuotedStrings(body)
+	if err != nil {
+		return "", err
+	}
+
 	head, tail := splitPipeline(body)
 	head = strings.TrimSpace(head)
 	if head == "" {
@@ -446,6 +427,77 @@ func rewriteAction(source string, funcs FuncMap) (string, error) {
 	}
 
 	return rewritten + " " + strings.TrimLeftFunc(tail, unicode.IsSpace), nil
+}
+
+func normalizeSingleQuotedStrings(source string) (string, error) {
+	var builder strings.Builder
+	cursor := 0
+
+	for cursor < len(source) {
+		char := source[cursor]
+
+		switch char {
+		case '\'':
+			value, closeQuote, err := readQuotedBody(source, cursor, '\'')
+			if err != nil {
+				return "", fmt.Errorf("%w: %v", errInvalidValue, err)
+			}
+			builder.WriteString(strconv.Quote(value))
+			cursor = closeQuote + 1
+			continue
+		case '"', '`':
+			end, err := skipQuotedString(source, cursor, char)
+			if err != nil {
+				return "", fmt.Errorf("%w: %v", errInvalidValue, err)
+			}
+			builder.WriteString(source[cursor:end])
+			cursor = end
+			continue
+		case '/':
+			if cursor+1 < len(source) && source[cursor+1] == '*' {
+				end := strings.Index(source[cursor+2:], "*/")
+				if end < 0 {
+					return "", fmt.Errorf("%w: unterminated comment", errInvalidValue)
+				}
+				end = cursor + 2 + end + 2
+				builder.WriteString(source[cursor:end])
+				cursor = end
+				continue
+			}
+		}
+
+		builder.WriteByte(char)
+		cursor += 1
+	}
+
+	return builder.String(), nil
+}
+
+func skipQuotedString(source string, openQuote int, quote byte) (int, error) {
+	cursor := openQuote + 1
+
+	for cursor < len(source) {
+		char := source[cursor]
+
+		if quote == '`' {
+			if char == '`' {
+				return cursor + 1, nil
+			}
+			cursor += 1
+			continue
+		}
+
+		if char == '\\' {
+			cursor += 2
+			continue
+		}
+		if char == quote {
+			return cursor + 1, nil
+		}
+		cursor += 1
+	}
+
+	return 0, errors.New("unterminated string")
 }
 
 func splitPipeline(source string) (string, string) {

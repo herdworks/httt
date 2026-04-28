@@ -6,7 +6,9 @@ module github.com/herdworks/hypertemplates-go
 go 1.23.5
 
 // first-party dependencies
-require github.com/herdworks/hyperfeed-go v0.19.1
+require (
+	github.com/herdworks/hyperfeed-go v0.19.1
+)
 
 // direct dependencies
 require (

@@ -106,57 +106,18 @@ func main() {
 ## Compile JavaScript Files
 
 `Function` accepts one JavaScript function body.
-To compile one reusable Go callable per JavaScript file, read each file and pass its contents to `scripting.Function` independently.
+To compile scripting-backed plugins from local JavaScript files, pass the ordered file list to `plugins.LoadPlugins`.
 
 ```go
 package main
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-
-	"github.com/herdworks/hypertemplates-go/scripting"
+	htplugins "github.com/herdworks/hypertemplates-go/plugins"
 	htvalue "github.com/herdworks/hypertemplates-go/value"
 )
 
-func pluginsFromFiles(paths []string) (plugins htvalue.Plugins, err error) {
-	plugins = make(htvalue.Plugins, len(paths))
-
-	for _, path := range paths {
-		var name, source string
-		var ok bool
-		var fn func(any) (any, error)
-		if src, err := os.ReadFile(path); err == nil {
-			source = string(src)
-		} else {
-			return nil, fmt.Errorf("read script %q: %w", path, err)
-		}
-
-		if name, ok, err = scripting.PluginName(source); err != nil {
-			return nil, fmt.Errorf("parse plugin name %q: %w", path, err)
-		} else if !ok {
-			basename := filepath.Base(path)
-			name = strings.TrimSuffix(basename, filepath.Ext(basename))
-		}
-		if name == "httd" || name == "default" {
-			return nil, fmt.Errorf("reserved plugin name %q from %q", name, path)
-		}
-		if _, exists := plugins[name]; exists {
-			return nil, fmt.Errorf("duplicate plugin name %q from %q", name, path)
-		}
-		if fn, err = scripting.Function(source, nil); err != nil {
-			return nil, fmt.Errorf("compile script %q: %w", path, err)
-		}
-		plugins[name] = fn
-	}
-
-	return plugins, nil
-}
-
 func main() {
-	plugins, err := pluginsFromFiles([]string{"scripts/upper.js", "scripts/title.js"})
+	plugins, err := htplugins.LoadPlugins([]string{"scripts/upper.js", "scripts/title.js"})
 	if err != nil {
 		panic(err)
 	}
@@ -168,6 +129,7 @@ func main() {
 
 Each leading `ht:plugin` comment becomes the value pipeline function name.
 If a file does not declare a name, the helper falls back to the filename stem.
+If multiple files resolve to the same plugin name, the last file wins.
 For example, `scripts/upper.js` registers an `upper` plugin usable as `${ page.title | upper }`.
 Because pipeline input is passed as the function argument, JavaScript file plugins usually read from `input`:
 

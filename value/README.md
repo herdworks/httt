@@ -6,7 +6,7 @@ The `value` package powers HyperTemplates template values. A template value is a
 Template values come in two forms:
 
 * Simple values resolve directly from TemplateData through `httd`.
-* Computed values resolve data first, then transform it through value plugins.
+* Computed values resolve data first, then transform it through plugins.
 
 Examples:
 
@@ -63,7 +63,7 @@ ${ httd "page.title" | upper }
 
 The only built-in DSL functions are `httd` and `default`. Built-in
 `text/template` functions such as `printf`, `len`, `index`, and `call` are
-outside the DSL unless registered as value plugins by the caller.
+outside the DSL unless registered as plugins by the caller.
 
 ## Missing Values
 
