@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.22.0 (2026-04-28)
+
 Added new plugins package with formalized HyperTemplates plugin spec, and redesigned HyperTemplates internals around relative paths, replacing the overly complex HyperFile struct with a collection of helper methods that require callers to provider root directories as context for relative path []string slices. 
 
 * Added `ListFiles`, `ListFilesByPattern`, `CleanRelativeFilePath`, `LocalFilePath`, `LocalFilePaths`, and `RelativeFilePath` for file discovery, validation, and root-relative path conversion.
