@@ -335,8 +335,8 @@ func TestThemeDiscoverPlugins(t *testing.T) {
 	theme := &Theme{
 		URI: &url.URL{Path: filepath.Join(root, "theme.json")},
 	}
-	writeTestFileContent(t, filepath.Join(theme.PluginsDirPath(), "render.js"), "// ht:plugin render\nreturn input")
-	writeTestFileContent(t, filepath.Join(theme.PluginsDirPath(), "nested", "format.js"), "// ht:plugin format\nreturn input")
+	writeTestFileContent(t, filepath.Join(theme.PluginsDirPath(), "render.js"), "function render(input) { return input }\nconst plugin = render")
+	writeTestFileContent(t, filepath.Join(theme.PluginsDirPath(), "nested", "format.js"), "function format(input) { return input }\nconst plugin = format")
 
 	if err := theme.DiscoverPlugins(); err != nil {
 		t.Fatalf("DiscoverPlugins returned error: %v", err)

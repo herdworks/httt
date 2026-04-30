@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/dop251/goja"
 )
@@ -33,6 +34,34 @@ func (e *Engine) programForShape(src string, shape bindingShape) (*goja.Program,
 
 	actual, _ := e.cache.LoadOrStore(key, prog)
 	return actual.(*goja.Program), nil
+}
+
+func (e *Engine) programForPluginFunction(src string) (*goja.Program, error) {
+	const cachePrefix = "plugin-function"
+	key := cachePrefix + "\x00" + src
+
+	if cached, ok := e.cache.Load(key); ok {
+		return cached.(*goja.Program), nil
+	}
+
+	wrapped := pluginFunctionWrapperSource(src)
+	prog, err := goja.Compile("cache.go", wrapped, true)
+	if err != nil {
+		return nil, compileError(src, err)
+	}
+
+	actual, _ := e.cache.LoadOrStore(key, prog)
+	return actual.(*goja.Program), nil
+}
+
+func pluginFunctionWrapperSource(src string) string {
+	var b strings.Builder
+	b.Grow(len(src) + 128)
+	b.WriteString(`(function(__args){ "use strict"; `)
+	b.WriteString(src)
+	b.WriteString("\n")
+	b.WriteString(`; if (typeof plugin !== "function") { throw new TypeError("plugin selector is not callable"); } return plugin(...__args); })`)
+	return b.String()
 }
 
 // compileError wraps a goja compile error with a short source excerpt so

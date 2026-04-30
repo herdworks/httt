@@ -12,7 +12,11 @@ import (
 	"unicode/utf8"
 )
 
-const templateName = "ht-value"
+const (
+	templateName       = "ht-value"
+	getFuncName        = "get"
+	cssDefaultFuncName = "cssDefault"
+)
 
 // TYPES =======================================================================
 
@@ -41,8 +45,8 @@ type FuncMap = texttemplate.FuncMap
 // resolved to nil), the original user-visible template source is emitted
 // instead. This all-or-nothing behavior keeps unresolved templates visible in
 // the output rather than leaking "<no value>" placeholders; callers that need
-// partial resolution on multi-action templates should annotate individual
-// actions with "| default \"...\"".
+// partial resolution on multi-action templates should give individual actions
+// an explicit string-literal fallback.
 func (t *tmpl) execute(writer io.Writer, data Getter) error {
 	compiled, err := buildTemplate(t.normalized, data, t.funcs)
 	if err != nil {
@@ -123,8 +127,8 @@ func validateWithFuncs(source string, syntax Syntax, funcs FuncMap) error {
 }
 
 // rewrite normalizes a template source to default-syntax form and rewrites
-// bare keypath actions into explicit httd function calls. For SyntaxCSS, a
-// pre-pass translates htfmt(...) calls to ${ ... } actions before the main
+// bare keypath actions into explicit get function calls. For SyntaxCSS, a
+// pre-pass translates --ht-value(...) calls to ${ ... } actions before the main
 // rewrite loop runs.
 func rewrite(source string, syntax Syntax) (string, error) {
 	return rewriteWithFuncs(source, syntax, nil)
@@ -189,10 +193,10 @@ func buildTemplate(source string, data Getter, funcs FuncMap) (parsed *texttempl
 	}()
 
 	compiledFuncs := texttemplate.FuncMap{
-		"httd": func(keypaths string) any {
-			return httdFunc(data, keypaths)
+		getFuncName: func(args ...string) any {
+			return getFunc(data, args...)
 		},
-		"default": defaultFunc,
+		cssDefaultFuncName: cssDefaultFunc,
 	}
 	for name, fn := range funcs {
 		if _, reserved := compiledFuncs[name]; reserved {
@@ -227,42 +231,57 @@ func mergeFuncMaps(funcMaps ...FuncMap) FuncMap {
 	return merged
 }
 
-// defaultFunc returns defaultValue when value is nil or an empty string, and
-// returns value otherwise. It is registered in the template func map as
-// "default" and is intended as a pipeline terminator for cases where a
-// template body may resolve to nothing — particularly the CSS-syntax
-// --ht-value("<body>", <fallback>) form.
-func defaultFunc(defaultValue string, value any) any {
-	if value == nil {
-		return defaultValue
-	}
-	if s, ok := value.(string); ok && s == "" {
-		return defaultValue
-	}
-	return value
-}
-
-// httdFunc is registered in the template func map as "httd" and resolves
-// comma-separated keypaths against the Getter, returning the first non-nil
-// value (or nil if all keypaths miss).
-func httdFunc(data Getter, keypaths string) any {
-	if data == nil {
+// getFunc is registered in the template func map as "get" and resolves
+// comma-separated keypaths against the Getter. If more than one argument is
+// provided, the final argument is a string fallback returned when lookup misses
+// or resolves to an empty string.
+func getFunc(data Getter, args ...string) any {
+	if len(args) == 0 {
 		return nil
 	}
 
-	for _, keypath := range strings.Split(keypaths, ",") {
-		keypath = strings.TrimSpace(keypath)
-		if keypath == "" {
-			continue
-		}
+	fallback := ""
+	hasFallback := len(args) > 1
+	if hasFallback {
+		fallback = args[len(args)-1]
+		args = args[:len(args)-1]
+	}
 
-		value := data.Get(keypath)
-		if value != nil {
-			return value
+	if data != nil {
+		for _, keypaths := range args {
+			for _, keypath := range strings.Split(keypaths, ",") {
+				keypath = strings.TrimSpace(keypath)
+				if keypath == "" {
+					continue
+				}
+
+				value := data.Get(keypath)
+				if value == nil {
+					continue
+				}
+				if s, ok := value.(string); ok && s == "" && hasFallback {
+					return fallback
+				}
+				return value
+			}
 		}
 	}
 
+	if hasFallback {
+		return fallback
+	}
+
 	return nil
+}
+
+func cssDefaultFunc(fallback string, value any) any {
+	if value == nil {
+		return fallback
+	}
+	if s, ok := value.(string); ok && s == "<no value>" {
+		return fallback
+	}
+	return value
 }
 
 type action struct {
@@ -405,28 +424,373 @@ func rewriteAction(source string, funcs FuncMap) (string, error) {
 		return "", fmt.Errorf("%w: empty action", errInvalidValue)
 	}
 
-	// Explicit function call: pass the body through verbatim and let
-	// text/template validate the tail against its FuncMap.
-	if reservedFunction(firstToken(head), funcs) {
-		return body, nil
+	rewrittenTail, err := rewritePipelineTail(tail, funcs)
+	if err != nil {
+		return "", err
 	}
 
-	for _, segment := range strings.Split(head, ",") {
+	if firstToken(head) == getFuncName {
+		return appendPipelineTail(head, rewrittenTail), nil
+	}
+
+	if registeredUserFunction(firstToken(head), funcs) {
+		rewritten, err := rewriteRegisteredFunctionCommand(head, funcs)
+		if err != nil {
+			return "", err
+		}
+		return appendPipelineTail(rewritten, rewrittenTail), nil
+	}
+
+	segments := splitCommaSeparated(head)
+	if len(segments) == 0 {
+		return "", fmt.Errorf("%w: empty action", errInvalidValue)
+	}
+
+	fallback := ""
+	hasFallback := false
+	last := strings.TrimSpace(segments[len(segments)-1])
+	if value, ok := stringLiteralValue(last); ok {
+		if len(segments) == 1 {
+			return "", fmt.Errorf("%w: %w: fallback requires a keypath", errInvalidValue, errInvalidKeypath)
+		}
+		fallback = value
+		hasFallback = true
+		segments = segments[:len(segments)-1]
+	}
+
+	keypaths := make([]string, 0, len(segments))
+	for _, segment := range segments {
 		trimmed := strings.TrimSpace(segment)
 		if trimmed == "" {
 			return "", fmt.Errorf("%w: %w: empty keypath in %q", errInvalidValue, errInvalidKeypath, head)
 		}
+		if _, ok := stringLiteralValue(trimmed); ok {
+			return "", fmt.Errorf("%w: %w: string literal fallback must be the last argument", errInvalidValue, errInvalidKeypath)
+		}
 		if strings.ContainsFunc(trimmed, unicode.IsSpace) {
 			return "", fmt.Errorf("%w: %w: %q", errInvalidValue, errInvalidKeypath, trimmed)
 		}
+		keypaths = append(keypaths, trimmed)
 	}
 
-	rewritten := fmt.Sprintf("httd %s", strconv.Quote(head))
+	rewritten := fmt.Sprintf("%s %s", getFuncName, strconv.Quote(strings.Join(keypaths, ", ")))
+	if hasFallback {
+		rewritten += " " + strconv.Quote(fallback)
+	}
 	if tail == "" {
 		return rewritten, nil
 	}
 
-	return rewritten + " " + strings.TrimLeftFunc(tail, unicode.IsSpace), nil
+	return appendPipelineTail(rewritten, rewrittenTail), nil
+}
+
+func appendPipelineTail(head string, tail string) string {
+	if tail == "" {
+		return head
+	}
+	return head + " " + strings.TrimLeftFunc(tail, unicode.IsSpace)
+}
+
+func rewritePipelineTail(tail string, funcs FuncMap) (string, error) {
+	if tail == "" {
+		return "", nil
+	}
+
+	var builder strings.Builder
+	cursor := 0
+	for cursor < len(tail) {
+		if tail[cursor] != '|' {
+			builder.WriteByte(tail[cursor])
+			cursor += 1
+			continue
+		}
+
+		builder.WriteByte('|')
+		cursor += 1
+		next := nextTopLevelPipe(tail, cursor)
+		segment, err := rewritePipelineSegment(tail[cursor:next], funcs)
+		if err != nil {
+			return "", err
+		}
+		builder.WriteString(segment)
+		cursor = next
+	}
+
+	return builder.String(), nil
+}
+
+func rewritePipelineSegment(segment string, funcs FuncMap) (string, error) {
+	leading := len(segment) - len(strings.TrimLeftFunc(segment, unicode.IsSpace))
+	trailing := len(strings.TrimRightFunc(segment, unicode.IsSpace))
+	command := segment[leading:trailing]
+	if command == "" {
+		return segment, nil
+	}
+	if !registeredUserFunction(firstToken(command), funcs) {
+		return segment, nil
+	}
+
+	rewritten, err := rewriteRegisteredFunctionCommand(command, funcs)
+	if err != nil {
+		return "", err
+	}
+	return segment[:leading] + rewritten + segment[trailing:], nil
+}
+
+func rewriteRegisteredFunctionCommand(command string, funcs FuncMap) (string, error) {
+	fields := commandFields(command)
+	if len(fields) == 0 {
+		return command, nil
+	}
+	if !registeredUserFunction(command[fields[0].start:fields[0].end], funcs) {
+		return command, nil
+	}
+
+	var builder strings.Builder
+	cursor := 0
+	for index, field := range fields {
+		builder.WriteString(command[cursor:field.start])
+		token := command[field.start:field.end]
+		if index > 0 && shouldDotPrefixArgument(token, funcs) {
+			builder.WriteByte('.')
+		}
+		builder.WriteString(token)
+		cursor = field.end
+	}
+	builder.WriteString(command[cursor:])
+	return builder.String(), nil
+}
+
+type commandField struct {
+	start int
+	end   int
+}
+
+func commandFields(source string) []commandField {
+	var fields []commandField
+	cursor := 0
+	for cursor < len(source) {
+		for cursor < len(source) {
+			r, size := utf8.DecodeRuneInString(source[cursor:])
+			if !unicode.IsSpace(r) {
+				break
+			}
+			cursor += size
+		}
+		if cursor >= len(source) {
+			break
+		}
+
+		start := cursor
+		cursor = scanCommandField(source, cursor)
+		fields = append(fields, commandField{start: start, end: cursor})
+	}
+	return fields
+}
+
+func scanCommandField(source string, cursor int) int {
+	var quote byte
+	escaped := false
+	inComment := false
+	depth := 0
+
+	for cursor < len(source) {
+		char := source[cursor]
+
+		if inComment {
+			if char == '*' && cursor+1 < len(source) && source[cursor+1] == '/' {
+				inComment = false
+				cursor += 2
+				continue
+			}
+			cursor += 1
+			continue
+		}
+
+		switch quote {
+		case '`':
+			cursor += 1
+			if char == '`' {
+				quote = 0
+			}
+			continue
+		case '"', '\'':
+			cursor += 1
+			if escaped {
+				escaped = false
+				continue
+			}
+			if char == '\\' {
+				escaped = true
+				continue
+			}
+			if char == quote {
+				quote = 0
+			}
+			continue
+		}
+
+		if char == '/' && cursor+1 < len(source) && source[cursor+1] == '*' {
+			inComment = true
+			cursor += 2
+			continue
+		}
+
+		switch char {
+		case '"', '\'', '`':
+			quote = char
+		case '(':
+			depth += 1
+		case ')':
+			if depth > 0 {
+				depth -= 1
+			}
+		default:
+			if depth == 0 {
+				r, size := utf8.DecodeRuneInString(source[cursor:])
+				if unicode.IsSpace(r) {
+					return cursor
+				}
+				cursor += size
+				continue
+			}
+		}
+		cursor += 1
+	}
+	return cursor
+}
+
+func shouldDotPrefixArgument(token string, funcs FuncMap) bool {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return false
+	}
+	if _, ok := stringLiteralValue(token); ok {
+		return false
+	}
+	if token == "true" || token == "false" || token == "nil" {
+		return false
+	}
+	if isNumericLiteral(token) {
+		return false
+	}
+	if strings.HasPrefix(token, ".") || strings.HasPrefix(token, "$") || strings.HasPrefix(token, "(") {
+		return false
+	}
+	if registeredFunctionName(token, funcs) {
+		return false
+	}
+	return isIdentifierPath(token)
+}
+
+func isNumericLiteral(token string) bool {
+	if _, err := strconv.ParseInt(token, 0, 64); err == nil {
+		return true
+	}
+	if _, err := strconv.ParseUint(token, 0, 64); err == nil {
+		return true
+	}
+	if _, err := strconv.ParseFloat(token, 64); err == nil {
+		return true
+	}
+	return false
+}
+
+func isIdentifierPath(token string) bool {
+	segments := strings.Split(token, ".")
+	for _, segment := range segments {
+		if !isIdentifier(segment) {
+			return false
+		}
+	}
+	return true
+}
+
+func isIdentifier(token string) bool {
+	if token == "" {
+		return false
+	}
+	for index, r := range token {
+		if index == 0 {
+			if r != '_' && !unicode.IsLetter(r) {
+				return false
+			}
+			continue
+		}
+		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func nextTopLevelPipe(source string, cursor int) int {
+	var quote byte
+	escaped := false
+	inComment := false
+	depth := 0
+
+	for cursor < len(source) {
+		char := source[cursor]
+
+		if inComment {
+			if char == '*' && cursor+1 < len(source) && source[cursor+1] == '/' {
+				inComment = false
+				cursor += 2
+				continue
+			}
+			cursor += 1
+			continue
+		}
+
+		switch quote {
+		case '`':
+			if char == '`' {
+				quote = 0
+			}
+			cursor += 1
+			continue
+		case '"', '\'':
+			if escaped {
+				escaped = false
+				cursor += 1
+				continue
+			}
+			if char == '\\' {
+				escaped = true
+				cursor += 1
+				continue
+			}
+			if char == quote {
+				quote = 0
+			}
+			cursor += 1
+			continue
+		}
+
+		if char == '/' && cursor+1 < len(source) && source[cursor+1] == '*' {
+			inComment = true
+			cursor += 2
+			continue
+		}
+
+		switch char {
+		case '"', '\'', '`':
+			quote = char
+		case '(':
+			depth += 1
+		case ')':
+			if depth > 0 {
+				depth -= 1
+			}
+		case '|':
+			if depth == 0 {
+				return cursor
+			}
+		}
+		cursor += 1
+	}
+	return cursor
 }
 
 func normalizeSingleQuotedStrings(source string) (string, error) {
@@ -563,6 +927,84 @@ func splitPipeline(source string) (string, string) {
 	return source, ""
 }
 
+func splitCommaSeparated(source string) []string {
+	var segments []string
+	var quote byte
+	escaped := false
+	inComment := false
+	depth := 0
+	start := 0
+
+	for index := 0; index < len(source); index += 1 {
+		char := source[index]
+
+		if inComment {
+			if char == '*' && index+1 < len(source) && source[index+1] == '/' {
+				inComment = false
+				index += 1
+			}
+			continue
+		}
+
+		switch quote {
+		case '`':
+			if char == '`' {
+				quote = 0
+			}
+			continue
+		case '"', '\'':
+			if escaped {
+				escaped = false
+				continue
+			}
+			if char == '\\' {
+				escaped = true
+				continue
+			}
+			if char == quote {
+				quote = 0
+			}
+			continue
+		}
+
+		if char == '/' && index+1 < len(source) && source[index+1] == '*' {
+			inComment = true
+			index += 1
+			continue
+		}
+
+		switch char {
+		case '"', '\'', '`':
+			quote = char
+		case '(':
+			depth += 1
+		case ')':
+			if depth > 0 {
+				depth -= 1
+			}
+		case ',':
+			if depth == 0 {
+				segments = append(segments, source[start:index])
+				start = index + 1
+			}
+		}
+	}
+
+	return append(segments, source[start:])
+}
+
+func stringLiteralValue(source string) (string, bool) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return "", false
+	}
+	value, err := strconv.Unquote(source)
+	if err != nil {
+		return "", false
+	}
+	return value, true
+}
+
 func firstToken(source string) string {
 	source = strings.TrimSpace(source)
 	if source == "" {
@@ -578,11 +1020,16 @@ func firstToken(source string) string {
 	return source
 }
 
-func reservedFunction(name string, funcs FuncMap) bool {
+func registeredFunctionName(name string, funcs FuncMap) bool {
 	switch name {
-	case "httd", "default":
+	case getFuncName, cssDefaultFuncName:
 		return true
 	}
+	_, ok := funcs[name]
+	return ok
+}
+
+func registeredUserFunction(name string, funcs FuncMap) bool {
 	_, ok := funcs[name]
 	return ok
 }

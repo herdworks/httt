@@ -3,8 +3,6 @@ package plugins
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 	texttemplate "text/template"
 
 	"github.com/herdworks/hypertemplates-go/scripting"
@@ -14,17 +12,18 @@ import (
 type FuncMap = texttemplate.FuncMap
 
 // Func is the executable function shape for HyperTemplates plugins.
-type Func func(any) (any, error)
+type Func func(...any) (any, error)
 
 // Plugin is a compiled HyperTemplates plugin.
 //
-// The original plugin shape is a JavaScript-backed value transformer compiled
-// into a Go function with this signature:
+// Plugins are JavaScript-backed value transformers compiled into Go functions
+// with this signature:
 //
-//	func(any) (any, error)
+//	func(...any) (any, error)
 //
-// That function shape lets value pipelines pass the upstream pipeline value as
-// the input argument while preserving normal text/template error propagation.
+// That function shape lets value pipelines pass explicit arguments first and
+// the upstream pipeline value last while preserving normal text/template error
+// propagation.
 type Plugin struct {
 	Name string
 	Path string
@@ -67,19 +66,7 @@ func LoadPlugin(path string) (Plugin, error) {
 	}
 	source := string(src)
 
-	name, ok, err := scripting.PluginName(source)
-	if err != nil {
-		return Plugin{}, fmt.Errorf("parse plugin name %q: %w", path, err)
-	}
-	if !ok {
-		basename := filepath.Base(path)
-		name = strings.TrimSuffix(basename, filepath.Ext(basename))
-	}
-	if name == "httd" || name == "default" {
-		return Plugin{}, fmt.Errorf("reserved plugin name %q from %q", name, path)
-	}
-
-	fn, err := scripting.Function(source, nil)
+	name, fn, err := scripting.Function(source)
 	if err != nil {
 		return Plugin{}, fmt.Errorf("compile plugin %q: %w", path, err)
 	}

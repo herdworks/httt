@@ -1,6 +1,6 @@
 # scripting
 
-`scripting` is a HyperTemplates subpackage for evaluating JavaScript function bodies against caller-provided arguments.
+`scripting` is a HyperTemplates subpackage for evaluating JavaScript scripts and plugin function files against caller-provided arguments.
 It is designed for concurrent use, so one `Engine` can be shared safely across many goroutines.
 
 ## Goals
@@ -22,7 +22,8 @@ The package import path is `github.com/herdworks/hypertemplates-go/scripting`, a
 `Eval` returns the exported Go value returned by a script.
 `EvalString` applies JavaScript string coercion and is the best fit for template-style rendering.
 `EvalStringStrict` requires the returned JavaScript value to already be a string.
-`Function`, `FunctionContext`, and `FunctionTimeout` compile reusable Go callables backed by a lazy package-default engine.
+`Script`, `ScriptContext`, and `ScriptTimeout` compile reusable script-body callables backed by a lazy package-default engine.
+`Function`, `FunctionContext`, and `FunctionTimeout` compile JavaScript plugin files that declare `const plugin = name`.
 Matching `Engine` methods are available when you want explicit engine ownership.
 `Options.EvalTimeout` applies an engine-level timeout to each evaluation.
 
@@ -31,9 +32,17 @@ Binding is intentionally binary:
 * If the argument is `map[string]any`, its top-level keys become local constants inside the script when those keys are valid strict-mode JavaScript binding names.
 * Every other argument shape is exposed as a single local constant named `input`.
 
-Scripts are wrapped in a strict-mode function body.
+`Eval` and `Script` source is wrapped in a strict-mode function body.
 Use `return` to produce a value.
-If a script completes without returning, `Eval` and compiled functions return nil.
+If a script completes without returning, `Eval` and compiled scripts return nil.
+Plugin functions receive ordered arguments exactly as the Go caller supplies
+them; maps are passed through as ordinary argument values.
+The hardened runtime provides a `console` binding for standard-output logging.
+`console.log` writes `[scripting] <message>`, while `console.info`,
+`console.warn`, `console.error`, and `console.debug` write
+`[scripting] <LEVEL> <message>`. Use `console.logger(name)` to create a
+separate logger that writes `[<name>] <message>` and `[<name>] <LEVEL>
+<message>` without mutating the shared runtime console.
 
 The package uses [`goja`](https://github.com/dop251/goja), which provides standard JavaScript built-ins such as `Math`.
 It does not provide Node.js globals such as `require`, `process`, `Buffer`, or `setTimeout`.
@@ -71,7 +80,7 @@ func main() {
 }
 ```
 
-## Compiled Function Example
+## Compiled Script Example
 
 ```go
 package main
@@ -83,7 +92,7 @@ import (
 )
 
 func main() {
-	formatGreeting, err := scripting.Function(
+	formatGreeting, err := scripting.Script(
 		"return `Hello ${user.name}`",
 		map[string]any{"user": nil},
 	)
@@ -105,8 +114,11 @@ func main() {
 
 ## Compile JavaScript Files
 
-`Function` accepts one JavaScript function body.
-To compile scripting-backed plugins from local JavaScript files, pass the ordered file list to `plugins.LoadPlugins`.
+`Function` accepts one JavaScript plugin file. Plugin files declare ordinary
+JavaScript functions or function-valued constants, then select the plugin
+entrypoint with a top-level `const plugin = name`.
+To compile scripting-backed plugins from local JavaScript files, pass the
+ordered file list to `plugins.LoadPlugins`.
 
 ```go
 package main
@@ -127,19 +139,34 @@ func main() {
 }
 ```
 
-Each leading `ht:plugin` comment becomes the value pipeline function name.
-If a file does not declare a name, the helper falls back to the filename stem.
+The selector identifier becomes the value pipeline function name.
+Comments and filenames are ignored for plugin naming.
 If multiple files resolve to the same plugin name, the last file wins.
 For example, `scripts/upper.js` registers an `upper` plugin usable as `${ page.title | upper }`.
-Because pipeline input is passed as the function argument, JavaScript file plugins usually read from `input`:
 
 ```js
-// ht:plugin upper
-if (typeof input !== "string") {
-	return input
+function upper(input) {
+	if (typeof input !== "string") {
+		return input
+	}
+
+	return input.toUpperCase()
 }
 
-return input.toUpperCase()
+const plugin = upper
+```
+
+Plugin functions can write diagnostic output with `console`:
+
+```js
+const logger = console.logger("plugin/upper")
+
+function upper(input) {
+	logger.log("rendering", input)
+	return String(input).toUpperCase()
+}
+
+const plugin = upper
 ```
 
 ```go
@@ -154,19 +181,28 @@ if err != nil {
 }
 ```
 
-Plugin files can use ordinary JavaScript statements and top-level `return`:
+Plugin files can also select function-valued constants, including arrow
+functions:
 
 ```js
-// ht:plugin title
-if (input == null) {
-	return input
+const title = (input) => {
+	if (input == null) {
+		return input
+	}
+
+	return String(input)
+		.split(/\s+/)
+		.map(word => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(" ")
 }
 
-return String(input)
-	.split(/\s+/)
-	.map(word => word.charAt(0).toUpperCase() + word.slice(1))
-	.join(" ")
+const plugin = title
 ```
+
+Plugins receive ordered arguments. In a `text/template` pipeline, explicit
+arguments come first and the upstream pipeline value comes last, so
+`${ page.updated_at, page.created_at | fmtdate "YYYY-MM-DD" }` calls JavaScript
+as `plugin("YYYY-MM-DD", input)`.
 
 If you need to install the plugins on a full HyperTemplates template, assign the map directly:
 
@@ -177,9 +213,10 @@ template.Plugins = plugins
 ## Concurrent Usage
 
 One `Engine` can be shared across goroutines.
-Each call receives its own argument, and compiled programs are cached by script source and binding shape.
+Each call receives its own arguments, and compiled programs are cached by script source and binding shape.
 All non-map arguments share one `input` cache shape.
 Map arguments are cached by their sorted top-level keys.
+Plugin functions are cached by plugin source.
 
 ```go
 package main
@@ -226,10 +263,12 @@ func main() {
 ## Timeouts And Cancellation
 
 `Eval` respects both the caller's `context.Context` and the optional engine-level timeout.
-`FunctionContext` keeps that same caller-controlled cancellation model for compiled callables.
-`FunctionTimeout` applies a fixed timeout to each invocation.
-`Function` is a convenience wrapper over `FunctionTimeout` that uses `250 * time.Millisecond`.
-Use `FunctionContext` when you need per-call deadlines or cancellation.
+`ScriptContext` keeps that same caller-controlled cancellation model for compiled script callables.
+`ScriptTimeout` applies a fixed timeout to each script invocation.
+`Script` is a convenience wrapper over `ScriptTimeout` that uses `250 * time.Millisecond`.
+Use `ScriptContext` when you need per-call deadlines or cancellation for script bodies.
+The plugin-oriented `FunctionContext` and `FunctionTimeout` variants provide
+the same cancellation and timeout controls for plugin functions.
 
 ```go
 package main
@@ -244,7 +283,7 @@ import (
 )
 
 func main() {
-	fn, err := scripting.FunctionContext("while (true) {}", nil)
+	fn, err := scripting.ScriptContext("while (true) {}", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -268,9 +307,10 @@ func main() {
 * If a map key is not available as a bare identifier, make sure the argument is exactly `map[string]any`.
 * If evaluation fails before running because of a top-level map key, rename that key to a valid strict-mode JavaScript binding name such as `user_name` or nest it under a valid parent key.
 * If you pass a struct, slice, scalar, or any other non-map value, access it through `input`.
-* If a compiled function rejects an argument, check whether the runtime argument still matches the sample shape you used at compile time.
+* If a compiled script rejects an argument, check whether the runtime argument still matches the sample shape you used at compile time.
+* If a plugin file fails to compile, confirm it has exactly one top-level `const plugin = name` selector and that `name` refers to a top-level callable binding.
 * If a script gets a `TypeError` while assigning to `globalThis` or a core prototype, runtime hardening blocked a persistent side effect on the pooled VM.
-* If `Function` interrupts unexpectedly, switch to `FunctionContext` or `FunctionTimeout` so the timeout policy is explicit.
+* If `Script` or `Function` interrupts unexpectedly, switch to the matching `Context` or `Timeout` variant so the timeout policy is explicit.
 
 ## Development
 

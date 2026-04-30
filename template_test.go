@@ -330,7 +330,12 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 		t.Fatalf("error parsing layout html: %v", err)
 	}
 
-	upper, err := scripting.Function(`return input.toUpperCase()`, nil)
+	name, upper, err := scripting.Function(`
+		function upper(input) {
+			return input.toUpperCase()
+		}
+		const plugin = upper
+	`)
 	if err != nil {
 		t.Fatalf("error compiling scripting function: %v", err)
 	}
@@ -344,7 +349,7 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 		Layout:   layout,
 		TidyMode: true,
 		Plugins: htplugins.Plugins{
-			"upper": {Name: "upper", Func: htplugins.Func(upper)},
+			name: {Name: name, Func: htplugins.Func(upper)},
 		},
 	}
 
@@ -485,7 +490,7 @@ func TestRenderValuesStyleElementFallback(t *testing.T) {
 		<html>
 			<head>
 				<style ht-apply>
-					.hero { color: --ht-value("theme.color", red); padding: --ht-value("theme.pad", 10px); }
+						.hero { color: --ht-value("theme.color", red); padding: --ht-value("theme.pad", 10px); }
 				</style>
 			</head>
 			<body></body>

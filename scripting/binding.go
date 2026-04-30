@@ -23,7 +23,7 @@ type bindingShape struct {
 }
 
 func bindingShapeForArg(arg any) bindingShape {
-	data, ok := arg.(map[string]any)
+	data, ok := jsPlainMap(arg)
 	if !ok {
 		return bindingShape{mode: bindingModeInput}
 	}
@@ -78,12 +78,12 @@ func (s bindingShape) wrapperSource(src string) string {
 func (s bindingShape) validateCallArg(arg any) error {
 	switch s.mode {
 	case bindingModeInput:
-		if _, ok := arg.(map[string]any); ok {
+		if _, ok := jsPlainMap(arg); ok {
 			return fmt.Errorf("scripting: expected non-map input, got %T", arg)
 		}
 		return nil
 	case bindingModeMap:
-		data, ok := arg.(map[string]any)
+		data, ok := jsPlainMap(arg)
 		if !ok {
 			return fmt.Errorf("scripting: expected map[string]any input, got %T", arg)
 		}

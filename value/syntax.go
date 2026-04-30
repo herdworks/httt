@@ -18,8 +18,8 @@ const (
 
 	// SyntaxCSS recognizes --ht-value("...") and --ht-value('...') calls.
 	// The quoted argument is the action body and follows the same grammar
-	// as a default-syntax action (bare keypaths, comma-separated fallbacks,
-	// pipelines to reserved or user functions).
+	// as a default-syntax action. An optional second argument is applied as a
+	// CSS fallback when the action renders no value.
 	SyntaxCSS
 )
 
@@ -29,10 +29,9 @@ var errInvalidHTValueCall = errors.New("invalid --ht-value call")
 const htValuePrefix = "--ht-value("
 
 // rewriteCSS replaces --ht-value("<body>") and --ht-value('<body>') calls with
-// ${ <body> } actions. An optional second argument provides a fallback value
-// used when the template body evaluates to nil or an empty string; when
-// present, the emission becomes ${ <body> | default "<fallback>" }.
-// Text outside of --ht-value(...) calls passes through unchanged.
+// ${ <body> } actions. An optional second argument is treated as a CSS fallback
+// after the expression pipeline. Text outside of --ht-value(...) calls passes
+// through unchanged.
 func rewriteCSS(source string) (string, error) {
 	var builder strings.Builder
 	cursor := 0
@@ -59,13 +58,12 @@ func rewriteCSS(source string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		if hasFallback {
+			body = appendCSSDefault(body, fallback)
+		}
 
 		builder.WriteString("${ ")
 		builder.WriteString(body)
-		if hasFallback {
-			builder.WriteString(" | default ")
-			builder.WriteString(strconv.Quote(fallback))
-		}
 		builder.WriteString(" }")
 
 		cursor = end
@@ -91,8 +89,8 @@ func atWordBoundary(source string, start int) bool {
 
 // readHTValueCall parses a --ht-value(...) call starting at start, which
 // points at the first '-' of "--ht-value(". It returns the decoded body, the
-// decoded fallback (empty if absent), whether a fallback was present, the byte
-// index just past the closing ')', and an error.
+// decoded fallback (if present), whether a fallback was present, the byte index
+// just past the closing ')', and an error.
 func readHTValueCall(source string, start int) (string, string, bool, int, error) {
 	cursor := start + len(htValuePrefix)
 	cursor = skipCSSWhitespace(source, cursor)
@@ -137,6 +135,11 @@ func readHTValueCall(source string, start int) (string, string, bool, int, error
 	}
 
 	return body, fallback, true, end, nil
+}
+
+func appendCSSDefault(body string, fallback string) string {
+	body = strings.TrimRightFunc(body, unicode.IsSpace)
+	return body + " | " + cssDefaultFuncName + " " + strconv.Quote(fallback)
 }
 
 // readFallback reads the second argument of a --ht-value(...) call starting

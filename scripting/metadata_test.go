@@ -5,110 +5,160 @@ import (
 	"testing"
 )
 
-func TestPluginName(t *testing.T) {
+func TestPluginSelector(t *testing.T) {
 	cases := []struct {
-		name      string
-		source    string
-		want      string
-		wantFound bool
-		wantErr   string
+		name    string
+		source  string
+		want    string
+		wantErr string
 	}{
 		{
-			name:      "line comment with space",
-			source:    "// ht:plugin upper\nreturn input.toUpperCase()",
-			want:      "upper",
-			wantFound: true,
+			name: "function declaration",
+			source: `
+				function upper(input) {
+					return input.toUpperCase()
+				}
+				const plugin = upper
+			`,
+			want: "upper",
 		},
 		{
-			name:      "line comment with colon",
-			source:    "// ht:plugin: title\ninput",
-			want:      "title",
-			wantFound: true,
+			name: "arrow function",
+			source: `
+				const upper = (input) => input.toUpperCase()
+				const plugin = upper
+			`,
+			want: "upper",
 		},
 		{
-			name:      "line comment with equals",
-			source:    "// ht:plugin=slug\ninput",
-			want:      "slug",
-			wantFound: true,
+			name: "helper function",
+			source: `
+				function helper(input) {
+					return input.toUpperCase()
+				}
+				function upper(input) {
+					return helper(input)
+				}
+				const plugin = upper
+			`,
+			want: "upper",
 		},
 		{
-			name: "block comment",
-			source: `/*
- * ht:plugin excerpt
- */
-input`,
-			want:      "excerpt",
-			wantFound: true,
+			name: "comments ignored",
+			source: `
+				// ht:plugin ignored
+				function upper(input) {
+					return input.toUpperCase()
+				}
+				const plugin = upper
+			`,
+			want: "upper",
 		},
 		{
-			name:      "at prefix",
-			source:    "/** @ht:plugin upper */\ninput",
-			want:      "upper",
-			wantFound: true,
+			name: "missing selector",
+			source: `
+				function upper(input) {
+					return input.toUpperCase()
+				}
+			`,
+			wantErr: "missing plugin selector",
 		},
 		{
-			name:      "not leading",
-			source:    "input\n// ht:plugin upper",
-			wantFound: false,
+			name: "duplicate selector",
+			source: `
+				function upper(input) {
+					return input.toUpperCase()
+				}
+				const plugin = upper
+				const plugin = upper
+			`,
+			wantErr: "duplicate",
 		},
 		{
-			name:      "missing",
-			source:    "// ordinary comment\ninput",
-			wantFound: false,
+			name: "let selector",
+			source: `
+				function upper(input) {
+					return input.toUpperCase()
+				}
+				let plugin = upper
+			`,
+			wantErr: "must be declared with const",
 		},
 		{
-			name:    "invalid name",
-			source:  "// ht:plugin upper-case\ninput",
-			wantErr: "invalid plugin name",
+			name: "inline selector expression",
+			source: `
+				const plugin = (input) => input.toUpperCase()
+			`,
+			wantErr: "must reference a callable identifier",
 		},
 		{
-			name:    "duplicate",
-			source:  "// ht:plugin upper\n// ht:plugin title\ninput",
-			wantErr: "duplicate plugin name",
+			name: "unknown selector",
+			source: `
+				const plugin = upper
+			`,
+			wantErr: "does not refer to a top-level callable binding",
 		},
 		{
-			name:    "unterminated block comment",
-			source:  "/* ht:plugin upper",
-			wantErr: "unterminated metadata comment",
+			name: "non-callable selector",
+			source: `
+				const upper = "not a function"
+				const plugin = upper
+			`,
+			wantErr: "does not refer to a top-level callable binding",
+		},
+		{
+			name: "reserved selector",
+			source: `
+				function get(input) {
+					return input
+				}
+				const plugin = get
+			`,
+			wantErr: "reserved plugin name",
+		},
+		{
+			name: "top-level return is invalid",
+			source: `
+				return input
+				const plugin = upper
+			`,
+			wantErr: "parse plugin function",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, found, err := PluginName(tc.source)
+			got, err := PluginSelector(tc.source)
 			if tc.wantErr != "" {
 				if err == nil {
-					t.Fatal("PluginName() error = nil")
+					t.Fatal("PluginSelector() error = nil")
 				}
 				if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("PluginName() error = %v, want substring %q", err, tc.wantErr)
+					t.Fatalf("PluginSelector() error = %v, want substring %q", err, tc.wantErr)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("PluginName() error = %v", err)
-			}
-			if found != tc.wantFound {
-				t.Fatalf("PluginName() found = %v, want %v", found, tc.wantFound)
+				t.Fatalf("PluginSelector() error = %v", err)
 			}
 			if got != tc.want {
-				t.Fatalf("PluginName() name = %q, want %q", got, tc.want)
+				t.Fatalf("PluginSelector() = %q, want %q", got, tc.want)
 			}
 		})
 	}
 }
 
-func TestPluginName_MetadataCommentCompilesAsScriptBody(t *testing.T) {
-	fn, err := Function("// ht:plugin upper\nreturn input.toUpperCase()", "")
+func TestScript_MetadataCommentCompilesAsScriptBody(t *testing.T) {
+	fn, err := Script("// ht:plugin ignored\nreturn input.toUpperCase()", "")
 	if err != nil {
-		t.Fatalf("Function() error = %v", err)
+		t.Fatalf("Script() error = %v", err)
 	}
 
 	got, err := fn("hello")
 	if err != nil {
-		t.Fatalf("compiled function error = %v", err)
+		t.Fatalf("compiled script error = %v", err)
 	}
 	if got != "HELLO" {
-		t.Fatalf("compiled function = %#v, want %#v", got, "HELLO")
+		t.Fatalf("compiled script = %#v, want %#v", got, "HELLO")
 	}
 }

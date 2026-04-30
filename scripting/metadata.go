@@ -2,152 +2,116 @@ package scripting
 
 import (
 	"fmt"
-	"strings"
-	"unicode"
-	"unicode/utf8"
+
+	"github.com/dop251/goja/ast"
+	"github.com/dop251/goja/parser"
+	"github.com/dop251/goja/token"
 )
 
-const pluginNameDirective = "ht:plugin"
+const pluginSelectorName = "plugin"
 
-// PluginName returns a plugin name declared in a leading JavaScript metadata
-// comment.
-//
-// Supported forms are:
-//
-//	// ht:plugin upper
-//	// ht:plugin: upper
-//	// ht:plugin=upper
-//	/* ht:plugin upper */
-//
-// Only leading comments and whitespace are scanned. Directives that appear
-// after executable JavaScript are ignored.
-func PluginName(source string) (string, bool, error) {
-	var name string
-	found := false
-
-	apply := func(next string) error {
-		if !validPluginName(next) {
-			return fmt.Errorf("scripting: invalid plugin name %q", next)
-		}
-		if found {
-			return fmt.Errorf("scripting: duplicate plugin name %q", next)
-		}
-		name = next
-		found = true
-		return nil
+// PluginSelector returns the public plugin name selected by a JavaScript plugin
+// file. Plugin files must declare exactly one top-level `const plugin = name`
+// binding. The selector value must be an identifier that refers to a top-level
+// callable binding in the same file.
+func PluginSelector(source string) (string, error) {
+	program, err := parser.ParseFile(nil, "plugin.js", source, 0)
+	if err != nil {
+		return "", fmt.Errorf("scripting: parse plugin function: %w", err)
 	}
 
-	for offset := 0; offset < len(source); {
-		offset = skipSpace(source, offset)
-		if offset >= len(source) {
-			break
-		}
+	callables := map[string]bool{}
+	var selector string
+	selectorFound := false
 
-		switch {
-		case strings.HasPrefix(source[offset:], "//"):
-			end := strings.IndexByte(source[offset:], '\n')
-			if end < 0 {
-				end = len(source) - offset
+	for _, statement := range program.Body {
+		switch stmt := statement.(type) {
+		case *ast.FunctionDeclaration:
+			if stmt.Function != nil && stmt.Function.Name != nil {
+				callables[stmt.Function.Name.Name.String()] = true
 			}
-			comment := source[offset+2 : offset+end]
-			next, ok, err := parsePluginNameComment(comment)
-			if err != nil {
-				return "", false, err
-			}
-			if ok {
-				if err := apply(next); err != nil {
-					return "", false, err
+		case *ast.LexicalDeclaration:
+			for _, binding := range stmt.List {
+				name, ok := bindingIdentifierName(binding)
+				if !ok {
+					continue
 				}
-			}
-			offset += end
-
-		case strings.HasPrefix(source[offset:], "/*"):
-			end := strings.Index(source[offset+2:], "*/")
-			if end < 0 {
-				return "", false, fmt.Errorf("scripting: unterminated metadata comment")
-			}
-			comment := source[offset+2 : offset+2+end]
-			for _, line := range strings.Split(comment, "\n") {
-				next, ok, err := parsePluginNameComment(line)
-				if err != nil {
-					return "", false, err
-				}
-				if ok {
-					if err := apply(next); err != nil {
-						return "", false, err
+				if name == pluginSelectorName {
+					if stmt.Token != token.CONST {
+						return "", fmt.Errorf("scripting: plugin selector must be declared with const")
 					}
+					if selectorFound {
+						return "", fmt.Errorf("scripting: duplicate plugin selector")
+					}
+					next, err := selectorIdentifierName(binding.Initializer)
+					if err != nil {
+						return "", err
+					}
+					selector = next
+					selectorFound = true
+					continue
+				}
+				if stmt.Token == token.CONST && initializerIsCallable(binding.Initializer) {
+					callables[name] = true
 				}
 			}
-			offset += 2 + end + 2
-
-		default:
-			return name, found, nil
+		case *ast.VariableStatement:
+			for _, binding := range stmt.List {
+				if name, ok := bindingIdentifierName(binding); ok && name == pluginSelectorName {
+					return "", fmt.Errorf("scripting: plugin selector must be declared with const")
+				}
+			}
 		}
 	}
 
-	return name, found, nil
+	if !selectorFound {
+		return "", fmt.Errorf("scripting: missing plugin selector const plugin = name")
+	}
+	if reservedPluginName(selector) {
+		return "", fmt.Errorf("scripting: reserved plugin name %q", selector)
+	}
+	if !callables[selector] {
+		return "", fmt.Errorf("scripting: plugin selector %q does not refer to a top-level callable binding", selector)
+	}
+	return selector, nil
 }
 
-func parsePluginNameComment(comment string) (string, bool, error) {
-	line := strings.TrimSpace(comment)
-	line = strings.TrimSpace(strings.TrimPrefix(line, "*"))
-	line = strings.TrimPrefix(line, "@")
-	if !strings.HasPrefix(line, pluginNameDirective) {
-		return "", false, nil
+func bindingIdentifierName(binding *ast.Binding) (string, bool) {
+	if binding == nil {
+		return "", false
 	}
-
-	rest := line[len(pluginNameDirective):]
-	if rest == "" {
-		return "", false, fmt.Errorf("scripting: missing plugin name")
+	identifier, ok := binding.Target.(*ast.Identifier)
+	if !ok {
+		return "", false
 	}
+	return identifier.Name.String(), true
+}
 
-	first, _ := utf8.DecodeRuneInString(rest)
-	switch {
-	case first == ':' || first == '=':
-		rest = rest[1:]
-	case unicode.IsSpace(first):
+func selectorIdentifierName(initializer ast.Expression) (string, error) {
+	if initializer == nil {
+		return "", fmt.Errorf("scripting: plugin selector must reference a callable identifier")
+	}
+	identifier, ok := initializer.(*ast.Identifier)
+	if !ok {
+		return "", fmt.Errorf("scripting: plugin selector must reference a callable identifier")
+	}
+	return identifier.Name.String(), nil
+}
+
+func initializerIsCallable(initializer ast.Expression) bool {
+	switch initializer.(type) {
+	case *ast.FunctionLiteral, *ast.ArrowFunctionLiteral:
+		return true
 	default:
-		return "", false, nil
-	}
-
-	fields := strings.Fields(rest)
-	if len(fields) == 0 {
-		return "", false, fmt.Errorf("scripting: missing plugin name")
-	}
-	if len(fields) > 1 {
-		return "", false, fmt.Errorf("scripting: invalid plugin name directive %q", strings.TrimSpace(comment))
-	}
-
-	return fields[0], true, nil
-}
-
-func validPluginName(name string) bool {
-	if name == "" {
 		return false
 	}
-
-	for index, r := range name {
-		if index == 0 {
-			if r != '_' && !unicode.IsLetter(r) {
-				return false
-			}
-			continue
-		}
-		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-			return false
-		}
-	}
-
-	return true
 }
 
-func skipSpace(source string, offset int) int {
-	for offset < len(source) {
-		r, size := utf8.DecodeRuneInString(source[offset:])
-		if !unicode.IsSpace(r) {
-			break
-		}
-		offset += size
+func reservedPluginName(name string) bool {
+	switch name {
+	case "get", pluginSelectorName:
+		return true
+	default:
+		return false
 	}
-	return offset
 }

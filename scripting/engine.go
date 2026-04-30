@@ -1,5 +1,6 @@
 // Package scripting embeds a pure-Go JavaScript runtime (goja) for evaluating
-// small JavaScript function bodies against per-call Go arguments.
+// small JavaScript scripts and plugin function files against per-call Go
+// arguments.
 //
 // The engine compiles scripts into reusable bytecode wrappers that either
 // expose top-level map keys as local constants or bind a single local
@@ -36,7 +37,8 @@ type Options struct {
 	EvalTimeout time.Duration
 }
 
-// Engine evaluates JavaScript function bodies against per-call data contexts.
+// Engine evaluates JavaScript scripts and plugin function files against
+// per-call data contexts.
 // An Engine is safe for concurrent use by multiple goroutines.
 type Engine struct {
 	opts   Options
@@ -60,7 +62,7 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-// Eval executes src as a JavaScript function body against arg.
+// Eval executes src as a JavaScript script body against arg.
 //
 // If arg is map[string]any, its top-level keys become local constants inside
 // the script. Otherwise the script receives a single local constant
@@ -116,17 +118,17 @@ func (e *Engine) EvalStringStrict(ctx context.Context, src string, arg any) (str
 	return s, nil
 }
 
-// Function returns a reusable evaluator that applies a fixed timeout to every
+// Script returns a reusable evaluator that applies a fixed timeout to every
 // call. sampleArg defines the binding mode and top-level contract for later
 // invocations.
-func (e *Engine) Function(src string, sampleArg any) (func(any) (any, error), error) {
-	return e.FunctionTimeout(src, sampleArg, defaultFunctionTimeout)
+func (e *Engine) Script(src string, sampleArg any) (func(any) (any, error), error) {
+	return e.ScriptTimeout(src, sampleArg, defaultFunctionTimeout)
 }
 
-// FunctionContext returns a reusable evaluator that accepts a caller-owned
+// ScriptContext returns a reusable evaluator that accepts a caller-owned
 // context on every invocation. sampleArg defines the binding mode and
 // top-level contract for later invocations.
-func (e *Engine) FunctionContext(src string, sampleArg any) (func(context.Context, any) (any, error), error) {
+func (e *Engine) ScriptContext(src string, sampleArg any) (func(context.Context, any) (any, error), error) {
 	shape := bindingShapeForArg(sampleArg)
 	prog, err := e.programForShape(src, shape)
 	if err != nil {
@@ -149,15 +151,15 @@ func (e *Engine) FunctionContext(src string, sampleArg any) (func(context.Contex
 	}, nil
 }
 
-// FunctionTimeout returns a reusable evaluator that applies timeout to every
+// ScriptTimeout returns a reusable evaluator that applies timeout to every
 // call. sampleArg defines the binding mode and top-level contract for later
 // invocations.
-func (e *Engine) FunctionTimeout(src string, sampleArg any, timeout time.Duration) (func(any) (any, error), error) {
+func (e *Engine) ScriptTimeout(src string, sampleArg any, timeout time.Duration) (func(any) (any, error), error) {
 	if timeout <= 0 {
-		return nil, fmt.Errorf("scripting: FunctionTimeout: timeout must be greater than zero")
+		return nil, fmt.Errorf("scripting: ScriptTimeout: timeout must be greater than zero")
 	}
 
-	fn, err := e.FunctionContext(src, sampleArg)
+	fn, err := e.ScriptContext(src, sampleArg)
 	if err != nil {
 		return nil, err
 	}
@@ -166,6 +168,58 @@ func (e *Engine) FunctionTimeout(src string, sampleArg any, timeout time.Duratio
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		return fn(ctx, arg)
+	}, nil
+}
+
+// Function compiles a JavaScript plugin file into a reusable Go callable.
+// Plugin source must define exactly one top-level `const plugin = name`
+// selector. The selected identifier becomes the public plugin name, and each
+// invocation passes ordered Go arguments to JavaScript as `plugin(...args)`.
+func (e *Engine) Function(src string) (string, func(...any) (any, error), error) {
+	return e.FunctionTimeout(src, defaultFunctionTimeout)
+}
+
+// FunctionContext compiles a JavaScript plugin file into a reusable Go callable
+// that accepts a caller-owned context on every invocation.
+func (e *Engine) FunctionContext(src string) (string, func(context.Context, ...any) (any, error), error) {
+	name, err := PluginSelector(src)
+	if err != nil {
+		return "", nil, err
+	}
+
+	prog, err := e.programForPluginFunction(src)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return name, func(ctx context.Context, args ...any) (any, error) {
+		v, err := e.evalProgramArgs(ctx, prog, args)
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return nil, nil
+		}
+		return v.Export(), nil
+	}, nil
+}
+
+// FunctionTimeout compiles a JavaScript plugin file into a reusable Go callable
+// that applies timeout to every invocation.
+func (e *Engine) FunctionTimeout(src string, timeout time.Duration) (string, func(...any) (any, error), error) {
+	if timeout <= 0 {
+		return "", nil, fmt.Errorf("scripting: FunctionTimeout: timeout must be greater than zero")
+	}
+
+	name, fn, err := e.FunctionContext(src)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return name, func(args ...any) (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		return fn(ctx, args...)
 	}, nil
 }
 
@@ -329,6 +383,14 @@ func (e *Engine) evalValue(ctx context.Context, src string, arg any) (goja.Value
 }
 
 func (e *Engine) evalProgram(ctx context.Context, prog *goja.Program, arg any) (goja.Value, error) {
+	return e.evalProgramCall(ctx, prog, []any{arg})
+}
+
+func (e *Engine) evalProgramArgs(ctx context.Context, prog *goja.Program, args []any) (goja.Value, error) {
+	return e.evalProgramCall(ctx, prog, []any{args})
+}
+
+func (e *Engine) evalProgramCall(ctx context.Context, prog *goja.Program, args []any) (goja.Value, error) {
 	if err := e.ensureUsable(ctx); err != nil {
 		return nil, err
 	}
@@ -350,7 +412,12 @@ func (e *Engine) evalProgram(ctx context.Context, prog *goja.Program, arg any) (
 		return nil, fmt.Errorf("scripting: compiled wrapper is not callable")
 	}
 
-	result, err := fn(goja.Undefined(), vm.ToValue(arg))
+	values := make([]goja.Value, 0, len(args))
+	for _, arg := range args {
+		values = append(values, vm.ToValue(jsPlainValue(arg)))
+	}
+
+	result, err := fn(goja.Undefined(), values...)
 	if err != nil {
 		return nil, wrapRunError(err, ctx)
 	}

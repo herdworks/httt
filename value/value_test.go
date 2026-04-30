@@ -23,7 +23,7 @@ func (data testGetter) Get(keypath string) any {
 	return value
 }
 
-func TestRewrite_DefaultHTTD(t *testing.T) {
+func TestRewrite_DefaultGet(t *testing.T) {
 	tests := []struct {
 		name   string
 		source string
@@ -32,32 +32,42 @@ func TestRewrite_DefaultHTTD(t *testing.T) {
 		{
 			name:   "bare keypath",
 			source: `${ page.title }`,
-			want:   `${ httd "page.title" }`,
+			want:   `${ get "page.title" }`,
 		},
 		{
-			name:   "pipeline with default",
-			source: `${ site.title, page.title | default "Untitled" }`,
-			want:   `${ httd "site.title, page.title" | default "Untitled" }`,
+			name:   "string literal fallback",
+			source: `${ site.title, page.title, "Untitled" }`,
+			want:   `${ get "site.title, page.title" "Untitled" }`,
 		},
 		{
-			name:   "pipeline with single-quoted default",
-			source: `${ page.title | default 'Untitled' }`,
-			want:   `${ httd "page.title" | default "Untitled" }`,
+			name:   "single-quoted string literal fallback",
+			source: `${ page.title, 'Untitled' }`,
+			want:   `${ get "page.title" "Untitled" }`,
 		},
 		{
-			name:   "reserved httd passes through",
-			source: `${ httd "page.title" }`,
-			want:   `${ httd "page.title" }`,
+			name:   "reserved get passes through",
+			source: `${ get "page.title" }`,
+			want:   `${ get "page.title" }`,
 		},
 		{
-			name:   "reserved httd with single-quoted strings",
-			source: `${ httd 'page.title' | default 'Untitled' }`,
-			want:   `${ httd "page.title" | default "Untitled" }`,
+			name:   "explicit unquoted get",
+			source: `${ get page.title }`,
+			want:   `${ get page.title }`,
+		},
+		{
+			name:   "explicit unquoted get fallback",
+			source: `${ get site.title, page.title, "Untitled" }`,
+			want:   `${ get site.title, page.title, "Untitled" }`,
+		},
+		{
+			name:   "reserved get with single-quoted strings",
+			source: `${ get 'page.title' 'Untitled' }`,
+			want:   `${ get "page.title" "Untitled" }`,
 		},
 		{
 			name:   "trim markers",
-			source: `${- page.title | default "X" -}`,
-			want:   `${- httd "page.title" | default "X" -}`,
+			source: `${- page.title, "X" -}`,
+			want:   `${- get "page.title" "X" -}`,
 		},
 	}
 
@@ -72,6 +82,70 @@ func TestRewrite_DefaultHTTD(t *testing.T) {
 				t.Fatalf("rewrite() mismatch:\nwant: %s\n got: %s", tc.want, got)
 			}
 		})
+	}
+}
+
+func TestRewrite_RegisteredFunctionCanStartPipeline(t *testing.T) {
+	funcs := FuncMap{
+		"upper": strings.ToUpper,
+	}
+
+	got, err := rewriteWithFuncs(`${ upper page.title site.title "Placeholder" }`, SyntaxDefault, funcs)
+	if err != nil {
+		t.Fatalf("rewriteWithFuncs() error = %v", err)
+	}
+
+	want := `${ upper .page.title .site.title "Placeholder" }`
+	if got != want {
+		t.Fatalf("rewriteWithFuncs() mismatch:\nwant: %s\n got: %s", want, got)
+	}
+}
+
+func TestRewrite_RegisteredFunctionArguments(t *testing.T) {
+	funcs := FuncMap{
+		"upper": strings.ToUpper,
+		"wrap":  func(args ...any) string { return fmt.Sprint(args...) },
+	}
+
+	got, err := rewriteWithFuncs(`${ wrap page.title site 123 true false nil $value .already upper foo-bar (page.title) }`, SyntaxDefault, funcs)
+	if err != nil {
+		t.Fatalf("rewriteWithFuncs() error = %v", err)
+	}
+
+	want := `${ wrap .page.title .site 123 true false nil $value .already upper foo-bar (page.title) }`
+	if got != want {
+		t.Fatalf("rewriteWithFuncs() mismatch:\nwant: %s\n got: %s", want, got)
+	}
+}
+
+func TestValidate_RewritesFunctionArguments(t *testing.T) {
+	funcs := FuncMap{
+		"upper": strings.ToUpper,
+	}
+
+	if err := validateWithFuncs(`${ upper page.title }`, SyntaxDefault, funcs); err != nil {
+		t.Fatalf("validateWithFuncs() error = %v", err)
+	}
+}
+
+func TestValidate_ParentheticalDoesNotImplicitlyGet(t *testing.T) {
+	funcs := FuncMap{
+		"upper": strings.ToUpper,
+	}
+
+	err := validateWithFuncs(`${ upper (page.title) }`, SyntaxDefault, funcs)
+	if err == nil {
+		t.Fatal("validateWithFuncs() error = nil")
+	}
+}
+
+func TestValidate_ExplicitGetDoesNotRewriteArguments(t *testing.T) {
+	err := validate(`${ get page.title }`, SyntaxDefault)
+	if err == nil {
+		t.Fatal("validate() error = nil")
+	}
+	if !strings.Contains(err.Error(), `function "page" not defined`) {
+		t.Fatalf("validate() error mismatch:\nwant page function error\n got: %v", err)
 	}
 }
 
@@ -137,7 +211,7 @@ func TestValidate_RejectsUnsupportedActions(t *testing.T) {
 	}
 }
 
-func TestRender_UsesHTTDLookup(t *testing.T) {
+func TestRender_UsesGetLookup(t *testing.T) {
 	data := testGetter{
 		"page": map[string]any{
 			"title": "Page Title",
@@ -196,8 +270,8 @@ func TestParse_ExposesNormalizedTemplate(t *testing.T) {
 		t.Fatalf("source mismatch:\nwant: %q\n got: %q", `${ page.title }`, parsed.source)
 	}
 
-	if parsed.normalized != `${ httd "page.title" }` {
-		t.Fatalf("normalized mismatch:\nwant: %q\n got: %q", `${ httd "page.title" }`, parsed.normalized)
+	if parsed.normalized != `${ get "page.title" }` {
+		t.Fatalf("normalized mismatch:\nwant: %q\n got: %q", `${ get "page.title" }`, parsed.normalized)
 	}
 }
 
@@ -240,8 +314,8 @@ func TestRender_MultiActionAnyMissRestoresWholeSource(t *testing.T) {
 	}
 }
 
-func TestRender_DefaultWinsOnMissPreventsRestore(t *testing.T) {
-	rendered, err := Render(`${ page.title | default "Untitled" }`, testGetter{}, SyntaxDefault)
+func TestRender_StringFallbackWinsOnMissPreventsRestore(t *testing.T) {
+	rendered, err := Render(`${ page.title, "Untitled" }`, testGetter{}, SyntaxDefault)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -250,14 +324,25 @@ func TestRender_DefaultWinsOnMissPreventsRestore(t *testing.T) {
 	}
 }
 
-func TestRender_SingleQuotedDefaultWinsOnMiss(t *testing.T) {
+func TestRender_StringFallbackWinsOnEmptyString(t *testing.T) {
+	data := testGetter{"page": map[string]any{"title": ""}}
+	rendered, err := Render(`${ page.title, "Untitled" }`, data, SyntaxDefault)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if rendered != "Untitled" {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Untitled", rendered)
+	}
+}
+
+func TestRender_SingleQuotedFallbackWinsOnMiss(t *testing.T) {
 	data := testGetter{
 		"site": map[string]any{
 			"title": "Caleb Hailey",
 		},
 	}
 
-	rendered, err := Render(`${ site.title } | ${ page.title | default '✱' }`, data, SyntaxDefault)
+	rendered, err := Render(`${ site.title } | ${ page.title, '✱' }`, data, SyntaxDefault)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -266,13 +351,23 @@ func TestRender_SingleQuotedDefaultWinsOnMiss(t *testing.T) {
 	}
 }
 
-func TestRender_SingleQuotedDefaultDecodesEscapes(t *testing.T) {
-	rendered, err := Render(`${ page.title | default 'Caleb\'s site' }`, testGetter{}, SyntaxDefault)
+func TestRender_SingleQuotedFallbackDecodesEscapes(t *testing.T) {
+	rendered, err := Render(`${ page.title, 'Caleb\'s site' }`, testGetter{}, SyntaxDefault)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
 	if rendered != "Caleb's site" {
 		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Caleb's site", rendered)
+	}
+}
+
+func TestValidate_DefaultFunctionRemoved(t *testing.T) {
+	err := validate(`${ page.title | default "Untitled" }`, SyntaxDefault)
+	if err == nil {
+		t.Fatal("validate() error = nil")
+	}
+	if !strings.Contains(err.Error(), `function "default" not defined`) {
+		t.Fatalf("validate() error mismatch:\nwant default not defined\n got: %v", err)
 	}
 }
 
@@ -309,6 +404,76 @@ func TestRender_UserFunctionPipelineWithSingleQuotedArgument(t *testing.T) {
 	}
 
 	rendered, err := Render(`${ page.title | suffix '!' }`, data, SyntaxDefault, funcs)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	if rendered != "Hello!" {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Hello!", rendered)
+	}
+}
+
+func TestRender_UserFunctionFirstWithExplicitGet(t *testing.T) {
+	data := testGetter{
+		"page": map[string]any{
+			"title": "Hello",
+		},
+	}
+	funcs := FuncMap{
+		"upper": strings.ToUpper,
+	}
+
+	rendered, err := Render(`${ upper (get "page.title") }`, data, SyntaxDefault, funcs)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	if rendered != "HELLO" {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "HELLO", rendered)
+	}
+}
+
+func TestRender_UserFunctionFirstWithDataArguments(t *testing.T) {
+	data := testGetter{
+		"page": map[string]any{
+			"title": "Hello",
+		},
+		"site": map[string]any{
+			"title": "World",
+		},
+	}
+	funcs := FuncMap{
+		"join": func(left string, right string) string {
+			return left + ", " + right
+		},
+	}
+
+	rendered, err := Render(`${ join page.title site.title }`, data, SyntaxDefault, funcs)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	if rendered != "Hello, World" {
+		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Hello, World", rendered)
+	}
+}
+
+func TestRender_UserFunctionPipelineArgument(t *testing.T) {
+	data := testGetter{
+		"page": map[string]any{
+			"title": "Hello",
+		},
+		"site": map[string]any{
+			"suffix": "!",
+		},
+	}
+	funcs := FuncMap{
+		"suffix": func(suffix string, value any) string {
+			return fmt.Sprint(value) + suffix
+		},
+	}
+
+	rendered, err := Render(`${ page.title | suffix site.suffix }`, data, SyntaxDefault, funcs)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}

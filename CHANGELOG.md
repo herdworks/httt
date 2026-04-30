@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* Added standard-output JavaScript `console` logging for scripts and plugins, including `console.log`, `console.info`, `console.warn`, `console.error`, `console.debug`, and `console.logger(name)` for named log prefixes.
+* Changed JavaScript plugins to regular function files selected with a top-level `const plugin = name`, replacing `ht:plugin` comment metadata, filename fallback names, and function-body plugin scripts.
+* Changed scripting-backed plugins to accept ordered variadic arguments so template pipelines can pass explicit function arguments before the upstream pipeline value.
+* Renamed the reusable JavaScript script-body APIs from `scripting.Function*` to `scripting.Script*`; `scripting.Function*` now compiles plugin function files.
+* Changed the template data lookup function from `httd` to `get`, and relaxed value pipelines so registered functions can start a pipeline when data lookups are written as explicit `get` calls.
+* Changed template value fallbacks to use a final string literal argument on `get`, replacing the public `default` function. `--ht-value(...)` can still accept a CSS-friendly second argument, which is applied as the CSS fallback after the expression pipeline.
+
 ## v0.22.0 (2026-04-28)
 
 Added new plugins package with formalized HyperTemplates plugin spec, and redesigned HyperTemplates internals around relative paths, replacing the overly complex HyperFile struct with a collection of helper methods that require callers to provider root directories as context for relative path []string slices. 
@@ -94,7 +101,7 @@ Improved HyperMark support for detecting inline vs block-level `ht-block` elemen
 * Added support for passing a discrete `userData *TemplateData` parameter to `Template.Process()`;
   callers can now seed user-generated template data in `ht-block` elements.
   _NOTE: this is a breaking API change for direct callers of `Template.Process()`._
-* Added the `value` package for `${ ... }` template values with default `httd` lookups and unsupported-action validation.
+* Added the `value` package for `${ ... }` template values with default `get` lookups and unsupported-action validation.
 * Added template value rendering for element text content with the new `value` package.
 * Added `hypermark.HTBlockHTMLParserExtension()` goldmark extension to promote `ht-block` elements to CommonMark type-6 HTML blocks;
   this prevents `ht-block` elements from being wrapped in `<p>` tags when they appear on their own line.

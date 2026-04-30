@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -20,6 +22,36 @@ func (e *Engine) cacheLen() int {
 		return true
 	})
 	return n
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	old := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+
+	os.Stdout = writer
+	output := make(chan string, 1)
+	go func() {
+		var b strings.Builder
+		_, _ = io.Copy(&b, reader)
+		output <- b.String()
+	}()
+
+	fn()
+
+	os.Stdout = old
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close stdout writer: %v", err)
+	}
+	got := <-output
+	if err := reader.Close(); err != nil {
+		t.Fatalf("close stdout reader: %v", err)
+	}
+	return got
 }
 
 func TestEval_Basics(t *testing.T) {
@@ -386,30 +418,30 @@ func TestEval_EvalTimeout(t *testing.T) {
 	}
 }
 
-func TestFunctionTimeout_DoesNotPoisonLaterEval(t *testing.T) {
+func TestScriptTimeout_DoesNotPoisonLaterEval(t *testing.T) {
 	old := runtime.GOMAXPROCS(1)
 	t.Cleanup(func() { runtime.GOMAXPROCS(old) })
 
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionTimeout("return 1 + 1", nil, 25*time.Millisecond)
+	fn, err := e.ScriptTimeout("return 1 + 1", nil, 25*time.Millisecond)
 	if err != nil {
-		t.Fatalf("FunctionTimeout: unexpected error: %v", err)
+		t.Fatalf("ScriptTimeout: unexpected error: %v", err)
 	}
 
 	for i := 0; i < 1000; i++ {
 		got, err := fn(nil)
 		if err != nil {
-			t.Fatalf("FunctionTimeout iteration %d: unexpected error: %v", i, err)
+			t.Fatalf("ScriptTimeout iteration %d: unexpected error: %v", i, err)
 		}
 		if got != int64(2) {
-			t.Fatalf("FunctionTimeout iteration %d: got %#v; want %#v", i, got, int64(2))
+			t.Fatalf("ScriptTimeout iteration %d: got %#v; want %#v", i, got, int64(2))
 		}
 
 		got, err = e.Eval(context.Background(), "return 1 + 1", nil)
 		if err != nil {
-			t.Fatalf("Eval iteration %d: unexpected error after FunctionTimeout call: %v", i, err)
+			t.Fatalf("Eval iteration %d: unexpected error after ScriptTimeout call: %v", i, err)
 		}
 		if got != int64(2) {
 			t.Fatalf("Eval iteration %d: got %#v; want %#v", i, got, int64(2))
@@ -553,7 +585,7 @@ func TestEval_SandboxDefaults(t *testing.T) {
 
 	// The hardened runtime still does not provide these Node-style globals.
 	// We check them via `typeof` so the runtime doesn't throw.
-	forbidden := []string{"require", "process", "console", "setTimeout", "setInterval", "Buffer"}
+	forbidden := []string{"require", "process", "setTimeout", "setInterval", "Buffer"}
 	for _, name := range forbidden {
 		got, err := e.Eval(context.Background(), "return typeof "+name, nil)
 		if err != nil {
@@ -562,6 +594,75 @@ func TestEval_SandboxDefaults(t *testing.T) {
 		if got != "undefined" {
 			t.Errorf("typeof %s: got %v; want \"undefined\"", name, got)
 		}
+	}
+}
+
+func TestEval_ConsoleWritesScriptingPrefixedLogs(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	var got any
+	var err error
+	output := captureStdout(t, func() {
+		got, err = e.Eval(context.Background(), `
+			console.log("hello", input)
+			console.info("ready")
+			console.warn("careful")
+			console.error("broken")
+			console.debug("details")
+			return input
+		`, "world")
+	})
+	if err != nil {
+		t.Fatalf("Eval: unexpected error: %v", err)
+	}
+	if got != "world" {
+		t.Fatalf("Eval: got %#v; want %#v", got, "world")
+	}
+
+	want := strings.Join([]string{
+		"[scripting] hello world",
+		"[scripting] INFO ready",
+		"[scripting] WARN careful",
+		"[scripting] ERROR broken",
+		"[scripting] DEBUG details",
+		"",
+	}, "\n")
+	if output != want {
+		t.Fatalf("stdout:\ngot:\n%swant:\n%s", output, want)
+	}
+}
+
+func TestEval_ConsoleLoggerWritesNamedPrefixedLogs(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	var got any
+	var err error
+	output := captureStdout(t, func() {
+		got, err = e.Eval(context.Background(), `
+			const logger = console.logger("plugin/foo")
+			logger.log("hello", input)
+			logger.warn("careful")
+			console.log("still default")
+			return logger.name
+		`, "world")
+	})
+	if err != nil {
+		t.Fatalf("Eval: unexpected error: %v", err)
+	}
+	if got != "plugin/foo" {
+		t.Fatalf("Eval: got %#v; want %#v", got, "plugin/foo")
+	}
+
+	want := strings.Join([]string{
+		"[plugin/foo] hello world",
+		"[plugin/foo] WARN careful",
+		"[scripting] still default",
+		"",
+	}, "\n")
+	if output != want {
+		t.Fatalf("stdout:\ngot:\n%swant:\n%s", output, want)
 	}
 }
 
@@ -592,6 +693,10 @@ func TestEval_GlobalHardeningBlocksBroadSideEffects(t *testing.T) {
 		{
 			name: "function prototype mutation",
 			src:  "Function.prototype.call = function() { return 0 }",
+		},
+		{
+			name: "console mutation",
+			src:  "console.log = function() {}",
 		},
 	}
 
@@ -671,13 +776,13 @@ func TestEval_NoGlobalLeakFromScript(t *testing.T) {
 	}
 }
 
-func TestFunctionContext_MapBindingContract(t *testing.T) {
+func TestScriptContext_MapBindingContract(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionContext("return typeof site", map[string]any{"user": nil})
+	fn, err := e.ScriptContext("return typeof site", map[string]any{"user": nil})
 	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
 	}
 
 	got, err := fn(context.Background(), map[string]any{
@@ -685,88 +790,544 @@ func TestFunctionContext_MapBindingContract(t *testing.T) {
 		"site": "example.com",
 	})
 	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
 	}
 	if got != "undefined" {
-		t.Fatalf("FunctionContext: got %#v; want %#v", got, "undefined")
+		t.Fatalf("ScriptContext: got %#v; want %#v", got, "undefined")
 	}
 
 	_, err = fn(context.Background(), "not a map")
 	if err == nil {
-		t.Fatal("FunctionContext: expected type validation error, got nil")
+		t.Fatal("ScriptContext: expected type validation error, got nil")
 	}
 	if !strings.Contains(err.Error(), "map[string]any") {
-		t.Fatalf("FunctionContext: got %q; want map validation error", err)
+		t.Fatalf("ScriptContext: got %q; want map validation error", err)
 	}
 
-	fn, err = e.FunctionContext("return user.name", map[string]any{"user": nil, "site": nil})
+	fn, err = e.ScriptContext("return user.name", map[string]any{"user": nil, "site": nil})
 	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
 	}
 
 	_, err = fn(context.Background(), map[string]any{"user": map[string]any{"name": "Alice"}})
 	if err == nil {
-		t.Fatal("FunctionContext: expected missing key validation error, got nil")
+		t.Fatal("ScriptContext: expected missing key validation error, got nil")
 	}
 	if !strings.Contains(err.Error(), "site") {
-		t.Fatalf("FunctionContext: got %q; want missing key error", err)
+		t.Fatalf("ScriptContext: got %q; want missing key error", err)
 	}
 }
 
-func TestFunctionContext_InputBindingContract(t *testing.T) {
+func TestScriptContext_InputBindingContract(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionContext("return typeof name", "")
+	fn, err := e.ScriptContext("return typeof name", "")
 	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
 	}
 
 	got, err := fn(context.Background(), "Alice")
 	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
 	}
 	if got != "undefined" {
-		t.Fatalf("FunctionContext: got %#v; want %#v", got, "undefined")
+		t.Fatalf("ScriptContext: got %#v; want %#v", got, "undefined")
 	}
 
-	fn, err = e.FunctionContext("return input + 1", 0)
+	fn, err = e.ScriptContext("return input + 1", 0)
 	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
 	}
 
 	got, err = fn(context.Background(), 41)
 	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
 	}
 	if got != int64(42) {
-		t.Fatalf("FunctionContext: got %#v; want %#v", got, int64(42))
+		t.Fatalf("ScriptContext: got %#v; want %#v", got, int64(42))
 	}
 
 	_, err = fn(context.Background(), map[string]any{"input": 41})
 	if err == nil {
-		t.Fatal("FunctionContext: expected map rejection, got nil")
+		t.Fatal("ScriptContext: expected map rejection, got nil")
 	}
 	if !strings.Contains(err.Error(), "non-map input") {
-		t.Fatalf("FunctionContext: got %q; want non-map validation error", err)
+		t.Fatalf("ScriptContext: got %q; want non-map validation error", err)
+	}
+
+	_, err = fn(context.Background(), testTemplateData{"input": 41})
+	if err == nil {
+		t.Fatal("ScriptContext: expected defined map rejection, got nil")
+	}
+	if !strings.Contains(err.Error(), "non-map input") {
+		t.Fatalf("ScriptContext: got %q; want non-map validation error", err)
 	}
 }
 
-func TestFunction_NoReturnExportsNil(t *testing.T) {
+func TestScript_NoReturnExportsNil(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.Function("const value = input", nil)
+	fn, err := e.Script("const value = input", nil)
+	if err != nil {
+		t.Fatalf("Script: unexpected error: %v", err)
+	}
+
+	got, err := fn("hello")
+	if err != nil {
+		t.Fatalf("Script: unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("Script: got %#v; want nil", got)
+	}
+}
+
+func TestScriptContext_RespectsCancellation(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	fn, err := e.ScriptContext("while (true) {}", nil)
+	if err != nil {
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(25 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	_, err = fn(ctx, nil)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("ScriptContext: expected interrupt error, got nil")
+	}
+	if !errors.Is(err, ErrInterrupted) {
+		t.Fatalf("ScriptContext: error should wrap ErrInterrupted: %v", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("ScriptContext: took %v; cancellation should have interrupted well under 1s", elapsed)
+	}
+}
+
+func TestScriptTimeout_HonorsTimeout(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	fn, err := e.ScriptTimeout("while (true) {}", nil, 25*time.Millisecond)
+	if err != nil {
+		t.Fatalf("ScriptTimeout: unexpected error: %v", err)
+	}
+
+	start := time.Now()
+	_, err = fn(nil)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("ScriptTimeout: expected interrupt error, got nil")
+	}
+	if !errors.Is(err, ErrInterrupted) {
+		t.Fatalf("ScriptTimeout: error should wrap ErrInterrupted: %v", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("ScriptTimeout: took %v; timeout should have interrupted well under 1s", elapsed)
+	}
+}
+
+func TestScript_UsesDefaultTimeout(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	fn, err := e.Script("while (true) {}", nil)
+	if err != nil {
+		t.Fatalf("Script: unexpected error: %v", err)
+	}
+
+	start := time.Now()
+	_, err = fn(nil)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("Script: expected interrupt error, got nil")
+	}
+	if !errors.Is(err, ErrInterrupted) {
+		t.Fatalf("Script: error should wrap ErrInterrupted: %v", err)
+	}
+	if elapsed < 150*time.Millisecond {
+		t.Fatalf("Script: took %v; default timeout should be substantially above immediate cancellation", elapsed)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("Script: took %v; default timeout should have interrupted well under 1s", elapsed)
+	}
+}
+
+func TestScript_DefaultEngineDelegatesAndReusesSingleton(t *testing.T) {
+	engine := shared()
+	before := engine.cacheLen()
+
+	src := fmt.Sprintf("return `%s ${name}`", t.Name())
+	fn, err := Script(src, map[string]any{"name": nil})
+	if err != nil {
+		t.Fatalf("Script: unexpected error: %v", err)
+	}
+
+	got, err := fn(map[string]any{"name": "Alice"})
+	if err != nil {
+		t.Fatalf("Script: unexpected error: %v", err)
+	}
+	if got != t.Name()+" Alice" {
+		t.Fatalf("Script: got %#v; want %#v", got, t.Name()+" Alice")
+	}
+
+	if shared() != engine {
+		t.Fatal("shared: expected singleton engine pointer")
+	}
+
+	if got := shared().cacheLen(); got != before+1 {
+		t.Fatalf("cacheLen: got %d; want %d after package-level Script call", got, before+1)
+	}
+}
+
+func TestScriptContextAndScriptTimeout_DefaultEngineDelegates(t *testing.T) {
+	engine := shared()
+	before := engine.cacheLen()
+
+	srcContext := fmt.Sprintf("return `%s ${name}`", t.Name())
+	fnContext, err := ScriptContext(srcContext, map[string]any{"name": nil})
+	if err != nil {
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
+	}
+
+	got, err := fnContext(context.Background(), map[string]any{"name": "Alice"})
+	if err != nil {
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
+	}
+	if got != t.Name()+" Alice" {
+		t.Fatalf("ScriptContext: got %#v; want %#v", got, t.Name()+" Alice")
+	}
+
+	srcTimeout := fmt.Sprintf("return `%s ${input}`", t.Name())
+	fnTimeout, err := ScriptTimeout(srcTimeout, "", 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("ScriptTimeout: unexpected error: %v", err)
+	}
+
+	got, err = fnTimeout("Bob")
+	if err != nil {
+		t.Fatalf("ScriptTimeout: unexpected error: %v", err)
+	}
+	if got != t.Name()+" Bob" {
+		t.Fatalf("ScriptTimeout: got %#v; want %#v", got, t.Name()+" Bob")
+	}
+
+	if shared() != engine {
+		t.Fatal("shared: expected singleton engine pointer")
+	}
+
+	if got := shared().cacheLen(); got != before+2 {
+		t.Fatalf("cacheLen: got %d; want %d after ScriptContext and ScriptTimeout", got, before+2)
+	}
+}
+
+func TestScript_SharesCacheWithEval(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	src := fmt.Sprintf("return `%s ${user.name}`", t.Name())
+	before := e.cacheLen()
+
+	fn, err := e.ScriptContext(src, map[string]any{"user": nil})
+	if err != nil {
+		t.Fatalf("ScriptContext: unexpected error: %v", err)
+	}
+
+	if _, err := fn(context.Background(), map[string]any{"user": map[string]any{"name": "Alice"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Eval(context.Background(), src, map[string]any{"user": map[string]any{"name": "Bob"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := e.cacheLen(); got != before+1 {
+		t.Fatalf("cacheLen: got %d; want %d (ScriptContext and Eval should share the cache)", got, before+1)
+	}
+}
+
+func TestFunction_OrderedArgs(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	name, fn, err := e.Function(`
+		function join(prefix, input) {
+			return prefix + ":" + input
+		}
+		const plugin = join
+	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if name != "join" {
+		t.Fatalf("Function name = %q, want join", name)
+	}
+
+	got, err := fn("title", "Hello")
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if got != "title:Hello" {
+		t.Fatalf("Function: got %#v; want %#v", got, "title:Hello")
+	}
+}
+
+func TestFunction_ZeroArgsAndDefaults(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	_, fn, err := e.Function(`
+		function label(input = "Untitled") {
+			return input
+		}
+		const plugin = label
+	`)
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+
+	got, err := fn()
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if got != "Untitled" {
+		t.Fatalf("Function: got %#v; want %#v", got, "Untitled")
+	}
+}
+
+func TestFunction_ArrowFunctionEntrypoint(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	name, fn, err := e.Function(`
+		const upper = (input) => input.toUpperCase()
+		const plugin = upper
+	`)
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if name != "upper" {
+		t.Fatalf("Function name = %q, want upper", name)
 	}
 
 	got, err := fn("hello")
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
 	}
-	if got != nil {
-		t.Fatalf("Function: got %#v; want nil", got)
+	if got != "HELLO" {
+		t.Fatalf("Function: got %#v; want %#v", got, "HELLO")
+	}
+}
+
+func TestFunction_ConsoleWritesScriptingPrefixedLogs(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	_, fn, err := e.Function(`
+		function trace(input) {
+			console.log("hello", input)
+			console.info("ready")
+			console.warn("careful")
+			console.error("broken")
+			console.debug("details")
+			return input
+		}
+		const plugin = trace
+	`)
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+
+	var got any
+	output := captureStdout(t, func() {
+		got, err = fn("world")
+	})
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if got != "world" {
+		t.Fatalf("Function: got %#v; want %#v", got, "world")
+	}
+
+	want := strings.Join([]string{
+		"[scripting] hello world",
+		"[scripting] INFO ready",
+		"[scripting] WARN careful",
+		"[scripting] ERROR broken",
+		"[scripting] DEBUG details",
+		"",
+	}, "\n")
+	if output != want {
+		t.Fatalf("stdout:\ngot:\n%swant:\n%s", output, want)
+	}
+}
+
+func TestFunction_ConsoleLoggerWritesNamedPrefixedLogs(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	_, fn, err := e.Function(`
+		const logger = console.logger("plugin/trace")
+
+		function trace(input) {
+			logger.log("hello", input)
+			logger.error("broken")
+			return input
+		}
+		const plugin = trace
+	`)
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+
+	var got any
+	output := captureStdout(t, func() {
+		got, err = fn("world")
+	})
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if got != "world" {
+		t.Fatalf("Function: got %#v; want %#v", got, "world")
+	}
+
+	want := strings.Join([]string{
+		"[plugin/trace] hello world",
+		"[plugin/trace] ERROR broken",
+		"",
+	}, "\n")
+	if output != want {
+		t.Fatalf("stdout:\ngot:\n%swant:\n%s", output, want)
+	}
+}
+
+func TestFunction_MapArgIsPlainArgument(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	_, fn, err := e.Function(`
+		function label(page) {
+			return typeof input + ":" + page.title
+		}
+		const plugin = label
+	`)
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+
+	got, err := fn(map[string]any{"title": "Hello"})
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if got != "undefined:Hello" {
+		t.Fatalf("Function: got %#v; want %#v", got, "undefined:Hello")
+	}
+}
+
+type testTemplateData map[string]any
+
+func (data testTemplateData) Get(key string) any {
+	return data[key]
+}
+
+func TestFunction_DefinedStringMapArgIsPlainObject(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	_, fn, err := e.Function(`
+		function inspect(input) {
+			return [
+				input.title,
+				input.nested.ok,
+				input.items[0].name,
+				JSON.stringify(input.nested),
+				Object.keys(input).sort().join(","),
+				typeof input.Get
+			].join(":")
+		}
+		const plugin = inspect
+	`)
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+
+	got, err := fn(testTemplateData{
+		"title":  "Hello",
+		"nested": testTemplateData{"ok": true},
+		"items":  []testTemplateData{{"name": "First"}},
+	})
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if got != `Hello:true:First:{"ok":true}:items,nested,title:undefined` {
+		t.Fatalf("Function: got %#v; want defined map as plain JavaScript object", got)
+	}
+}
+
+func TestFunction_NestedDefinedStringMapArgIsPlainObject(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	_, fn, err := e.Function(`
+		function inspect(input) {
+			return input.site.title + ":" + Object.keys(input.site).sort().join(",")
+		}
+		const plugin = inspect
+	`)
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+
+	got, err := fn(map[string]any{
+		"site": testTemplateData{"title": "Hello"},
+	})
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+	if got != "Hello:title" {
+		t.Fatalf("Function: got %#v; want nested defined map as plain JavaScript object", got)
+	}
+}
+
+func TestEval_DefinedStringMapArgUsesMapBinding(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	got, err := e.Eval(context.Background(), "return title", testTemplateData{"title": "Hello"})
+	if err != nil {
+		t.Fatalf("Eval: unexpected error: %v", err)
+	}
+	if got != "Hello" {
+		t.Fatalf("Eval: got %#v; want %#v", got, "Hello")
+	}
+}
+
+func TestFunction_RuntimeError(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+
+	_, fn, err := e.Function(`
+		function broken() {
+			return missing.value
+		}
+		const plugin = broken
+	`)
+	if err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
+	}
+
+	if _, err := fn(); err == nil {
+		t.Fatal("Function: expected runtime error, got nil")
 	}
 }
 
@@ -774,7 +1335,12 @@ func TestFunctionContext_RespectsCancellation(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionContext("while (true) {}", nil)
+	_, fn, err := e.FunctionContext(`
+		function spin() {
+			while (true) {}
+		}
+		const plugin = spin
+	`)
 	if err != nil {
 		t.Fatalf("FunctionContext: unexpected error: %v", err)
 	}
@@ -786,7 +1352,7 @@ func TestFunctionContext_RespectsCancellation(t *testing.T) {
 	}()
 
 	start := time.Now()
-	_, err = fn(ctx, nil)
+	_, err = fn(ctx)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -804,13 +1370,18 @@ func TestFunctionTimeout_HonorsTimeout(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	fn, err := e.FunctionTimeout("while (true) {}", nil, 25*time.Millisecond)
+	_, fn, err := e.FunctionTimeout(`
+		function spin() {
+			while (true) {}
+		}
+		const plugin = spin
+	`, 25*time.Millisecond)
 	if err != nil {
 		t.Fatalf("FunctionTimeout: unexpected error: %v", err)
 	}
 
 	start := time.Now()
-	_, err = fn(nil)
+	_, err = fn()
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -824,122 +1395,58 @@ func TestFunctionTimeout_HonorsTimeout(t *testing.T) {
 	}
 }
 
-func TestFunction_UsesDefaultTimeout(t *testing.T) {
-	e := NewEngine(Options{})
-	t.Cleanup(func() { e.Close() })
-
-	fn, err := e.Function("while (true) {}", nil)
-	if err != nil {
-		t.Fatalf("Function: unexpected error: %v", err)
-	}
-
-	start := time.Now()
-	_, err = fn(nil)
-	elapsed := time.Since(start)
-
-	if err == nil {
-		t.Fatal("Function: expected interrupt error, got nil")
-	}
-	if !errors.Is(err, ErrInterrupted) {
-		t.Fatalf("Function: error should wrap ErrInterrupted: %v", err)
-	}
-	if elapsed < 150*time.Millisecond {
-		t.Fatalf("Function: took %v; default timeout should be substantially above immediate cancellation", elapsed)
-	}
-	if elapsed > time.Second {
-		t.Fatalf("Function: took %v; default timeout should have interrupted well under 1s", elapsed)
-	}
-}
-
 func TestFunction_DefaultEngineDelegatesAndReusesSingleton(t *testing.T) {
 	engine := shared()
 	before := engine.cacheLen()
 
-	src := fmt.Sprintf("return `%s ${name}`", t.Name())
-	fn, err := Function(src, map[string]any{"name": nil})
+	src := `
+		function label(input) {
+			return input
+		}
+		const plugin = label
+	`
+	name, fn, err := Function(src)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
 	}
-
-	got, err := fn(map[string]any{"name": "Alice"})
-	if err != nil {
-		t.Fatalf("Function: unexpected error: %v", err)
+	if name != "label" {
+		t.Fatalf("Function name = %q, want label", name)
 	}
-	if got != t.Name()+" Alice" {
-		t.Fatalf("Function: got %#v; want %#v", got, t.Name()+" Alice")
+	if _, err := fn("hello"); err != nil {
+		t.Fatalf("Function: unexpected error: %v", err)
 	}
 
 	if shared() != engine {
 		t.Fatal("shared: expected singleton engine pointer")
 	}
-
 	if got := shared().cacheLen(); got != before+1 {
 		t.Fatalf("cacheLen: got %d; want %d after package-level Function call", got, before+1)
 	}
 }
 
-func TestFunctionContextAndFunctionTimeout_DefaultEngineDelegates(t *testing.T) {
-	engine := shared()
-	before := engine.cacheLen()
-
-	srcContext := fmt.Sprintf("return `%s ${name}`", t.Name())
-	fnContext, err := FunctionContext(srcContext, map[string]any{"name": nil})
-	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
-	}
-
-	got, err := fnContext(context.Background(), map[string]any{"name": "Alice"})
-	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
-	}
-	if got != t.Name()+" Alice" {
-		t.Fatalf("FunctionContext: got %#v; want %#v", got, t.Name()+" Alice")
-	}
-
-	srcTimeout := fmt.Sprintf("return `%s ${input}`", t.Name())
-	fnTimeout, err := FunctionTimeout(srcTimeout, "", 100*time.Millisecond)
-	if err != nil {
-		t.Fatalf("FunctionTimeout: unexpected error: %v", err)
-	}
-
-	got, err = fnTimeout("Bob")
-	if err != nil {
-		t.Fatalf("FunctionTimeout: unexpected error: %v", err)
-	}
-	if got != t.Name()+" Bob" {
-		t.Fatalf("FunctionTimeout: got %#v; want %#v", got, t.Name()+" Bob")
-	}
-
-	if shared() != engine {
-		t.Fatal("shared: expected singleton engine pointer")
-	}
-
-	if got := shared().cacheLen(); got != before+2 {
-		t.Fatalf("cacheLen: got %d; want %d after FunctionContext and FunctionTimeout", got, before+2)
-	}
-}
-
-func TestFunction_SharesCacheWithEval(t *testing.T) {
+func TestFunction_SharesCacheAcrossCalls(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	src := fmt.Sprintf("return `%s ${user.name}`", t.Name())
+	src := `
+		function label(input) {
+			return input
+		}
+		const plugin = label
+	`
 	before := e.cacheLen()
 
-	fn, err := e.FunctionContext(src, map[string]any{"user": nil})
+	_, fn, err := e.Function(src)
 	if err != nil {
-		t.Fatalf("FunctionContext: unexpected error: %v", err)
+		t.Fatalf("Function: unexpected error: %v", err)
 	}
-
-	if _, err := fn(context.Background(), map[string]any{"user": map[string]any{"name": "Alice"}}); err != nil {
-		t.Fatal(err)
+	for _, input := range []string{"Alice", "Bob", "Zara"} {
+		if _, err := fn(input); err != nil {
+			t.Fatalf("Function(%q): %v", input, err)
+		}
 	}
-	if _, err := e.Eval(context.Background(), src, map[string]any{"user": map[string]any{"name": "Bob"}}); err != nil {
-		t.Fatal(err)
-	}
-
 	if got := e.cacheLen(); got != before+1 {
-		t.Fatalf("cacheLen: got %d; want %d (FunctionContext and Eval should share the cache)", got, before+1)
+		t.Fatalf("cacheLen: got %d; want %d after repeated Function calls", got, before+1)
 	}
 }
 

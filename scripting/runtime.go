@@ -13,11 +13,16 @@ Object.freeze(Array);
 Object.freeze(Array.prototype);
 Object.freeze(Function);
 Object.freeze(Function.prototype);
+Object.freeze(console);
 Object.freeze(globalThis);
 `)
 
 func newRuntime() *goja.Runtime {
 	vm := goja.New()
+
+	if err := installConsole(vm); err != nil {
+		panic(fmt.Sprintf("scripting: install console: %v", err))
+	}
 
 	if err := hardenRuntime(vm); err != nil {
 		panic(fmt.Sprintf("scripting: harden runtime: %v", err))

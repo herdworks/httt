@@ -5,8 +5,8 @@ The `value` package powers HyperTemplates template values. A template value is a
 
 Template values come in two forms:
 
-* Simple values resolve directly from TemplateData through `httd`.
-* Computed values resolve data first, then transform it through plugins.
+* Simple values resolve directly from TemplateData through `get`.
+* Computed values transform bare data identifiers through plugins.
 
 Examples:
 
@@ -28,28 +28,31 @@ ${ page.title }
 normalizes to:
 
 ```gotemplate
-${ httd "page.title" }
+${ get "page.title" }
 ```
 
 Comma-separated keypaths are fallbacks:
 
 ```gotemplate
-${ site.title, page.title | default "Untitled" }
+${ site.title, page.title, "Untitled" }
 ```
 
 normalizes to:
 
 ```gotemplate
-${ httd "site.title, page.title" | default "Untitled" }
+${ get "site.title, page.title" "Untitled" }
 ```
 
-`httd` resolves keypaths through any type that implements `Get(string) any` and
-returns the first non-nil value.
+`get` resolves keypaths through any type that implements `Get(string) any` and
+returns the first non-nil value. If the last comma-separated argument is a
+string literal, `get` uses it as the fallback when all keypaths miss or the
+resolved value is an empty string.
 
 ## Computed Values
 
-Computed values use plugins as downstream transformers. Every supported
-pipeline starts with `httd`, either explicitly or through the implicit rewrite.
+Computed values use plugins as transformers. If the first token in a pipeline is
+not `get` and not registered in the caller's function map, the value package
+rewrites that first pipeline command as an implicit `get`.
 
 ```gotemplate
 ${ page.title | upper }
@@ -58,12 +61,28 @@ ${ page.title | upper }
 normalizes to:
 
 ```gotemplate
-${ httd "page.title" | upper }
+${ get "page.title" | upper }
 ```
 
-The only built-in DSL functions are `httd` and `default`. Built-in
-`text/template` functions such as `printf`, `len`, `index`, and `call` are
-outside the DSL unless registered as plugins by the caller.
+Pipelines may also start with a registered function. In that shape, top-level
+bare identifier arguments are data references:
+
+```gotemplate
+${ concat page.title site.title "Untitled" }
+```
+
+Registered functions and parenthetical expressions are escape hatches into raw
+`text/template` syntax. Explicit `get` calls are left alone, so their arguments
+must already use the correct `get` syntax:
+
+```gotemplate
+${ upper (get "page.title") }
+```
+
+Parenthetical expressions do not perform implicit gets. The only built-in
+public DSL function is `get`. Built-in `text/template` functions such as
+`printf`, `len`, `index`, and `call` are outside the DSL unless registered as
+plugins by the caller.
 
 ## Missing Values
 
@@ -72,13 +91,13 @@ If any action in a rendered template value source resolves to
 and emits the original user-visible source verbatim. That keeps unresolved
 values visible instead of leaking partial substitutions.
 
-Use `default` for per-value fallbacks:
+Use a final string literal for per-value fallbacks:
 
 ```gotemplate
-${ page.title | default "Untitled" }
+${ page.title, "Untitled" }
 ```
 
-`default` returns the fallback when the value is nil or an empty string.
+The fallback is returned when the value is nil or an empty string.
 
 ## CSS Values
 
@@ -92,8 +111,10 @@ ${ page.title | default "Untitled" }
 }
 ```
 
-The optional second argument is a fallback value, following the same convention
-as CSS `var(--name, fallback)`.
+The quoted first argument follows the same grammar as `${ ... }`. The optional
+second argument is a CSS fallback applied after the expression is evaluated. It
+is used when the expression renders no value, and is not used for present
+falsey values such as `""`, `0`, or `false`.
 
 ## HTML Directive
 
