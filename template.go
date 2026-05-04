@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	htmltemplate "html/template"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/andybalholm/cascadia"
+	htmarkdown "github.com/herdworks/hypertemplates-go/markdown"
 	htplugins "github.com/herdworks/hypertemplates-go/plugins"
 	htvalue "github.com/herdworks/hypertemplates-go/value"
 	"golang.org/x/net/html"
@@ -209,8 +211,8 @@ func (template *Template) RenderTemplate(element *html.Node, data *TemplateData,
 		for _, p := range params[1:] {
 			nestedData.Set(p.Target, p.Value()) // set additional TemplateData values
 		}
-		nestedData.SetKeyValue("ht.index", index) // set template meta
-		nestedData.SetKeyValue("ht.count", count) // set template meta
+		nestedData.Set("ht.index", index) // set template meta
+		nestedData.Set("ht.count", count) // set template meta
 		nestedTemplate := Template{
 			Layout:         layoutTemplate,
 			Theme:          template.Theme,
@@ -352,25 +354,50 @@ func (template *Template) RenderValues(element *html.Node, data *TemplateData) (
 		if !containsSyntaxMarker(attribute.Val, syntax) {
 			continue
 		}
-		if element.Attr[index].Val, err = htvalue.Render(attribute.Val, data, syntax, funcs); err != nil {
+		if element.Attr[index].Val, err = htvalue.RenderString(attribute.Val, data, syntax, funcs); err != nil {
 			return err
 		}
 	}
 
-	childSyntax := htvalue.SyntaxDefault
 	if element.Data == "style" {
-		childSyntax = htvalue.SyntaxCSS
-	}
-
-	for child := element.FirstChild; child != nil; child = child.NextSibling {
-		if child.Type != html.TextNode {
-			continue
+		// CSS content stays as a single text node; no html/markdown injection.
+		for child := element.FirstChild; child != nil; child = child.NextSibling {
+			if child.Type != html.TextNode {
+				continue
+			}
+			if !containsSyntaxMarker(child.Data, htvalue.SyntaxCSS) {
+				continue
+			}
+			if child.Data, err = htvalue.RenderString(child.Data, data, htvalue.SyntaxCSS, funcs); err != nil {
+				return err
+			}
 		}
-		if !containsSyntaxMarker(child.Data, childSyntax) {
-			continue
+	} else {
+		nodeFuncs := htvalue.FuncMap{
+			"html":     htmlValueFunc(element),
+			"markdown": markdownValueFunc(element, template.MarkdownConfig),
 		}
-		if child.Data, err = htvalue.Render(child.Data, data, childSyntax, funcs); err != nil {
-			return err
+		// Snapshot text-node children before iterating: RenderNodes splices
+		// new nodes into the parent and removes the original text node, which
+		// invalidates NextSibling traversal.
+		var textChildren []*html.Node
+		for child := element.FirstChild; child != nil; child = child.NextSibling {
+			if child.Type == html.TextNode {
+				textChildren = append(textChildren, child)
+			}
+		}
+		for _, child := range textChildren {
+			if !containsSyntaxMarker(child.Data, htvalue.SyntaxDefault) {
+				continue
+			}
+			nodes, err := htvalue.RenderNodes(child.Data, data, element, funcs, nodeFuncs)
+			if err != nil {
+				return err
+			}
+			for _, node := range nodes {
+				element.InsertBefore(node, child)
+			}
+			element.RemoveChild(child)
 		}
 	}
 
@@ -389,26 +416,20 @@ func (template *Template) RenderContent(element *html.Node, data *TemplateData) 
 		}
 		switch param.Target {
 		case "html":
-			htmlString := fmt.Sprintf("%v", param.Value())
-			fragment, err := html.ParseFragment(strings.NewReader(htmlString), element)
+			fragment, err := htmlContent(element, param.Value())
 			if err != nil {
 				return err
 			}
 			innerHTML(element, fragment)
 		case "markdown":
-			md := HyperMark{}.New(template.MarkdownConfig)
-			content := fmt.Sprintf("%v", param.Value())
-			if err := md.Parse([]byte(content)); err != nil {
-				return err
-			}
-			fragment, err := html.ParseFragment(strings.NewReader(md.Content), element)
-			if err != nil {
-				return err
-			}
 			// TODO: markdown render hooks?
 			// See:
 			//   https://gohugo.io/render-hooks/
 			//   https://github.com/gohugoio/hugo/blob/master/markup/goldmark/render_hooks.go
+			fragment, err := markdownContent(element, template.MarkdownConfig, param.Value())
+			if err != nil {
+				return err
+			}
 			innerHTML(element, fragment)
 		default:
 			innerText(element, fmt.Sprintf("%v", param.Value()))
@@ -434,18 +455,12 @@ func (template *Template) RenderParams(element *html.Node, data *TemplateData) (
 		}
 		switch param.Target {
 		case "html":
-			htmlString := fmt.Sprintf("%v", param.Value())
-			if fragment, err = html.ParseFragment(strings.NewReader(htmlString), fragmentDiv); err != nil {
+			if fragment, err = htmlContent(fragmentDiv, param.Value()); err != nil {
 				return err
 			}
 			outerHTML(element, fragment)
 		case "markdown":
-			md := HyperMark{}.New(template.MarkdownConfig)
-			mdString := fmt.Sprintf("%v", param.Value())
-			if err := md.Parse([]byte(mdString)); err != nil {
-				return err
-			}
-			if fragment, err = html.ParseFragment(strings.NewReader(md.Content), fragmentDiv); err != nil {
+			if fragment, err = markdownContent(fragmentDiv, template.MarkdownConfig, param.Value()); err != nil {
 				return err
 			}
 			outerHTML(element, fragment)
@@ -475,7 +490,7 @@ func (template *Template) RenderBlock(element *html.Node, userData *TemplateData
 	if len(fragmentNodes) > 0 {
 		// pass nested block content as the template data "block.content" property, so that
 		// block templates can insert wrapped content into block layouts.
-		fragmentData.SetKeyValue("block.content", string(template.HTML(fragmentNodes...)))
+		fragmentData.Set("block.content", string(template.HTML(fragmentNodes...)))
 	}
 	shortcode := Template{
 		Layout:         fragment,
@@ -559,6 +574,58 @@ func (template *Template) Debug(element *html.Node, data *TemplateData) (err err
 	fmt.Println(string(statement)) // print debug statement to stdout
 	removeAttributes(element, HyperDebugAttributeStrings...)
 	return nil
+}
+
+// htmlContent parses an HTML string into nodes using parent as the parsing
+// context. Mirrors the html: branch of RenderContent.
+func htmlContent(parent *html.Node, value any) ([]*html.Node, error) {
+	return html.ParseFragment(strings.NewReader(fmt.Sprintf("%v", value)), parent)
+}
+
+// markdownContent renders markdown to HTML and parses the result into nodes
+// using parent as the parsing context. Mirrors the markdown: branch of
+// RenderContent.
+func markdownContent(parent *html.Node, config *HyperMarkConfig, value any) ([]*html.Node, error) {
+	md := htmarkdown.New(config)
+	if err := md.Parse([]byte(fmt.Sprintf("%v", value))); err != nil {
+		return nil, err
+	}
+	return html.ParseFragment(strings.NewReader(md.Content), parent)
+}
+
+// htmlValueFunc returns a value-funcmap entry that wraps htmlContent and
+// serializes the resulting nodes back to a template.HTML string for
+// composition with html/template's auto-escaping.
+func htmlValueFunc(parent *html.Node) func(any) (htmltemplate.HTML, error) {
+	return func(value any) (htmltemplate.HTML, error) {
+		nodes, err := htmlContent(parent, value)
+		if err != nil {
+			return "", err
+		}
+		return nodesToHTML(nodes)
+	}
+}
+
+// markdownValueFunc returns a value-funcmap entry that wraps markdownContent
+// and serializes the resulting nodes back to a template.HTML string.
+func markdownValueFunc(parent *html.Node, config *HyperMarkConfig) func(any) (htmltemplate.HTML, error) {
+	return func(value any) (htmltemplate.HTML, error) {
+		nodes, err := markdownContent(parent, config, value)
+		if err != nil {
+			return "", err
+		}
+		return nodesToHTML(nodes)
+	}
+}
+
+func nodesToHTML(nodes []*html.Node) (htmltemplate.HTML, error) {
+	var buf bytes.Buffer
+	for _, node := range nodes {
+		if err := html.Render(&buf, node); err != nil {
+			return "", err
+		}
+	}
+	return htmltemplate.HTML(buf.String()), nil
 }
 
 // =============================================================================
@@ -821,6 +888,9 @@ func (template *Template) ParseParameters(attr string, data *TemplateData) Param
 	}
 	for _, param := range strings.Split(attr, ";") {
 		param = strings.TrimSpace(param)
+		if param == "" {
+			continue // skip stray separators (e.g. leading "; " from concatenation)
+		}
 		params = append(params, template.ParseParameter(param, data))
 	}
 	return params

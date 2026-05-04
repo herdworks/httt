@@ -168,32 +168,47 @@ func TestValidate_RejectsUnsupportedActions(t *testing.T) {
 		{
 			name:   "if keyword",
 			source: `${ if page.title }`,
-			want:   errInvalidKeypath.Error(),
+			want:   `function "if" not registered`,
 		},
 		{
 			name:   "range keyword",
 			source: `${ range page.items }`,
-			want:   errInvalidKeypath.Error(),
+			want:   `function "range" not registered`,
 		},
 		{
 			name:   "with keyword",
 			source: `${ with page }`,
-			want:   errInvalidKeypath.Error(),
+			want:   `function "with" not registered`,
 		},
 		{
 			name:   "space-separated tokens",
 			source: `${ foo bar }`,
-			want:   errInvalidKeypath.Error(),
+			want:   `function "foo" not registered`,
 		},
 		{
 			name:   "disallowed pipeline function",
 			source: `${ page.title | upper }`,
-			want:   `not defined`,
+			want:   `function "upper" not registered`,
 		},
 		{
 			name:   "builtin rejected at head",
 			source: `${ printf "%s" "hello" }`,
-			want:   errInvalidKeypath.Error(),
+			want:   `function "printf" not registered`,
+		},
+		{
+			name:   "builtin rejected at pipeline tail",
+			source: `${ page.title | printf "%v" }`,
+			want:   `function "printf" not registered`,
+		},
+		{
+			name:   "builtin len rejected at pipeline tail",
+			source: `${ page.title | len }`,
+			want:   `function "len" not registered`,
+		},
+		{
+			name:   "builtin index rejected at pipeline tail",
+			source: `${ page.items | index 0 }`,
+			want:   `function "index" not registered`,
 		},
 	}
 
@@ -218,13 +233,13 @@ func TestRender_UsesGetLookup(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`Title: ${ page.title }`, data, SyntaxDefault)
+	rendered, err := RenderString(`Title: ${ page.title }`, data, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	if rendered != "Title: Page Title" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Title: Page Title", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Title: Page Title", rendered)
 	}
 }
 
@@ -235,13 +250,13 @@ func TestRender_FallsBackAcrossCommaSeparatedKeypaths(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`${ site.title, page.title }`, data, SyntaxDefault)
+	rendered, err := RenderString(`${ site.title, page.title }`, data, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	if rendered != "Page Title" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Page Title", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Page Title", rendered)
 	}
 }
 
@@ -250,13 +265,13 @@ func TestRender_BareKeywordNameIsValidKeypath(t *testing.T) {
 		"template": "Template Value",
 	}
 
-	rendered, err := Render(`${ template }`, data, SyntaxDefault)
+	rendered, err := RenderString(`${ template }`, data, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	if rendered != "Template Value" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Template Value", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Template Value", rendered)
 	}
 }
 
@@ -288,12 +303,12 @@ func TestRender_MissingKeypathRestoresSource(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			rendered, err := Render(tc.source, testGetter{}, SyntaxDefault)
+			rendered, err := RenderString(tc.source, testGetter{}, SyntaxDefault)
 			if err != nil {
-				t.Fatalf("Render() error = %v", err)
+				t.Fatalf("RenderString() error = %v", err)
 			}
 			if rendered != tc.source {
-				t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", tc.source, rendered)
+				t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", tc.source, rendered)
 			}
 		})
 	}
@@ -305,33 +320,33 @@ func TestRender_MultiActionAnyMissRestoresWholeSource(t *testing.T) {
 	}
 
 	source := `${ page.title } and ${ page.missing }`
-	rendered, err := Render(source, data, SyntaxDefault)
+	rendered, err := RenderString(source, data, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 	if rendered != source {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", source, rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", source, rendered)
 	}
 }
 
 func TestRender_StringFallbackWinsOnMissPreventsRestore(t *testing.T) {
-	rendered, err := Render(`${ page.title, "Untitled" }`, testGetter{}, SyntaxDefault)
+	rendered, err := RenderString(`${ page.title, "Untitled" }`, testGetter{}, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 	if rendered != "Untitled" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Untitled", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Untitled", rendered)
 	}
 }
 
 func TestRender_StringFallbackWinsOnEmptyString(t *testing.T) {
 	data := testGetter{"page": map[string]any{"title": ""}}
-	rendered, err := Render(`${ page.title, "Untitled" }`, data, SyntaxDefault)
+	rendered, err := RenderString(`${ page.title, "Untitled" }`, data, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 	if rendered != "Untitled" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Untitled", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Untitled", rendered)
 	}
 }
 
@@ -342,22 +357,22 @@ func TestRender_SingleQuotedFallbackWinsOnMiss(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`${ site.title } | ${ page.title, '✱' }`, data, SyntaxDefault)
+	rendered, err := RenderString(`${ site.title } | ${ page.title, '✱' }`, data, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 	if rendered != "Caleb Hailey | ✱" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Caleb Hailey | ✱", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Caleb Hailey | ✱", rendered)
 	}
 }
 
 func TestRender_SingleQuotedFallbackDecodesEscapes(t *testing.T) {
-	rendered, err := Render(`${ page.title, 'Caleb\'s site' }`, testGetter{}, SyntaxDefault)
+	rendered, err := RenderString(`${ page.title, 'Caleb\'s site' }`, testGetter{}, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 	if rendered != "Caleb's site" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Caleb's site", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Caleb's site", rendered)
 	}
 }
 
@@ -366,8 +381,8 @@ func TestValidate_DefaultFunctionRemoved(t *testing.T) {
 	if err == nil {
 		t.Fatal("validate() error = nil")
 	}
-	if !strings.Contains(err.Error(), `function "default" not defined`) {
-		t.Fatalf("validate() error mismatch:\nwant default not defined\n got: %v", err)
+	if !strings.Contains(err.Error(), `function "default" not registered`) {
+		t.Fatalf("validate() error mismatch:\nwant default not registered\n got: %v", err)
 	}
 }
 
@@ -381,13 +396,13 @@ func TestRender_UserFunctionPipeline(t *testing.T) {
 		"upper": strings.ToUpper,
 	}
 
-	rendered, err := Render(`${ page.title | upper }`, data, SyntaxDefault, funcs)
+	rendered, err := RenderString(`${ page.title | upper }`, data, SyntaxDefault, funcs)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	if rendered != "HELLO, HYPERTEMPLATES" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "HELLO, HYPERTEMPLATES", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "HELLO, HYPERTEMPLATES", rendered)
 	}
 }
 
@@ -403,13 +418,13 @@ func TestRender_UserFunctionPipelineWithSingleQuotedArgument(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`${ page.title | suffix '!' }`, data, SyntaxDefault, funcs)
+	rendered, err := RenderString(`${ page.title | suffix '!' }`, data, SyntaxDefault, funcs)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	if rendered != "Hello!" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Hello!", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Hello!", rendered)
 	}
 }
 
@@ -423,13 +438,13 @@ func TestRender_UserFunctionFirstWithExplicitGet(t *testing.T) {
 		"upper": strings.ToUpper,
 	}
 
-	rendered, err := Render(`${ upper (get "page.title") }`, data, SyntaxDefault, funcs)
+	rendered, err := RenderString(`${ upper (get "page.title") }`, data, SyntaxDefault, funcs)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	if rendered != "HELLO" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "HELLO", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "HELLO", rendered)
 	}
 }
 
@@ -448,13 +463,13 @@ func TestRender_UserFunctionFirstWithDataArguments(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`${ join page.title site.title }`, data, SyntaxDefault, funcs)
+	rendered, err := RenderString(`${ join page.title site.title }`, data, SyntaxDefault, funcs)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	if rendered != "Hello, World" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Hello, World", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Hello, World", rendered)
 	}
 }
 
@@ -473,13 +488,13 @@ func TestRender_UserFunctionPipelineArgument(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`${ page.title | suffix site.suffix }`, data, SyntaxDefault, funcs)
+	rendered, err := RenderString(`${ page.title | suffix site.suffix }`, data, SyntaxDefault, funcs)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	if rendered != "Hello!" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Hello!", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Hello!", rendered)
 	}
 }
 
@@ -495,11 +510,11 @@ func TestValidate_UserFunctionPipeline(t *testing.T) {
 
 func TestRender_NoMissNoSubstitution(t *testing.T) {
 	data := testGetter{"page": map[string]any{"title": "Page Title"}}
-	rendered, err := Render(`Title: ${ page.title }`, data, SyntaxDefault)
+	rendered, err := RenderString(`Title: ${ page.title }`, data, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 	if rendered != "Title: Page Title" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Title: Page Title", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Title: Page Title", rendered)
 	}
 }

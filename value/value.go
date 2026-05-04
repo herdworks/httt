@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	htmltemplate "html/template"
 	"io"
 	"strconv"
 	"strings"
 	texttemplate "text/template"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/net/html"
 )
 
 const (
@@ -83,14 +86,44 @@ func (t *tmpl) executeString(data Getter) (string, error) {
 
 // FUNCTIONS ===================================================================
 
-// Render parses and executes template values in one step.
-func Render(source string, data Getter, syntax Syntax, funcs ...FuncMap) (string, error) {
+// RenderString parses and executes template values into a string. Used for
+// attribute values and other contexts where the rendered output must remain
+// inline text. Backed by text/template.
+func RenderString(source string, data Getter, syntax Syntax, funcs ...FuncMap) (string, error) {
 	parsed, err := parseWithFuncs(source, syntax, mergeFuncMaps(funcs...))
 	if err != nil {
 		return "", err
 	}
 
 	return parsed.executeString(data)
+}
+
+// RenderNodes parses and executes template values into a slice of HTML nodes.
+// Used for text-node content where the rendered output may include HTML
+// produced by funcmap entries returning html/template.HTML. Backed by
+// html/template (so user data is auto-escaped, while template.HTML returns
+// pass through raw). The rendered string is parsed as a fragment using parent
+// as the parsing context, mirroring the html: branch of Template.RenderContent.
+//
+// A source that renders to plain text returns a single TextNode. A source
+// that mixes text and html-returning funcmap entries returns multiple nodes
+// (text + element + text, etc.). When any expression in source resolves to
+// nil, the original source is restored as a single TextNode (matching
+// RenderString's all-or-nothing fallback).
+func RenderNodes(source string, data Getter, parent *html.Node, funcs ...FuncMap) ([]*html.Node, error) {
+	merged := mergeFuncMaps(funcs...)
+
+	normalized, err := rewriteWithFuncs(source, SyntaxDefault, merged)
+	if err != nil {
+		return nil, err
+	}
+
+	rendered, err := executeHTMLTemplate(normalized, source, data, merged)
+	if err != nil {
+		return nil, err
+	}
+
+	return html.ParseFragment(strings.NewReader(rendered), parent)
 }
 
 // parse validates and normalizes a template value source.
@@ -213,6 +246,59 @@ func buildTemplate(source string, data Getter, funcs FuncMap) (parsed *texttempl
 	}
 
 	return parsed, nil
+}
+
+// executeHTMLTemplate compiles normalized via html/template and executes it
+// against data. Mirrors buildTemplate + tmpl.execute but uses html/template
+// for context-aware auto-escaping of user data while honoring the
+// template.HTML type returned by funcmap entries that produce HTML.
+//
+// html/template formats nil function returns as the empty string rather than
+// "<no value>" (text/template's behavior), so the all-or-nothing source
+// restoration is gated on a per-execution miss flag set by the wrapped get
+// function. User funcs that return nil are not tracked here; they render as
+// empty per html/template's default.
+func executeHTMLTemplate(normalized, source string, data Getter, funcs FuncMap) (rendered string, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			rendered = ""
+			err = fmt.Errorf("failed configuring template value %q: %v", templateName, recovered)
+		}
+	}()
+
+	var missed bool
+	compiledFuncs := htmltemplate.FuncMap{
+		getFuncName: func(args ...string) any {
+			value := getFunc(data, args...)
+			if value == nil {
+				missed = true
+			}
+			return value
+		},
+		cssDefaultFuncName: cssDefaultFunc,
+	}
+	for name, fn := range funcs {
+		if _, reserved := compiledFuncs[name]; reserved {
+			return "", fmt.Errorf("template value function %q is reserved", name)
+		}
+		compiledFuncs[name] = fn
+	}
+
+	compiled, err := htmltemplate.New(templateName).Delims("${", "}").Funcs(compiledFuncs).Parse(normalized)
+	if err != nil {
+		return "", fmt.Errorf("failed parsing template value %q: %w", templateName, err)
+	}
+
+	var buffer bytes.Buffer
+	if err := compiled.Execute(&buffer, data); err != nil {
+		return "", fmt.Errorf("failed executing template value %q: %w", templateName, err)
+	}
+
+	if missed {
+		return source, nil
+	}
+
+	return buffer.String(), nil
 }
 
 func mergeFuncMaps(funcMaps ...FuncMap) FuncMap {
@@ -441,6 +527,10 @@ func rewriteAction(source string, funcs FuncMap) (string, error) {
 		return appendPipelineTail(rewritten, rewrittenTail), nil
 	}
 
+	if isFunctionCallHead(head) {
+		return "", fmt.Errorf("%w: function %q not registered", errInvalidValue, firstToken(head))
+	}
+
 	segments := splitCommaSeparated(head)
 	if len(segments) == 0 {
 		return "", fmt.Errorf("%w: empty action", errInvalidValue)
@@ -526,7 +616,11 @@ func rewritePipelineSegment(segment string, funcs FuncMap) (string, error) {
 	if command == "" {
 		return segment, nil
 	}
-	if !registeredUserFunction(firstToken(command), funcs) {
+	name := firstToken(command)
+	if !registeredFunctionName(name, funcs) {
+		return "", fmt.Errorf("%w: function %q not registered", errInvalidValue, name)
+	}
+	if !registeredUserFunction(name, funcs) {
 		return segment, nil
 	}
 
@@ -1018,6 +1112,20 @@ func firstToken(source string) string {
 	}
 
 	return source
+}
+
+// isFunctionCallHead reports whether head looks like an unregistered function
+// call: a bare identifier followed by argument tokens. Used after the
+// registered-function checks fail to produce a clearer error than the generic
+// "invalid keypath" fallthrough would.
+func isFunctionCallHead(head string) bool {
+	head = strings.TrimSpace(head)
+	name := firstToken(head)
+	if !isIdentifier(name) {
+		return false
+	}
+	rest := strings.TrimSpace(head[len(name):])
+	return rest != ""
 }
 
 func registeredFunctionName(name string, funcs FuncMap) bool {

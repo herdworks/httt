@@ -558,3 +558,136 @@ func TestRenderValuesStyleAttribute(t *testing.T) {
 		t.Fatalf("expected style=%q, got %q", "color: red;", style)
 	}
 }
+
+func TestRenderValuesHtmlFunc(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<div ht-apply>${ page.body | html }</div>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"body": "<em>hi</em>",
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("<em>hi</em>")) {
+		t.Fatalf("expected <em>hi</em> in output, got:\n%s", htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("&lt;em&gt;")) {
+		t.Fatalf("expected raw <em> insertion, got escaped output:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderValuesMarkdownFunc(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<article ht-apply>${ page.body | markdown }</article>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"body": "# Title\n\nA paragraph.",
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("<h1")) {
+		t.Fatalf("expected <h1> from markdown rendering, got:\n%s", htmlBytes)
+	}
+	if !bytes.Contains(htmlBytes, []byte("<p>A paragraph.</p>")) {
+		t.Fatalf("expected <p>A paragraph.</p>, got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderValuesAutoEscapesUserData(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<h1 ht-apply>${ page.title }</h1>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"title": "<script>alert(1)</script>",
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	// The title must be escaped — no real <script> element in the tree.
+	if bytes.Contains(htmlBytes, []byte("<script>alert(1)")) {
+		t.Fatalf("expected <script> tag to be escaped in output, got:\n%s", htmlBytes)
+	}
+	if !bytes.Contains(htmlBytes, []byte("&lt;script&gt;")) {
+		t.Fatalf("expected escaped &lt;script&gt; in output, got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderContentHtmlMarkdownRefactorRegression(t *testing.T) {
+	// Regression-lock: RenderContent's html: and markdown: directive
+	// branches still produce the same output after the helper extraction.
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<div ht-content="html:page.body"></div>
+				<article ht-content="markdown:page.markdown"></article>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"body":     "<em>raw</em>",
+			"markdown": "# Heading",
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("<em>raw</em>")) {
+		t.Fatalf("html: branch missing expected <em>raw</em>; got:\n%s", htmlBytes)
+	}
+	if !bytes.Contains(htmlBytes, []byte("<h1")) {
+		t.Fatalf("markdown: branch missing expected <h1>; got:\n%s", htmlBytes)
+	}
+}

@@ -80,9 +80,24 @@ ${ upper (get "page.title") }
 ```
 
 Parenthetical expressions do not perform implicit gets. The only built-in
-public DSL function is `get`. Built-in `text/template` functions such as
-`printf`, `len`, `index`, and `call` are outside the DSL unless registered as
-plugins by the caller.
+public DSL function is `get`. Built-in `text/template` and `html/template`
+functions (`printf`, `len`, `index`, `call`, `print`, `println`, `and`, `or`,
+`not`, `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `html`, `js`, `urlquery`) are
+outside the DSL unless registered as plugins by the caller. The rewriter
+rejects them at parse/validate time at both pipeline head and tail with a
+`function "X" not registered` error.
+
+## Entry Points
+
+- `RenderString(source, data, syntax, funcs...) (string, error)` — for
+  attribute values and other contexts that need an inline string. Backed by
+  `text/template`. Returns the rendered string.
+- `RenderNodes(source, data, parent, funcs...) ([]*html.Node, error)` — for
+  text-node content where the rendered output may include HTML produced by
+  funcmap entries returning `html/template.HTML`. Backed by `html/template`
+  so user data is auto-escaped while `template.HTML` returns pass through
+  raw. The rendered string is parsed as a fragment using `parent` as
+  context.
 
 ## Missing Values
 

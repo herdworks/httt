@@ -134,7 +134,7 @@ func main() {
 		panic(err)
 	}
 
-	// Use plugins with Template.Plugins, or pass plugins.FuncMap() to value.Render.
+	// Use plugins with Template.Plugins, or pass plugins.FuncMap() to value.RenderString / value.RenderNodes.
 	_ = plugins
 }
 ```
@@ -170,7 +170,7 @@ const plugin = upper
 ```
 
 ```go
-rendered, err := htvalue.Render(
+rendered, err := htvalue.RenderString(
 	`${ page.title | upper }`,
 	data,
 	htvalue.SyntaxDefault,

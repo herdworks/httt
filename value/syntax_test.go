@@ -11,6 +11,7 @@ func TestRewriteCSS_Basic(t *testing.T) {
 		name   string
 		source string
 		want   string
+		funcs  FuncMap
 	}{
 		{
 			name:   "double-quoted keypath",
@@ -66,12 +67,13 @@ func TestRewriteCSS_Basic(t *testing.T) {
 			name:   "second argument fallback with pipeline",
 			source: `--ht-value("page.title | upper", "DEFAULT")`,
 			want:   `${ get "page.title" | upper | cssDefault "DEFAULT" }`,
+			funcs:  FuncMap{"upper": strings.ToUpper},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := rewrite(tc.source, SyntaxCSS)
+			got, err := rewriteWithFuncs(tc.source, SyntaxCSS, tc.funcs)
 			if err != nil {
 				t.Fatalf("rewrite() error = %v", err)
 			}
@@ -88,17 +90,19 @@ func TestRewriteCSS_Pipeline(t *testing.T) {
 		name   string
 		source string
 		want   string
+		funcs  FuncMap
 	}{
 		{
 			name:   "pipeline tail with fallback",
 			source: `--ht-value("page.title, \"Untitled\" | upper")`,
 			want:   `${ get "page.title" "Untitled" | upper }`,
+			funcs:  FuncMap{"upper": strings.ToUpper},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := rewrite(tc.source, SyntaxCSS)
+			got, err := rewriteWithFuncs(tc.source, SyntaxCSS, tc.funcs)
 			if err != nil {
 				t.Fatalf("rewrite() error = %v", err)
 			}
@@ -396,10 +400,10 @@ func TestRewriteCSS_Rejects(t *testing.T) {
 func TestRewriteCSS_InheritsKeypathValidation(t *testing.T) {
 	_, err := rewrite(`--ht-value("if page.title")`, SyntaxCSS)
 	if err == nil {
-		t.Fatal("rewrite() error = nil, want invalid-keypath error")
+		t.Fatal("rewrite() error = nil, want function-not-registered error")
 	}
-	if !strings.Contains(err.Error(), errInvalidKeypath.Error()) {
-		t.Fatalf("rewrite() error = %v, want substring %q", err, errInvalidKeypath.Error())
+	if !strings.Contains(err.Error(), `function "if" not registered`) {
+		t.Fatalf("rewrite() error = %v, want function-not-registered error", err)
 	}
 }
 
@@ -421,28 +425,28 @@ func TestRenderCSS_EndToEnd(t *testing.T) {
 	}
 
 	source := `.hero { color: --ht-value("theme.color"); }`
-	rendered, err := Render(source, data, SyntaxCSS)
+	rendered, err := RenderString(source, data, SyntaxCSS)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	want := `.hero { color: red; }`
 	if rendered != want {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", want, rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", want, rendered)
 	}
 }
 
 func TestRenderCSS_FallbackWhenNil(t *testing.T) {
 	data := testGetter{}
 
-	rendered, err := Render(`.a { color: --ht-value("theme.color", red); }`, data, SyntaxCSS)
+	rendered, err := RenderString(`.a { color: --ht-value("theme.color", red); }`, data, SyntaxCSS)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	want := `.a { color: red; }`
 	if rendered != want {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", want, rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", want, rendered)
 	}
 }
 
@@ -453,14 +457,14 @@ func TestRenderCSS_FallbackWhenEmptyString(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`.a { color: --ht-value("theme.color", red); }`, data, SyntaxCSS)
+	rendered, err := RenderString(`.a { color: --ht-value("theme.color", red); }`, data, SyntaxCSS)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	want := `.a { color: ; }`
 	if rendered != want {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", want, rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", want, rendered)
 	}
 }
 
@@ -476,14 +480,14 @@ func TestRenderCSS_FallbackWhenFunctionReturnsNil(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`.a { color: --ht-value("maybe theme.color", red); }`, data, SyntaxCSS, funcs)
+	rendered, err := RenderString(`.a { color: --ht-value("maybe theme.color", red); }`, data, SyntaxCSS, funcs)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	want := `.a { color: red; }`
 	if rendered != want {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", want, rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", want, rendered)
 	}
 }
 
@@ -499,14 +503,14 @@ func TestRenderCSS_FallbackSkippedWhenFunctionReturnsEmptyString(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`.a { color: --ht-value("maybe theme.color", red); }`, data, SyntaxCSS, funcs)
+	rendered, err := RenderString(`.a { color: --ht-value("maybe theme.color", red); }`, data, SyntaxCSS, funcs)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	want := `.a { color: ; }`
 	if rendered != want {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", want, rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", want, rendered)
 	}
 }
 
@@ -517,28 +521,28 @@ func TestRenderCSS_FallbackSkippedWhenPresent(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`.a { color: --ht-value("theme.color", red); }`, data, SyntaxCSS)
+	rendered, err := RenderString(`.a { color: --ht-value("theme.color", red); }`, data, SyntaxCSS)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	want := `.a { color: blue; }`
 	if rendered != want {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", want, rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", want, rendered)
 	}
 }
 
 func TestRenderCSS_FallbackRGB(t *testing.T) {
 	data := testGetter{}
 
-	rendered, err := Render(`.a { color: --ht-value("theme.color", rgb(255, 0, 0)); }`, data, SyntaxCSS)
+	rendered, err := RenderString(`.a { color: --ht-value("theme.color", rgb(255, 0, 0)); }`, data, SyntaxCSS)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	want := `.a { color: rgb(255, 0, 0); }`
 	if rendered != want {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", want, rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", want, rendered)
 	}
 }
 
@@ -549,13 +553,13 @@ func TestRenderCSS_FallbackResolution(t *testing.T) {
 		},
 	}
 
-	rendered, err := Render(`--ht-value("site.title, page.title")`, data, SyntaxCSS)
+	rendered, err := RenderString(`--ht-value("site.title, page.title")`, data, SyntaxCSS)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 
 	if rendered != "Page Title" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Page Title", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Page Title", rendered)
 	}
 }
 
@@ -597,12 +601,12 @@ func TestRewriteCSS_DefaultModeIgnoresCalls(t *testing.T) {
 
 func TestHTFallback_InDefaultSyntax(t *testing.T) {
 	data := testGetter{}
-	rendered, err := Render(`${ page.title, "Untitled" }`, data, SyntaxDefault)
+	rendered, err := RenderString(`${ page.title, "Untitled" }`, data, SyntaxDefault)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 	if rendered != "Untitled" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "Untitled", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "Untitled", rendered)
 	}
 }
 
@@ -618,24 +622,24 @@ func TestRenderCSS_MissingRestoresCSSSource(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			rendered, err := Render(tc.source, testGetter{}, SyntaxCSS)
+			rendered, err := RenderString(tc.source, testGetter{}, SyntaxCSS)
 			if err != nil {
-				t.Fatalf("Render() error = %v", err)
+				t.Fatalf("RenderString() error = %v", err)
 			}
 			if rendered != tc.source {
-				t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", tc.source, rendered)
+				t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", tc.source, rendered)
 			}
 		})
 	}
 }
 
 func TestRenderCSS_FallbackOnMissPreventsRestore(t *testing.T) {
-	rendered, err := Render(`--ht-value("theme.color", red)`, testGetter{}, SyntaxCSS)
+	rendered, err := RenderString(`--ht-value("theme.color", red)`, testGetter{}, SyntaxCSS)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 	if rendered != "red" {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", "red", rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", "red", rendered)
 	}
 }
 
@@ -645,11 +649,11 @@ func TestRenderCSS_MultiActionAnyMissRestoresWholeCSS(t *testing.T) {
 	}
 	source := `.a { color: --ht-value("theme.color"); bg: --ht-value("theme.bg"); }`
 
-	rendered, err := Render(source, data, SyntaxCSS)
+	rendered, err := RenderString(source, data, SyntaxCSS)
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("RenderString() error = %v", err)
 	}
 	if rendered != source {
-		t.Fatalf("Render() mismatch:\nwant: %q\n got: %q", source, rendered)
+		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", source, rendered)
 	}
 }

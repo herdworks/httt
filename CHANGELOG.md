@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+Major refactor that splits TemplateData and the markdown engine into dedicated, dependency-isolated subpackages so callers can depend on a smaller surface and the value DSL can use markdown rendering without pulling the whole template engine. The value DSL also gains an `html/template`-backed entry point so text-node content can be rendered to `[]*html.Node`.
+
+* Added `hypertemplates-go/data` — owns `TemplateData`, `TemplateDataSet`, dot-notation accessors, and `UnmarshalJSON` / `UnmarshalYAML`. stdlib + yaml.v3 only; zero internal deps.
+* Added `hypertemplates-go/markdown` — owns `HyperMark`, `HyperMarkConfig`, `DefaultHyperMarkConfig`, `New`, `Parse`, and `UnmarshalTemplateData`. Owns the goldmark/chroma/emoji/meta dependency tree and the goldmark-meta yaml.v2 front-matter key-stringify fix-up.
+* Added `hypertemplates-go/htmldata` — `UnmarshalTemplateData([]byte)`, `ExtractTemplateData(*html.Node)`, and `ExtractTemplateDataNodes([]*html.Node)` for extracting title, description, and timestamp metadata from HTML documents.
+* Added `hypertemplates-go/opmldata` — `UnmarshalTemplateData([]byte)` and `FromOPML(*opml.OPML)` bridge between hyperfeed-go's OPML parser and TemplateData.
+* Added `hypertemplates-go/parse` — `ReadFile(path, opts...)` and `Unmarshal(b, ext, opts...)` extension dispatcher across data, markdown, htmldata, and opmldata.
+* Added `TemplateData.Get(key) any` with dot-notation key resolution and 1-indexed slice access.
+* Added `TemplateData.Set(key, value) error` — now dot-walking; replaces both the old top-level `Set` and `SetKeyValue` / `SetPathValue`.
+* Added `TemplateData.Has(key) bool` — replaces `Exists`. Returns true for present non-empty values.
+* Added `TemplateData.Delete(key)` with dot-walking support.
+* Added `TemplateData.Keys(key) []string` and `TemplateData.Len(key) int` for explicit introspection.
+* Added function-style accessors as the canonical way to call computed accessors from a key: `page.tags.length()`, `page.tags.count()`, `page.metadata.keys()`. Built-in only — no plugin extensibility.
+* Added `TemplateData.Without(keys ...string) TemplateData`, replacing `Clean(reserved []string)`.
+* Added `TemplateData.MergeAppend(other) TemplateData` to make slice-append merging an explicit method instead of a boolean flag.
+* Added `TemplateData.StringifyKeys() TemplateData` that returns a copy (renamed from `StringifyMapKeys`, no longer mutates).
+* Added `value.RenderNodes(source, data, parent, funcs...) ([]*html.Node, error)` — new entry point for text-node content. Returns parsed `*html.Node` slices so funcmap entries returning `html/template.HTML` are spliced into the output as real elements rather than escaped text. Backed by `html/template`, which auto-escapes user data while passing `template.HTML` through raw. Plain text inputs come back as a single `TextNode`.
+* Added `htmlContent(parent, value) ([]*html.Node, error)` and `markdownContent(parent, config, value) ([]*html.Node, error)` in the top-level package — primary helpers shared by `Template.RenderContent`, `Template.RenderParams`, and the new value-funcmap wrappers. Single source of truth for fragment parsing.
+* Added `htmlValueFunc(parent)` and `markdownValueFunc(parent, config)` — funcmap-compatible wrappers that `Template.RenderValues` injects per text-node call site, so `${ page.body | html }` and `${ page.body | markdown }` work in value expressions.
+* Fixed `Template.ParseParameters` to skip empty segments after splitting on `;`. Previously, an empty segment (e.g. from the unconditional `"; "` prefix in `RenderAttributes` when no `ht-attrs` attribute was present alongside an `ht-attr`) would create a `Parameter` with empty `Keys`. Combined with the new `data.Get("")` returning the entire receiver, that empty key resolved to the whole `TemplateData`, which `RenderAttributes` then dumped as attributes on the element via the `case TemplateData:` map-iteration branch. Symptom: builds bloated 70x+ (e.g. 2.7MB → 197MB on a typical site) when any element used `ht-attr` without a sibling `ht-attrs`.
+
+* Changed `HyperMark.FrontMatter` to `map[string]any` instead of `TemplateData`. The TemplateData-flavored `Data()` method moved to `(HyperMark).TemplateData()` in the new markdown package; `ApplyMentions` is now an internal helper.
+* Changed `HyperMark` construction to `markdown.New(config)` rather than `HyperMark{}.New(config)`.
+* Changed (renamed) `value.Render` to `value.RenderString` to disambiguate the string-returning attribute path from the new node-returning text-node path. Update call sites accordingly.
+* Changed the value rewriter to reject any pipeline command whose first token is not registered as either a built-in (`get`, `cssDefault`) or in the caller-supplied `funcs` map. This applies at both pipeline head and tail. Previously, `text/template`'s inherited builtins (`printf`, `len`, `index`, `print`, `println`, `and`, `or`, `not`, `call`, `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `html`, `js`, `urlquery`) were silently callable in pipe-tail position. They now produce a `function "X" not registered` error at parse/validate time. Closes a future-proofing gap; new builtins introduced by future `text/template` or `html/template` versions are blocked by default.
+* Changed head-position function-call shape (e.g. `${ printf "%s" "x" }`, `${ if page.title }`, `${ foo bar }`) to produce a `function "X" not registered` error instead of the misleading `invalid keypath` error.
+
+* Removed the magic-suffix accessors `Get("foo.keys")` and `Get("foo.length")`. Use the function-style accessors `Get("foo.keys()")` and `Get("foo.length()")` instead. The old form silently shadowed real property names called `keys` or `length`.
+* Removed `GetValue([]string)`, `GetKeys([]string)`, `GetLength([]string)`, `SetKeyValue`, `SetPathValue` — folded into `Get` / `Set` / `Keys` / `Len`.
+* Removed `Lookup` (use `Get` — the docs guarantee missing-key lookups are not errors).
+* Removed `Exists` (use `Has`).
+* Removed `Inspect(path, format)` — `json.Marshal(d.Get(key))` covers it.
+* Removed `Validate(required)` — trivially recreated as `for _, k := range required { if !d.Has(k) {...} }`.
+* Removed `IsEmpty()` — use `len(d) == 0`.
+* Removed `Clean(reserved []string)` — replaced by `Without(keys ...string)`.
+* Removed `Merge(other, appendMode bool, verbose bool)` — split into `Merge(other)` and `MergeAppend(other)`. Verbose logging is the caller's concern.
+* Removed `Namespace()`, `NamespaceData()`, `ColumnValues()` — moved to `hypertexting-go` as free functions and the `NamespacedData` wrapper type.
+* Removed `OrderedTemplateData` — moved to `hypertexting-go` (the field-order list is the Page schema, which is SSG-domain).
+
+The root `hypertemplates` package retains type aliases (`type TemplateData = data.TemplateData`, `type HyperMark = markdown.HyperMark`, etc.) and thin wrapper functions for `ParseTemplateData{File,Bytes,OPML,Markdown,HTML}` so existing import paths and call signatures continue to compile. New code should depend on the format-specific packages directly.
+
+Method count on `TemplateData` drops from ~22 to 11. Doc comments now mirror the website's "template data object / property / key / value" vocabulary. Breaking changes have been removed without a deprecation period since the v0.x line is pre-1.0.
+
 ## v0.23.0 (2026-04-30)
 
 * Added standard-output JavaScript `console` logging for scripts and plugins, including `console.log`, `console.info`, `console.warn`, `console.error`, `console.debug`, and `console.logger(name)` for named log prefixes.

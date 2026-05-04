@@ -54,7 +54,7 @@ const plugin = title
 		t.Fatalf("upper plugin path = %q, want %q", plugins["upper"].Path, upperPath)
 	}
 
-	rendered, err := htvalue.Render(`${ page.title | upper }`, testGetter{"page": map[string]any{"title": "hello"}}, htvalue.SyntaxDefault, plugins.FuncMap())
+	rendered, err := htvalue.RenderString(`${ page.title | upper }`, testGetter{"page": map[string]any{"title": "hello"}}, htvalue.SyntaxDefault, plugins.FuncMap())
 	if err != nil {
 		t.Fatalf("Render upper plugin error = %v", err)
 	}
@@ -62,7 +62,7 @@ const plugin = title
 		t.Fatalf("Render upper plugin = %q, want HELLO", rendered)
 	}
 
-	rendered, err = htvalue.Render(`${ page.title | title }`, testGetter{"page": map[string]any{"title": "hello world"}}, htvalue.SyntaxDefault, plugins.FuncMap())
+	rendered, err = htvalue.RenderString(`${ page.title | title }`, testGetter{"page": map[string]any{"title": "hello world"}}, htvalue.SyntaxDefault, plugins.FuncMap())
 	if err != nil {
 		t.Fatalf("Render title plugin error = %v", err)
 	}
@@ -86,7 +86,7 @@ func TestLoadPluginsLastPluginWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPlugins() error = %v", err)
 	}
-	rendered, err := htvalue.Render(`${ page.title | label }`, testGetter{"page": map[string]any{"title": "ignored"}}, htvalue.SyntaxDefault, plugins.FuncMap())
+	rendered, err := htvalue.RenderString(`${ page.title | label }`, testGetter{"page": map[string]any{"title": "ignored"}}, htvalue.SyntaxDefault, plugins.FuncMap())
 	if err != nil {
 		t.Fatalf("Render label plugin error = %v", err)
 	}
@@ -201,7 +201,7 @@ const plugin = fmtdate
 		t.Fatalf("LoadPlugins() error = %v", err)
 	}
 
-	rendered, err := htvalue.Render(
+	rendered, err := htvalue.RenderString(
 		`${ page.updated_at, page.created_at | fmtdate "YYYY-MM-DD" }`,
 		testGetter{"page": map[string]any{"created_at": "2026-04-28T00:00:00Z"}},
 		htvalue.SyntaxDefault,
