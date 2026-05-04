@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.24.0 (2026-05-04)
+
 Major refactor that splits TemplateData and the markdown engine into dedicated, dependency-isolated subpackages so callers can depend on a smaller surface and the value DSL can use markdown rendering without pulling the whole template engine. The value DSL also gains an `html/template`-backed entry point so text-node content can be rendered to `[]*html.Node`.
 
 * Added `hypertemplates-go/data` — owns `TemplateData`, `TemplateDataSet`, dot-notation accessors, and `UnmarshalJSON` / `UnmarshalYAML`. stdlib + yaml.v3 only; zero internal deps.
