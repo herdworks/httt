@@ -1,6 +1,7 @@
 package scripting
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -663,6 +664,58 @@ func TestEval_ConsoleLoggerWritesNamedPrefixedLogs(t *testing.T) {
 	}, "\n")
 	if output != want {
 		t.Fatalf("stdout:\ngot:\n%swant:\n%s", output, want)
+	}
+}
+
+func TestSetConsoleOutputRedirectsAndSilences(t *testing.T) {
+	e := NewEngine(Options{})
+	t.Cleanup(func() { e.Close() })
+	t.Cleanup(func() { SetConsoleOutput(nil) }) // restore default
+
+	// Custom writer captures script output instead of stdout.
+	var buf bytes.Buffer
+	SetConsoleOutput(&buf)
+	stdoutDuringRedirect := captureStdout(t, func() {
+		if _, err := e.Eval(context.Background(), `
+			console.log("redirected", input)
+			return null
+		`, "value"); err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+	})
+	if stdoutDuringRedirect != "" {
+		t.Fatalf("stdout should be empty when redirected, got: %q", stdoutDuringRedirect)
+	}
+	if got, want := buf.String(), "[scripting] redirected value\n"; got != want {
+		t.Fatalf("buf = %q; want %q", got, want)
+	}
+
+	// io.Discard silences output entirely.
+	SetConsoleOutput(io.Discard)
+	stdoutDuringDiscard := captureStdout(t, func() {
+		if _, err := e.Eval(context.Background(), `
+			console.log("dropped")
+			return null
+		`, "value"); err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+	})
+	if stdoutDuringDiscard != "" {
+		t.Fatalf("stdout should be empty when discarded, got: %q", stdoutDuringDiscard)
+	}
+
+	// Resetting to nil restores os.Stdout.
+	SetConsoleOutput(nil)
+	stdoutAfterReset := captureStdout(t, func() {
+		if _, err := e.Eval(context.Background(), `
+			console.log("restored")
+			return null
+		`, "value"); err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+	})
+	if got, want := stdoutAfterReset, "[scripting] restored\n"; got != want {
+		t.Fatalf("stdout = %q; want %q", got, want)
 	}
 }
 

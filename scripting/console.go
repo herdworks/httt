@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -9,7 +10,28 @@ import (
 	"github.com/dop251/goja"
 )
 
-var consoleOutputMu sync.Mutex
+var (
+	consoleOutputMu sync.Mutex
+	// consoleOutput is the writer used by console.* methods. A nil value
+	// means "resolve os.Stdout at write time" so callers (and tests) that
+	// swap os.Stdout still see script output flow through.
+	consoleOutput io.Writer
+)
+
+// SetConsoleOutput redirects the writer used by `console.log`/`info`/`warn`/
+// `error`/`debug` (and any `console.logger(name)` instances) inside scripts.
+// Pass `io.Discard` to silence script output entirely, or `os.Stderr` to
+// route diagnostics off stdout so callers can stream JSON results to tools
+// like `jq`. Passing nil restores the default behavior (resolve `os.Stdout`
+// at write time).
+//
+// The setting is process-global and synchronized with the console-output
+// mutex; concurrent script executions all observe the most recent writer.
+func SetConsoleOutput(w io.Writer) {
+	consoleOutputMu.Lock()
+	defer consoleOutputMu.Unlock()
+	consoleOutput = w
+}
 
 func installConsole(vm *goja.Runtime) error {
 	console := consoleValue(vm)
@@ -53,10 +75,14 @@ func consoleMethod(name, level string) func(goja.FunctionCall) goja.Value {
 		consoleOutputMu.Lock()
 		defer consoleOutputMu.Unlock()
 
+		out := consoleOutput
+		if out == nil {
+			out = os.Stdout
+		}
 		if level == "" {
-			fmt.Fprintf(os.Stdout, "[%s] %s\n", name, message)
+			fmt.Fprintf(out, "[%s] %s\n", name, message)
 		} else {
-			fmt.Fprintf(os.Stdout, "[%s] %s %s\n", name, level, message)
+			fmt.Fprintf(out, "[%s] %s %s\n", name, level, message)
 		}
 
 		return goja.Undefined()
