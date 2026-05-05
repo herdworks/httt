@@ -330,11 +330,10 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 		t.Fatalf("error parsing layout html: %v", err)
 	}
 
-	name, upper, err := scripting.Function(`
-		function upper(input) {
+	upper, err := scripting.Function(`
+		function plugin(input) {
 			return input.toUpperCase()
 		}
-		const plugin = upper
 	`)
 	if err != nil {
 		t.Fatalf("error compiling scripting function: %v", err)
@@ -349,7 +348,7 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 		Layout:   layout,
 		TidyMode: true,
 		Plugins: htplugins.Plugins{
-			name: {Name: name, Func: htplugins.Func(upper)},
+			"upper": {Name: "upper", Func: htplugins.Func(upper)},
 		},
 	}
 

@@ -39,6 +39,14 @@ type Options struct {
 
 // Engine evaluates JavaScript scripts and plugin function files against
 // per-call data contexts.
+//
+// An Engine pools a single set of hardened goja runtimes, shared across all
+// evaluation entry points (Eval, Script, NamedFunction, SeededFunction). Each
+// entry point's wrapper is an IIFE whose locals are scoped to the call, so
+// no per-call data leaks across runtimes that pass through the pool. Callers
+// that want pool isolation between workloads should construct distinct
+// Engines.
+//
 // An Engine is safe for concurrent use by multiple goroutines.
 type Engine struct {
 	opts   Options
@@ -171,28 +179,44 @@ func (e *Engine) ScriptTimeout(src string, sampleArg any, timeout time.Duration)
 	}, nil
 }
 
-// Function compiles a JavaScript plugin file into a reusable Go callable.
-// Plugin source must define exactly one top-level `const plugin = name`
-// selector. The selected identifier becomes the public plugin name, and each
-// invocation passes ordered Go arguments to JavaScript as `plugin(...args)`.
-func (e *Engine) Function(src string) (string, func(...any) (any, error), error) {
-	return e.FunctionTimeout(src, defaultFunctionTimeout)
+// Function compiles a JavaScript file that defines a top-level
+// `function plugin(...)` into a reusable Go callable. Each invocation passes
+// ordered Go arguments to JavaScript as `plugin(...args)`. The plugin name is
+// not derived from the source — callers (e.g. plugins.LoadPlugin) determine
+// the public name from the file path.
+func (e *Engine) Function(src string) (func(...any) (any, error), error) {
+	return e.NamedFunctionTimeout(src, "plugin", defaultFunctionTimeout)
 }
 
-// FunctionContext compiles a JavaScript plugin file into a reusable Go callable
-// that accepts a caller-owned context on every invocation.
-func (e *Engine) FunctionContext(src string) (string, func(context.Context, ...any) (any, error), error) {
-	name, err := PluginSelector(src)
-	if err != nil {
-		return "", nil, err
+// FunctionContext is the context-accepting variant of Function.
+func (e *Engine) FunctionContext(src string) (func(context.Context, ...any) (any, error), error) {
+	return e.NamedFunctionContext(src, "plugin")
+}
+
+// FunctionTimeout is the timeout variant of Function.
+func (e *Engine) FunctionTimeout(src string, timeout time.Duration) (func(...any) (any, error), error) {
+	return e.NamedFunctionTimeout(src, "plugin", timeout)
+}
+
+// NamedFunction compiles a JavaScript file that defines a top-level function
+// named `entrypoint` into a reusable Go callable. Each invocation passes
+// ordered Go arguments to JavaScript as `<entrypoint>(...args)`.
+func (e *Engine) NamedFunction(src, entrypoint string) (func(...any) (any, error), error) {
+	return e.NamedFunctionTimeout(src, entrypoint, defaultFunctionTimeout)
+}
+
+// NamedFunctionContext is the context-accepting variant of NamedFunction.
+func (e *Engine) NamedFunctionContext(src, entrypoint string) (func(context.Context, ...any) (any, error), error) {
+	if !isValidJSIdentifier(entrypoint) {
+		return nil, fmt.Errorf("scripting: NamedFunctionContext: %q is not a valid JS identifier", entrypoint)
 	}
 
-	prog, err := e.programForPluginFunction(src)
+	prog, err := e.programForNamedFunction(src, entrypoint)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	return name, func(ctx context.Context, args ...any) (any, error) {
+	return func(ctx context.Context, args ...any) (any, error) {
 		v, err := e.evalProgramArgs(ctx, prog, args)
 		if err != nil {
 			return nil, err
@@ -204,23 +228,86 @@ func (e *Engine) FunctionContext(src string) (string, func(context.Context, ...a
 	}, nil
 }
 
-// FunctionTimeout compiles a JavaScript plugin file into a reusable Go callable
-// that applies timeout to every invocation.
-func (e *Engine) FunctionTimeout(src string, timeout time.Duration) (string, func(...any) (any, error), error) {
+// NamedFunctionTimeout is the timeout variant of NamedFunction.
+func (e *Engine) NamedFunctionTimeout(src, entrypoint string, timeout time.Duration) (func(...any) (any, error), error) {
 	if timeout <= 0 {
-		return "", nil, fmt.Errorf("scripting: FunctionTimeout: timeout must be greater than zero")
+		return nil, fmt.Errorf("scripting: NamedFunctionTimeout: timeout must be greater than zero")
 	}
 
-	name, fn, err := e.FunctionContext(src)
+	fn, err := e.NamedFunctionContext(src, entrypoint)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	return name, func(args ...any) (any, error) {
+	return func(args ...any) (any, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		return fn(ctx, args...)
 	}, nil
+}
+
+// SeededFunction evaluates src inside a runtime borrowed from the engine's
+// pool: each key in bindings becomes a lexical binding visible to the script,
+// then entrypoint() is called with no arguments and its return value is
+// exported back to Go. Bindings are scoped to the IIFE (not on globalThis),
+// so they do not leak across calls sharing the same pooled runtime.
+//
+// Binding names are reserved symbols: entrypoint MUST NOT appear in bindings,
+// and every binding name must be a valid JS identifier. Pre-flight validation
+// runs on every call (not cached) so collisions are caught even if the same
+// src has been compiled before.
+func (e *Engine) SeededFunction(ctx context.Context, src, entrypoint string, bindings map[string]any) (any, error) {
+	if err := validateSeededCall(entrypoint, bindings); err != nil {
+		return nil, err
+	}
+
+	keys := sortedKeys(bindings)
+	prog, err := e.programForSeededFunction(src, entrypoint, keys)
+	if err != nil {
+		return nil, err
+	}
+
+	v, err := e.evalSeededProgram(ctx, prog, bindings)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, nil
+	}
+	return v.Export(), nil
+}
+
+// SeededFunctionTimeout is the timeout variant of SeededFunction.
+func (e *Engine) SeededFunctionTimeout(src, entrypoint string, bindings map[string]any, timeout time.Duration) (any, error) {
+	if timeout <= 0 {
+		return nil, fmt.Errorf("scripting: SeededFunctionTimeout: timeout must be greater than zero")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return e.SeededFunction(ctx, src, entrypoint, bindings)
+}
+
+func validateSeededCall(entrypoint string, bindings map[string]any) error {
+	if !isValidJSIdentifier(entrypoint) {
+		return fmt.Errorf("scripting: entrypoint %q is not a valid JS identifier", entrypoint)
+	}
+	for k := range bindings {
+		if !isValidJSIdentifier(k) {
+			return fmt.Errorf("scripting: binding name %q is not a valid JS identifier", k)
+		}
+	}
+	if _, collides := bindings[entrypoint]; collides {
+		return fmt.Errorf("scripting: entrypoint %q collides with a binding of the same name; rename the entrypoint or the binding", entrypoint)
+	}
+	return nil
+}
+
+func isValidJSIdentifier(name string) bool {
+	if name == "" {
+		return false
+	}
+	return bindingKeyIsValid(name)
 }
 
 // -----------------------------------------------------------------------------
@@ -388,6 +475,34 @@ func (e *Engine) evalProgram(ctx context.Context, prog *goja.Program, arg any) (
 
 func (e *Engine) evalProgramArgs(ctx context.Context, prog *goja.Program, args []any) (goja.Value, error) {
 	return e.evalProgramCall(ctx, prog, []any{args})
+}
+
+func (e *Engine) evalSeededProgram(ctx context.Context, prog *goja.Program, bindings map[string]any) (goja.Value, error) {
+	if err := e.ensureUsable(ctx); err != nil {
+		return nil, err
+	}
+
+	vm := e.pool.Get().(*goja.Runtime)
+	defer e.pool.Put(vm)
+
+	stop := e.contextSupervisor(ctx, vm)
+	defer stop()
+
+	fnVal, err := vm.RunProgram(prog)
+	if err != nil {
+		return nil, wrapRunError(err, ctx)
+	}
+	fn, ok := goja.AssertFunction(fnVal)
+	if !ok {
+		return nil, fmt.Errorf("scripting: compiled wrapper is not callable")
+	}
+
+	bindingsArg := vm.ToValue(jsPlainValue(bindings))
+	result, err := fn(goja.Undefined(), bindingsArg)
+	if err != nil {
+		return nil, wrapRunError(err, ctx)
+	}
+	return result, nil
 }
 
 func (e *Engine) evalProgramCall(ctx context.Context, prog *goja.Program, args []any) (goja.Value, error) {

@@ -1060,17 +1060,13 @@ func TestFunction_OrderedArgs(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	name, fn, err := e.Function(`
-		function join(prefix, input) {
+	fn, err := e.Function(`
+		function plugin(prefix, input) {
 			return prefix + ":" + input
 		}
-		const plugin = join
 	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
-	}
-	if name != "join" {
-		t.Fatalf("Function name = %q, want join", name)
 	}
 
 	got, err := fn("title", "Hello")
@@ -1086,11 +1082,10 @@ func TestFunction_ZeroArgsAndDefaults(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, fn, err := e.Function(`
-		function label(input = "Untitled") {
+	fn, err := e.Function(`
+		function plugin(input = "Untitled") {
 			return input
 		}
-		const plugin = label
 	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
@@ -1109,15 +1104,11 @@ func TestFunction_ArrowFunctionEntrypoint(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	name, fn, err := e.Function(`
-		const upper = (input) => input.toUpperCase()
-		const plugin = upper
+	fn, err := e.Function(`
+		const plugin = (input) => input.toUpperCase()
 	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
-	}
-	if name != "upper" {
-		t.Fatalf("Function name = %q, want upper", name)
 	}
 
 	got, err := fn("hello")
@@ -1133,8 +1124,8 @@ func TestFunction_ConsoleWritesScriptingPrefixedLogs(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, fn, err := e.Function(`
-		function trace(input) {
+	fn, err := e.Function(`
+		function plugin(input) {
 			console.log("hello", input)
 			console.info("ready")
 			console.warn("careful")
@@ -1142,7 +1133,6 @@ func TestFunction_ConsoleWritesScriptingPrefixedLogs(t *testing.T) {
 			console.debug("details")
 			return input
 		}
-		const plugin = trace
 	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
@@ -1176,15 +1166,14 @@ func TestFunction_ConsoleLoggerWritesNamedPrefixedLogs(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, fn, err := e.Function(`
+	fn, err := e.Function(`
 		const logger = console.logger("plugin/trace")
 
-		function trace(input) {
+		function plugin(input) {
 			logger.log("hello", input)
 			logger.error("broken")
 			return input
 		}
-		const plugin = trace
 	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
@@ -1215,11 +1204,10 @@ func TestFunction_MapArgIsPlainArgument(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, fn, err := e.Function(`
-		function label(page) {
+	fn, err := e.Function(`
+		function plugin(page) {
 			return typeof input + ":" + page.title
 		}
-		const plugin = label
 	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
@@ -1244,8 +1232,8 @@ func TestFunction_DefinedStringMapArgIsPlainObject(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, fn, err := e.Function(`
-		function inspect(input) {
+	fn, err := e.Function(`
+		function plugin(input) {
 			return [
 				input.title,
 				input.nested.ok,
@@ -1255,7 +1243,6 @@ func TestFunction_DefinedStringMapArgIsPlainObject(t *testing.T) {
 				typeof input.Get
 			].join(":")
 		}
-		const plugin = inspect
 	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
@@ -1278,11 +1265,10 @@ func TestFunction_NestedDefinedStringMapArgIsPlainObject(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, fn, err := e.Function(`
-		function inspect(input) {
+	fn, err := e.Function(`
+		function plugin(input) {
 			return input.site.title + ":" + Object.keys(input.site).sort().join(",")
 		}
-		const plugin = inspect
 	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
@@ -1316,11 +1302,10 @@ func TestFunction_RuntimeError(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, fn, err := e.Function(`
-		function broken() {
+	fn, err := e.Function(`
+		function plugin() {
 			return missing.value
 		}
-		const plugin = broken
 	`)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
@@ -1335,11 +1320,10 @@ func TestFunctionContext_RespectsCancellation(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, fn, err := e.FunctionContext(`
-		function spin() {
+	fn, err := e.FunctionContext(`
+		function plugin() {
 			while (true) {}
 		}
-		const plugin = spin
 	`)
 	if err != nil {
 		t.Fatalf("FunctionContext: unexpected error: %v", err)
@@ -1370,11 +1354,10 @@ func TestFunctionTimeout_HonorsTimeout(t *testing.T) {
 	e := NewEngine(Options{})
 	t.Cleanup(func() { e.Close() })
 
-	_, fn, err := e.FunctionTimeout(`
-		function spin() {
+	fn, err := e.FunctionTimeout(`
+		function plugin() {
 			while (true) {}
 		}
-		const plugin = spin
 	`, 25*time.Millisecond)
 	if err != nil {
 		t.Fatalf("FunctionTimeout: unexpected error: %v", err)
@@ -1400,17 +1383,13 @@ func TestFunction_DefaultEngineDelegatesAndReusesSingleton(t *testing.T) {
 	before := engine.cacheLen()
 
 	src := `
-		function label(input) {
+		function plugin(input) {
 			return input
 		}
-		const plugin = label
 	`
-	name, fn, err := Function(src)
+	fn, err := Function(src)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
-	}
-	if name != "label" {
-		t.Fatalf("Function name = %q, want label", name)
 	}
 	if _, err := fn("hello"); err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
@@ -1429,14 +1408,13 @@ func TestFunction_SharesCacheAcrossCalls(t *testing.T) {
 	t.Cleanup(func() { e.Close() })
 
 	src := `
-		function label(input) {
+		function plugin(input) {
 			return input
 		}
-		const plugin = label
 	`
 	before := e.cacheLen()
 
-	_, fn, err := e.Function(src)
+	fn, err := e.Function(src)
 	if err != nil {
 		t.Fatalf("Function: unexpected error: %v", err)
 	}

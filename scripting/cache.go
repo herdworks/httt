@@ -36,15 +36,15 @@ func (e *Engine) programForShape(src string, shape bindingShape) (*goja.Program,
 	return actual.(*goja.Program), nil
 }
 
-func (e *Engine) programForPluginFunction(src string) (*goja.Program, error) {
-	const cachePrefix = "plugin-function"
-	key := cachePrefix + "\x00" + src
+func (e *Engine) programForNamedFunction(src, entrypoint string) (*goja.Program, error) {
+	const cachePrefix = "named-function"
+	key := cachePrefix + "\x00" + entrypoint + "\x00" + src
 
 	if cached, ok := e.cache.Load(key); ok {
 		return cached.(*goja.Program), nil
 	}
 
-	wrapped := pluginFunctionWrapperSource(src)
+	wrapped := namedFunctionWrapperSource(src, entrypoint)
 	prog, err := goja.Compile("cache.go", wrapped, true)
 	if err != nil {
 		return nil, compileError(src, err)
@@ -54,13 +54,58 @@ func (e *Engine) programForPluginFunction(src string) (*goja.Program, error) {
 	return actual.(*goja.Program), nil
 }
 
-func pluginFunctionWrapperSource(src string) string {
+func namedFunctionWrapperSource(src, entrypoint string) string {
 	var b strings.Builder
-	b.Grow(len(src) + 128)
+	b.Grow(len(src) + 160)
 	b.WriteString(`(function(__args){ "use strict"; `)
 	b.WriteString(src)
 	b.WriteString("\n")
-	b.WriteString(`; if (typeof plugin !== "function") { throw new TypeError("plugin selector is not callable"); } return plugin(...__args); })`)
+	b.WriteString(`; if (typeof `)
+	b.WriteString(entrypoint)
+	b.WriteString(` !== "function") { throw new TypeError("`)
+	b.WriteString(entrypoint)
+	b.WriteString(` is not a function"); } return `)
+	b.WriteString(entrypoint)
+	b.WriteString(`(...__args); })`)
+	return b.String()
+}
+
+func (e *Engine) programForSeededFunction(src, entrypoint string, sortedKeys []string) (*goja.Program, error) {
+	const cachePrefix = "seeded"
+	key := cachePrefix + "\x00" + entrypoint + "\x00" + strings.Join(sortedKeys, ",") + "\x00" + src
+
+	if cached, ok := e.cache.Load(key); ok {
+		return cached.(*goja.Program), nil
+	}
+
+	wrapped := seededWrapperSource(src, entrypoint, sortedKeys)
+	prog, err := goja.Compile("cache.go", wrapped, true)
+	if err != nil {
+		return nil, compileError(src, err)
+	}
+
+	actual, _ := e.cache.LoadOrStore(key, prog)
+	return actual.(*goja.Program), nil
+}
+
+func seededWrapperSource(src, entrypoint string, sortedKeys []string) string {
+	var b strings.Builder
+	b.Grow(len(src) + 192)
+	b.WriteString(`(function(__bindings){ "use strict"; `)
+	if len(sortedKeys) > 0 {
+		b.WriteString(`const {`)
+		b.WriteString(strings.Join(sortedKeys, ","))
+		b.WriteString(`} = __bindings; `)
+	}
+	b.WriteString(src)
+	b.WriteString("\n")
+	b.WriteString(`; if (typeof `)
+	b.WriteString(entrypoint)
+	b.WriteString(` !== "function") { throw new TypeError("`)
+	b.WriteString(entrypoint)
+	b.WriteString(` is not a function"); } return `)
+	b.WriteString(entrypoint)
+	b.WriteString(`(); })`)
 	return b.String()
 }
 

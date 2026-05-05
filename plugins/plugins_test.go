@@ -24,22 +24,24 @@ func (getter testGetter) Get(keypath string) any {
 	return value
 }
 
+const upperPluginSrc = `
+function plugin(input) {
+	return input.toUpperCase()
+}
+`
+
+const titlePluginSrc = `
+const plugin = (input) => input.replace(/\b\w/g, c => c.toUpperCase())
+`
+
 func TestLoadPlugins(t *testing.T) {
 	root := t.TempDir()
 	upperPath := filepath.Join(root, "upper.js")
 	titlePath := filepath.Join(root, "title.js")
-	if err := os.WriteFile(upperPath, []byte(`
-function upper(input) {
-	return input.toUpperCase()
-}
-const plugin = upper
-`), 0644); err != nil {
+	if err := os.WriteFile(upperPath, []byte(upperPluginSrc), 0644); err != nil {
 		t.Fatalf("write upper plugin: %v", err)
 	}
-	if err := os.WriteFile(titlePath, []byte(`
-const title = (input) => input.replace(/\b\w/g, c => c.toUpperCase())
-const plugin = title
-`), 0644); err != nil {
+	if err := os.WriteFile(titlePath, []byte(titlePluginSrc), 0644); err != nil {
 		t.Fatalf("write title plugin: %v", err)
 	}
 
@@ -73,12 +75,23 @@ const plugin = title
 
 func TestLoadPluginsLastPluginWins(t *testing.T) {
 	root := t.TempDir()
-	firstPath := filepath.Join(root, "first.js")
-	secondPath := filepath.Join(root, "second.js")
-	if err := os.WriteFile(firstPath, []byte("function label() { return 'first' }\nconst plugin = label"), 0644); err != nil {
+	firstPath := filepath.Join(root, "label.js")
+	secondPath := filepath.Join(root, "label.js")
+	// Two distinct files in two distinct dirs, both named label.js.
+	firstDir := filepath.Join(root, "first")
+	secondDir := filepath.Join(root, "second")
+	if err := os.MkdirAll(firstDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.MkdirAll(secondDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	firstPath = filepath.Join(firstDir, "label.js")
+	secondPath = filepath.Join(secondDir, "label.js")
+	if err := os.WriteFile(firstPath, []byte("function plugin() { return 'first' }"), 0644); err != nil {
 		t.Fatalf("write first plugin: %v", err)
 	}
-	if err := os.WriteFile(secondPath, []byte("function label() { return 'second' }\nconst plugin = label"), 0644); err != nil {
+	if err := os.WriteFile(secondPath, []byte("function plugin() { return 'second' }"), 0644); err != nil {
 		t.Fatalf("write second plugin: %v", err)
 	}
 
@@ -121,14 +134,46 @@ func TestPluginFuncMap(t *testing.T) {
 }
 
 func TestLoadPluginsRejectsReservedNames(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "get.js")
-	if err := os.WriteFile(path, []byte("function get(input) { return input }\nconst plugin = get"), 0644); err != nil {
-		t.Fatalf("write reserved plugin: %v", err)
-	}
+	for _, name := range []string{"get", "plugin"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, name+".js")
+			if err := os.WriteFile(path, []byte("function plugin(input) { return input }"), 0644); err != nil {
+				t.Fatalf("write reserved plugin: %v", err)
+			}
 
-	if _, err := LoadPlugins([]string{path}); err == nil {
-		t.Fatal("LoadPlugins() reserved name error = nil")
+			if _, err := LoadPlugins([]string{path}); err == nil {
+				t.Fatalf("LoadPlugins(%s.js) reserved-name error = nil", name)
+			} else if !strings.Contains(err.Error(), "reserved plugin name") {
+				t.Fatalf("LoadPlugins(%s.js) error = %v, want substring %q", name, err, "reserved plugin name")
+			}
+		})
+	}
+}
+
+func TestLoadPluginsRejectsInvalidFilenames(t *testing.T) {
+	for _, name := range []string{
+		"bad-name",  // hyphen
+		"2digits",   // leading digit
+		"has space", // space
+		"foo.bar",   // intermediate dot
+		"emoji-🚀",   // non-ASCII (also has hyphen)
+		"-leading",  // leading hyphen
+		"$dollar",   // dollar sign
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, name+".js")
+			if err := os.WriteFile(path, []byte("function plugin(input) { return input }"), 0644); err != nil {
+				t.Fatalf("write invalid plugin: %v", err)
+			}
+
+			if _, err := LoadPlugins([]string{path}); err == nil {
+				t.Fatalf("LoadPlugins(%q) invalid-name error = nil", name)
+			} else if !strings.Contains(err.Error(), "invalid plugin name") {
+				t.Fatalf("LoadPlugins(%q) error = %v, want substring %q", name, err, "invalid plugin name")
+			}
+		})
 	}
 }
 
@@ -144,40 +189,23 @@ func TestLoadPluginsReportsCompileErrors(t *testing.T) {
 	}
 }
 
-func TestLoadPluginsRequiresSelector(t *testing.T) {
+func TestLoadPluginsRequiresPluginFunction(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "upper.js")
+	// No `function plugin` and no `const plugin = ...`.
 	if err := os.WriteFile(path, []byte("function upper(input) { return input.toUpperCase() }"), 0644); err != nil {
-		t.Fatalf("write missing selector plugin: %v", err)
-	}
-
-	if _, err := LoadPlugins([]string{path}); err == nil {
-		t.Fatal("LoadPlugins() missing selector error = nil")
-	}
-}
-
-func TestLoadPluginsIgnoresComments(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "upper.js")
-	if err := os.WriteFile(path, []byte(`
-// ht:plugin ignored
-function upper(input) {
-	return input.toUpperCase()
-}
-const plugin = upper
-`), 0644); err != nil {
-		t.Fatalf("write commented plugin: %v", err)
+		t.Fatalf("write missing-entry plugin: %v", err)
 	}
 
 	plugins, err := LoadPlugins([]string{path})
 	if err != nil {
-		t.Fatalf("LoadPlugins() error = %v", err)
+		t.Fatalf("LoadPlugins() unexpected compile error: %v", err)
 	}
-	if _, ok := plugins["ignored"]; ok {
-		t.Fatal("LoadPlugins() registered comment plugin name")
-	}
-	if _, ok := plugins["upper"]; !ok {
-		t.Fatal("LoadPlugins() did not register selected plugin name")
+	// Compile succeeds (LoadPlugin doesn't run the script). The error is
+	// surfaced when the plugin is invoked, since the wrapper checks
+	// typeof plugin === "function".
+	if _, err := plugins["upper"].Func("hello"); err == nil {
+		t.Fatal("plugins[upper].Func() missing-entry error = nil")
 	}
 }
 
@@ -185,13 +213,12 @@ func TestLoadPluginsVariadicPipelineArgs(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "fmtdate.js")
 	if err := os.WriteFile(path, []byte(`
-function fmtdate(format = "", input = "") {
+function plugin(format = "", input = "") {
 	if (typeof input !== "string") {
 		return input
 	}
 	return format + ":" + input
 }
-const plugin = fmtdate
 `), 0644); err != nil {
 		t.Fatalf("write fmtdate plugin: %v", err)
 	}

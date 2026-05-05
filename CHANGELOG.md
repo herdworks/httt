@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+This release removes "magic" naming logic from plugins files and OPML data, generalizes the scripting engine's plugin entry point, and adds a generic seeded-runtime primitive that powers computed template data in `hypertexting-go`.
+
+* Added `Engine.NamedFunction` / `NamedFunctionContext` / `NamedFunctionTimeout` (and package-level wrappers). The wrapper invokes a caller-specified `entrypoint` function name instead of hardcoding `plugin`. `Function*` is a thin alias around `NamedFunction*` with `entrypoint = "plugin"`.
+* Added `Engine.SeededFunction` / `SeededFunctionTimeout` (and package-level wrappers). Runs a JS source with a caller-supplied `bindings map[string]any` exposed as ambient lexical bindings (via IIFE destructuring), then invokes a named entry function with no arguments. Pre-flight checks reject invalid identifiers and any collision between the `entrypoint` and a binding name — that pre-flight is what protects callers from the JS scoping conflict between, e.g., `function data()` and a `data` lexical binding. Seeded calls borrow from the same runtime pool as the other entry points; callers wanting pool isolation between workloads should construct distinct `Engine`s.
+* Changed `Engine.Function` / `FunctionContext` / `FunctionTimeout` (and their package-level wrappers) to drop the leading `name string` return value. They now return `(func(...any) (any, error), error)` (and the context/timeout shape variants). The compiled wrapper still requires the source to expose a top-level `plugin` callable; the JS-side check throws if it isn't there.
+* Changed `plugins.LoadPlugin` to now derive the plugin's public name from the file's basename (sans `.js` extension) rather than from a `const plugin = name` selector inside the file. Plugin filenames must match `^[A-Za-z_][A-Za-z0-9_]*$` (Go identifier shape, required by `text/template` for FuncMap keys). Reserved plugin names are `get` (the value-DSL primitive) and `plugin` (the JS entry-function name).
+* Changed the plugin file format to require a `function plugin(input) { ... }` (a top-level `function` declaration named `plugin`, or any expression that binds the identifier `plugin` to a function — e.g. `const plugin = (input) => ...`). The wrapper enforces `typeof plugin === "function"` at runtime.
+* Changed `opmldata.UnmarshalTemplateData` and `FromOPML` no longer synthesize a top-level `namespace` key from `Head.Title`. The namespace under which OPML data is installed is now determined entirely by the loader's filename rules, not by anything inside the document.
+* Removed `scripting.PluginSelector` and the entire `scripting/metadata.go` AST inspector. Plugin files no longer need a `const plugin = name` selector — their public name comes from the caller (typically the filename).
+
 ## v0.24.0 (2026-05-04)
 
 Major refactor that splits TemplateData and the markdown engine into dedicated, dependency-isolated subpackages so callers can depend on a smaller surface and the value DSL can use markdown rendering without pulling the whole template engine. The value DSL also gains an `html/template`-backed entry point so text-node content can be rendered to `[]*html.Node`.

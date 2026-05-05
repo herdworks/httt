@@ -1,24 +1,21 @@
 // Package opmldata extracts template data from OPML documents.
 //
 // opmldata is a thin bridge between hyperfeed-go's OPML parser and the
-// HyperTemplates data package. It owns the project-specific conventions for
-// projecting an *opml.OPML into a TemplateData, including the top-level
-// "namespace" key derived from the document's Head.Title.
+// HyperTemplates data package. The result mirrors the JSON-tagged
+// opml.OPML struct shape; the namespace under which this data is
+// installed is determined by the caller (typically by the loader's
+// filename-based naming rules), not by anything inside the document.
 package opmldata
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/herdworks/hyperfeed-go/types/opml"
 	"github.com/herdworks/hypertemplates-go/data"
 )
 
 // UnmarshalTemplateData parses OPML bytes and projects the result into a
-// TemplateData. The resulting map's shape mirrors the JSON-tagged opml.OPML
-// struct, with an additional top-level "namespace" key derived from
-// Head.Title (lowercased, spaces and dots stripped). When the title is
-// empty the namespace defaults to "opml".
+// TemplateData whose shape mirrors the JSON-tagged opml.OPML struct.
 func UnmarshalTemplateData(b []byte) (data.TemplateData, error) {
 	doc, err := opml.ParseOPML(b)
 	if err != nil {
@@ -28,7 +25,7 @@ func UnmarshalTemplateData(b []byte) (data.TemplateData, error) {
 }
 
 // FromOPML projects an already-parsed *opml.OPML into a TemplateData using
-// the same shape and "namespace" rule as UnmarshalTemplateData.
+// the same shape as UnmarshalTemplateData.
 func FromOPML(o *opml.OPML) data.TemplateData {
 	if o == nil {
 		return data.TemplateData{}
@@ -48,16 +45,5 @@ func FromOPML(o *opml.OPML) data.TemplateData {
 		return data.TemplateData{}
 	}
 
-	d["namespace"] = namespace(o.Head.Title)
 	return d
-}
-
-func namespace(title string) string {
-	ns := title
-	if ns == "" {
-		ns = "opml"
-	}
-	ns = strings.ReplaceAll(ns, " ", "")
-	ns = strings.ReplaceAll(ns, ".", "")
-	return strings.ToLower(ns)
 }

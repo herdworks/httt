@@ -3,6 +3,9 @@ package plugins
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	texttemplate "text/template"
 
 	"github.com/herdworks/hypertemplates-go/scripting"
@@ -58,15 +61,47 @@ func (plugins Plugins) FuncMap() FuncMap {
 	return funcs
 }
 
-// LoadPlugin compiles one scripting-backed plugin from a local file.
+// pluginNameRegexp matches valid Go-identifier-shaped names. Go's
+// text/template requires Go-identifier-shaped function names in a FuncMap.
+var pluginNameRegexp = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// reservedPluginNames are identifiers that the engine or templating layer
+// reserves for its own use:
+//   - "get": the value-DSL primitive (rewritten into pipelines).
+//   - "plugin": the JS entry-function name expected in plugin files.
+var reservedPluginNames = map[string]struct{}{
+	"get":    {},
+	"plugin": {},
+}
+
+func pluginNameFromPath(path string) (string, error) {
+	base := filepath.Base(path)
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+	if !pluginNameRegexp.MatchString(name) {
+		return "", fmt.Errorf("plugins: invalid plugin name %q (must match %s)", name, pluginNameRegexp.String())
+	}
+	if _, reserved := reservedPluginNames[name]; reserved {
+		return "", fmt.Errorf("plugins: reserved plugin name %q", name)
+	}
+	return name, nil
+}
+
+// LoadPlugin compiles one scripting-backed plugin from a local file. The
+// plugin name is derived from the filename (sans .js extension); the file
+// must define a top-level `function plugin(...)` that the engine wrapper
+// invokes for each call.
 func LoadPlugin(path string) (Plugin, error) {
+	name, err := pluginNameFromPath(path)
+	if err != nil {
+		return Plugin{}, fmt.Errorf("%w (path %q)", err, path)
+	}
+
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return Plugin{}, fmt.Errorf("read plugin %q: %w", path, err)
 	}
-	source := string(src)
 
-	name, fn, err := scripting.Function(source)
+	fn, err := scripting.Function(string(src))
 	if err != nil {
 		return Plugin{}, fmt.Errorf("compile plugin %q: %w", path, err)
 	}
