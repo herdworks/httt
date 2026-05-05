@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.25.0 (2026-05-05)
+
 This release removes "magic" naming logic from plugins files and OPML data, generalizes the scripting engine's plugin entry point, and adds a generic seeded-runtime primitive that powers computed template data in `hypertexting-go`.
 
 * Added `Engine.NamedFunction` / `NamedFunctionContext` / `NamedFunctionTimeout` (and package-level wrappers). The wrapper invokes a caller-specified `entrypoint` function name instead of hardcoding `plugin`. `Function*` is a thin alias around `NamedFunction*` with `entrypoint = "plugin"`.
