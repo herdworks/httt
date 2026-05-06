@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.26.1 (2026-05-05)
+
+Added support for "implicit ht-apply" on ht-template elements. 
+
 ## v0.26.0 (2026-05-05)
 
 Added `scripting.SetConsoleOutput(io.Writer)` — redirects the writer used by `console.log`/`info`/`warn`/`error`/`debug` and any `console.logger(name)` instance. Pass `io.Discard` to silence script output (useful when a tool consumes stdout, e.g. piping JSON output to `jq`), `os.Stderr` to route diagnostics off stdout, or `nil` to restore the default (resolves `os.Stdout` lazily at write time so tests and callers that swap `os.Stdout` continue to work).
