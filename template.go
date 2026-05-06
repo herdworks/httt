@@ -206,7 +206,13 @@ func (template *Template) RenderTemplate(element *html.Node, data *TemplateData,
 		count := len(params[0].ValueSet())
 		layoutTemplate := cloneElement(element)                            // element becomes the new/nested layout template
 		removeAttributes(layoutTemplate, HyperTemplateAttributeStrings...) // remove the ht-template attribute from the new layout template
-		nestedData := &TemplateData{}                                      // instantiate a new/scoped TemplateData object for the new layout template
+
+		var implicitApply bool // Implicit ht-apply ensures template variables are processed on ht-template elements
+		if layoutTemplate.Type == html.ElementNode && !hasAttribute(layoutTemplate, HyperValueAttributeStrings...) {
+			implicitApply = true
+			setAttribute(layoutTemplate, "data-ht-apply", "")
+		}
+		nestedData := &TemplateData{} // instantiate a new/scoped TemplateData object for the new layout template
 		nestedData.Set(params[0].Target, value)
 		for _, p := range params[1:] {
 			nestedData.Set(p.Target, p.Value()) // set additional TemplateData values
@@ -224,6 +230,9 @@ func (template *Template) RenderTemplate(element *html.Node, data *TemplateData,
 		// RECURSION — forward userData unchanged
 		if _, err = nestedTemplate.Process(nestedData, userData); err != nil {
 			return err
+		}
+		if implicitApply {
+			removeAttributes(layoutTemplate, "data-ht-apply") // synthetic; do not leak into output
 		}
 		if layoutTemplate.Type == html.CommentNode {
 			continue // skip comment nodes

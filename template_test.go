@@ -690,3 +690,291 @@ func TestRenderContentHtmlMarkdownRefactorRegression(t *testing.T) {
 		t.Fatalf("markdown: branch missing expected <h1>; got:\n%s", htmlBytes)
 	}
 }
+
+// TestImplicitApplyOnTemplateAttribute exercises the ergonomic shortcut where
+// ${ ... } expressions on an ht-template element's own attributes resolve
+// against the per-iteration scope without an explicit ht-apply.
+func TestImplicitApplyOnTemplateAttribute(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<a ht-template="link:page.links" href="${ link.href }"></a>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"links": TemplateDataSet{
+				TemplateData{"href": "/a"},
+				TemplateData{"href": "/b"},
+			},
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	anchors := QueryAll(rendered, "body > a[href]")
+	if len(anchors) != 2 {
+		t.Fatalf("expected 2 rendered <a> siblings, got %d; output:\n%s", len(anchors), htmlBytes)
+	}
+	want := []string{"/a", "/b"}
+	for i, a := range anchors {
+		if href := getAttributeString(a, "href"); href != want[i] {
+			t.Fatalf("anchor %d: expected href=%q, got %q", i, want[i], href)
+		}
+	}
+
+	if bytes.Contains(htmlBytes, []byte("data-ht-apply")) || bytes.Contains(htmlBytes, []byte("ht-apply")) {
+		t.Fatalf("synthetic ht-apply attribute leaked into output:\n%s", htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("${")) {
+		t.Fatalf("expected ${ ... } expressions to be rendered; got:\n%s", htmlBytes)
+	}
+}
+
+// TestImplicitApplyOnTemplateText verifies that ${ ... } in the direct text
+// children of an ht-template element resolve without an explicit ht-apply.
+func TestImplicitApplyOnTemplateText(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<span ht-template="item:items">${ item }</span>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{"items": []any{"x", "y"}}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	spans := QueryAll(rendered, "body > span")
+	if len(spans) != 2 {
+		t.Fatalf("expected 2 rendered <span> siblings, got %d; output:\n%s", len(spans), htmlBytes)
+	}
+	want := []string{"x", "y"}
+	for i, s := range spans {
+		if s.FirstChild == nil || strings.TrimSpace(s.FirstChild.Data) != want[i] {
+			got := ""
+			if s.FirstChild != nil {
+				got = strings.TrimSpace(s.FirstChild.Data)
+			}
+			t.Fatalf("span %d: expected text %q, got %q", i, want[i], got)
+		}
+	}
+}
+
+// TestImplicitApplyDoesNotClobberExplicit confirms that an author-supplied
+// ht-apply on the same element is preserved through iteration (the synthetic
+// injection is a no-op when ht-apply is already present).
+func TestImplicitApplyDoesNotClobberExplicit(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<a ht-template="link:page.links" ht-apply href="${ link.href }"></a>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"links": TemplateDataSet{
+				TemplateData{"href": "/a"},
+				TemplateData{"href": "/b"},
+			},
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	anchors := QueryAll(rendered, "body > a[href]")
+	if len(anchors) != 2 {
+		t.Fatalf("expected 2 rendered <a> siblings, got %d; output:\n%s", len(anchors), htmlBytes)
+	}
+	want := []string{"/a", "/b"}
+	for i, a := range anchors {
+		if href := getAttributeString(a, "href"); href != want[i] {
+			t.Fatalf("anchor %d: expected href=%q, got %q", i, want[i], href)
+		}
+	}
+}
+
+// TestImplicitApplyStrictMode exercises the data- attribute form under
+// StrictMode so the synthetic data-ht-apply is picked up by the strict
+// HyperValueElements selector.
+func TestImplicitApplyStrictMode(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<a data-ht-template="link:page.links" href="${ link.href }"></a>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"links": TemplateDataSet{
+				TemplateData{"href": "/a"},
+				TemplateData{"href": "/b"},
+			},
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: true, StrictMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	anchors := QueryAll(rendered, "body > a[href]")
+	if len(anchors) != 2 {
+		t.Fatalf("expected 2 rendered <a> siblings, got %d; output:\n%s", len(anchors), htmlBytes)
+	}
+	want := []string{"/a", "/b"}
+	for i, a := range anchors {
+		if href := getAttributeString(a, "href"); href != want[i] {
+			t.Fatalf("anchor %d: expected href=%q, got %q", i, want[i], href)
+		}
+	}
+
+	if bytes.Contains(htmlBytes, []byte("data-ht-apply")) {
+		t.Fatalf("synthetic data-ht-apply attribute leaked into strict-mode output:\n%s", htmlBytes)
+	}
+}
+
+// TestImplicitApplyCleanupNonTidy verifies that the synthetic ht-apply
+// attribute is stripped from cloned elements regardless of TidyMode, so it
+// never reaches the serialized output.
+func TestImplicitApplyCleanupNonTidy(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<a ht-template="link:page.links" href="${ link.href }"></a>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"links": TemplateDataSet{
+				TemplateData{"href": "/a"},
+			},
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: false}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if bytes.Contains(htmlBytes, []byte("data-ht-apply")) {
+		t.Fatalf("synthetic data-ht-apply leaked into non-tidy output:\n%s", htmlBytes)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	clones := QueryAll(rendered, "body > a[href]")
+	found := false
+	for _, a := range clones {
+		if getAttributeString(a, "href") == "/a" && !hasAttribute(a, "ht-template", "data-ht-template") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected an iterated <a href=\"/a\"> sibling without ht-template; got:\n%s", htmlBytes)
+	}
+}
+
+// TestImplicitApplyNoMarker confirms that an ht-template element without any
+// ${ ... } expressions iterates without panic; the synthetic RenderValues
+// pass is a no-op and no stray attribute is emitted.
+func TestImplicitApplyNoMarker(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<li ht-template="x:items">static</li>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{"items": []any{"a", "b", "c"}}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	items := QueryAll(rendered, "body > li")
+	if len(items) != 3 {
+		t.Fatalf("expected 3 <li> siblings, got %d; output:\n%s", len(items), htmlBytes)
+	}
+	for i, li := range items {
+		if li.FirstChild == nil || strings.TrimSpace(li.FirstChild.Data) != "static" {
+			t.Fatalf("li %d: expected text %q, got %q", i, "static", strings.TrimSpace(li.FirstChild.Data))
+		}
+	}
+	if bytes.Contains(htmlBytes, []byte("data-ht-apply")) || bytes.Contains(htmlBytes, []byte("ht-apply")) {
+		t.Fatalf("synthetic ht-apply attribute leaked into output:\n%s", htmlBytes)
+	}
+}
