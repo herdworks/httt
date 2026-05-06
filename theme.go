@@ -206,14 +206,22 @@ func (theme *Theme) ResourceHTML(resourceRef string) (*html.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !exists {
-		return nil, fmt.Errorf("template resource \"%s\" not found", resourcePath)
+	if exists {
+		resourceBytes, err := os.ReadFile(resourcePath)
+		if err != nil {
+			return nil, err
+		}
+		return html.Parse(bytes.NewReader(resourceBytes))
 	}
-	resourceBytes, err := os.ReadFile(resourcePath)
+	// On disk-miss, fall back to embedded builtins at the same relative path.
+	builtinBytes, found, err := getBuiltinResource(resourceRef)
 	if err != nil {
 		return nil, err
 	}
-	return html.Parse(bytes.NewReader(resourceBytes))
+	if !found {
+		return nil, fmt.Errorf("template resource \"%s\" not found", resourcePath)
+	}
+	return html.Parse(bytes.NewReader(builtinBytes))
 }
 func (theme *Theme) LayoutHTML(layoutRef string) (*html.Node, error) {
 	layoutDir := theme.LayoutsDirName()

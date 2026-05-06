@@ -51,6 +51,12 @@ func (template *Template) Process(data *TemplateData, userData *TemplateData) (h
 		return nil, err
 	}
 
+	// inject built-in fragments into the layout (before any directive evaluation
+	// so subsequent passes apply to injected nodes)
+	if err = template.RenderBuiltins(); err != nil {
+		return nil, err
+	}
+
 	// process layout template data
 	data.Set("layout", template.LayoutData())
 
@@ -145,7 +151,18 @@ func (template *Template) IncludeFragments(element *html.Node, path string) (fra
 	var includePath string = template.Theme.ResourcePath(path)
 	var fragmentBytes []byte
 	if fragmentBytes, err = os.ReadFile(includePath); err != nil {
-		return nil, errors.Join(ErrIncludeFragment, err)
+		if !os.IsNotExist(err) {
+			return nil, errors.Join(ErrIncludeFragment, err)
+		}
+		// On disk-miss, fall back to embedded builtins.
+		builtinBytes, found, builtinErr := getBuiltinResource(path)
+		if builtinErr != nil {
+			return nil, errors.Join(ErrIncludeFragment, builtinErr)
+		}
+		if !found {
+			return nil, errors.Join(ErrIncludeFragment, err)
+		}
+		fragmentBytes = builtinBytes
 	}
 	if len(fragmentBytes) == 0 {
 		return []*html.Node{}, nil // TODO: throw an error if fragment fragmentBytes is empty?

@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+Added built-in embedded template fragments and a generic embedded-FS fallback for theme resource lookups. The library now ships a small set of layout slots that themes can override on disk or disable with an empty file.
+
+* Added `Builtin` struct (`Name`, `Selector`, `Mode`, `Fragment`) describing a layout-injection slot. 
+  Modes are `prepend`, `append`, `before`, `after`.
+* Added `DefaultBuiltins []Builtin` package-level registry with `head_start` builtin (prepend into `head`). 
+  Callers may append to or replace entries.
+* Added `BuiltinsFS fs.FS` package-level variable that defaults to the embedded fragments shipped with the package.
+  Caller programs (e.g. `hypertexting-go`) may replace it with any `fs.FS` to inject their own built-in resource pack.
+* Added `Template.RenderBuiltins()` pipeline pass that runs after `ResolveIncludes` and before all directive evaluation.
+  Injected builtins flow through the rest of the pipeline naturally (`${...}`, `ht-if`, `ht-attrs`, etc., apply to them). 
+  Skipped when `BlockMode` is true.
+* Changed `Template.IncludeFragments` & `Theme.ResourceHTML` to load missing resources from `BuiltinsFS`. 
+  Empty theme files still short-circuit (opt-out); fallback is only consulted on `os.IsNotExist`.
+* Added `MustSubFS(fsys, dir)` helper for callers that ship their own `embed.FS` assign it to `BuiltinsFS`.
+
 ## v0.26.1 (2026-05-05)
 
 Added support for "implicit ht-apply" on ht-template elements. 
