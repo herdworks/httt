@@ -1440,19 +1440,20 @@ func TestFunction_DefaultEngineDelegatesAndReusesSingleton(t *testing.T) {
 			return input
 		}
 	`
-	fn, err := Function(src)
+	plugin := Plugin{Source: src, Entrypoint: "plugin"}
+	fn, err := plugin.Compile()
 	if err != nil {
-		t.Fatalf("Function: unexpected error: %v", err)
+		t.Fatalf("Plugin.Compile: unexpected error: %v", err)
 	}
 	if _, err := fn("hello"); err != nil {
-		t.Fatalf("Function: unexpected error: %v", err)
+		t.Fatalf("Plugin.Compile: unexpected error: %v", err)
 	}
 
 	if shared() != engine {
 		t.Fatal("shared: expected singleton engine pointer")
 	}
 	if got := shared().cacheLen(); got != before+1 {
-		t.Fatalf("cacheLen: got %d; want %d after package-level Function call", got, before+1)
+		t.Fatalf("cacheLen: got %d; want %d after Plugin.Compile call", got, before+1)
 	}
 }
 

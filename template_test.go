@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	htplugins "github.com/herdworks/hypertemplates-go/plugins"
 	"github.com/herdworks/hypertemplates-go/scripting"
+	htvalue "github.com/herdworks/hypertemplates-go/value"
 	"golang.org/x/net/html"
 )
 
@@ -330,13 +330,17 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 		t.Fatalf("error parsing layout html: %v", err)
 	}
 
-	upper, err := scripting.Function(`
-		function plugin(input) {
-			return input.toUpperCase()
-		}
-	`)
+	upperPlugin := scripting.Plugin{
+		Source: `
+			function plugin(input) {
+				return input.toUpperCase()
+			}
+		`,
+		Entrypoint: "plugin",
+	}
+	upper, err := upperPlugin.Compile()
 	if err != nil {
-		t.Fatalf("error compiling scripting function: %v", err)
+		t.Fatalf("error compiling scripting plugin: %v", err)
 	}
 
 	data := TemplateData{
@@ -347,8 +351,8 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 	template := &Template{
 		Layout:   layout,
 		TidyMode: true,
-		Plugins: htplugins.Plugins{
-			"upper": {Name: "upper", Func: htplugins.Func(upper)},
+		Plugins: htvalue.Plugins{
+			"upper": {Name: "upper", Func: upper},
 		},
 	}
 

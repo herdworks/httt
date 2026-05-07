@@ -1,28 +1,11 @@
-package plugins
+package value
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	htvalue "github.com/herdworks/hypertemplates-go/value"
 )
-
-type testGetter map[string]any
-
-func (getter testGetter) Get(keypath string) any {
-	value := any(map[string]any(getter))
-
-	for _, key := range strings.Split(keypath, ".") {
-		mapped, ok := value.(map[string]any)
-		if !ok {
-			return nil
-		}
-		value = mapped[key]
-	}
-	return value
-}
 
 const upperPluginSrc = `
 function plugin(input) {
@@ -56,7 +39,7 @@ func TestLoadPlugins(t *testing.T) {
 		t.Fatalf("upper plugin path = %q, want %q", plugins["upper"].Path, upperPath)
 	}
 
-	rendered, err := htvalue.RenderString(`${ page.title | upper }`, testGetter{"page": map[string]any{"title": "hello"}}, htvalue.SyntaxDefault, plugins.FuncMap())
+	rendered, err := RenderString(`${ page.title | upper }`, testGetter{"page": map[string]any{"title": "hello"}}, SyntaxDefault, plugins.FuncMap())
 	if err != nil {
 		t.Fatalf("Render upper plugin error = %v", err)
 	}
@@ -64,7 +47,7 @@ func TestLoadPlugins(t *testing.T) {
 		t.Fatalf("Render upper plugin = %q, want HELLO", rendered)
 	}
 
-	rendered, err = htvalue.RenderString(`${ page.title | title }`, testGetter{"page": map[string]any{"title": "hello world"}}, htvalue.SyntaxDefault, plugins.FuncMap())
+	rendered, err = RenderString(`${ page.title | title }`, testGetter{"page": map[string]any{"title": "hello world"}}, SyntaxDefault, plugins.FuncMap())
 	if err != nil {
 		t.Fatalf("Render title plugin error = %v", err)
 	}
@@ -75,9 +58,6 @@ func TestLoadPlugins(t *testing.T) {
 
 func TestLoadPluginsLastPluginWins(t *testing.T) {
 	root := t.TempDir()
-	firstPath := filepath.Join(root, "label.js")
-	secondPath := filepath.Join(root, "label.js")
-	// Two distinct files in two distinct dirs, both named label.js.
 	firstDir := filepath.Join(root, "first")
 	secondDir := filepath.Join(root, "second")
 	if err := os.MkdirAll(firstDir, 0755); err != nil {
@@ -86,8 +66,8 @@ func TestLoadPluginsLastPluginWins(t *testing.T) {
 	if err := os.MkdirAll(secondDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	firstPath = filepath.Join(firstDir, "label.js")
-	secondPath = filepath.Join(secondDir, "label.js")
+	firstPath := filepath.Join(firstDir, "label.js")
+	secondPath := filepath.Join(secondDir, "label.js")
 	if err := os.WriteFile(firstPath, []byte("function plugin() { return 'first' }"), 0644); err != nil {
 		t.Fatalf("write first plugin: %v", err)
 	}
@@ -99,7 +79,7 @@ func TestLoadPluginsLastPluginWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPlugins() error = %v", err)
 	}
-	rendered, err := htvalue.RenderString(`${ page.title | label }`, testGetter{"page": map[string]any{"title": "ignored"}}, htvalue.SyntaxDefault, plugins.FuncMap())
+	rendered, err := RenderString(`${ page.title | label }`, testGetter{"page": map[string]any{"title": "ignored"}}, SyntaxDefault, plugins.FuncMap())
 	if err != nil {
 		t.Fatalf("Render label plugin error = %v", err)
 	}
@@ -109,8 +89,8 @@ func TestLoadPluginsLastPluginWins(t *testing.T) {
 }
 
 func TestMergeLastPluginGroupWins(t *testing.T) {
-	first := Plugins{"label": {Name: "label", Path: "first.js", Func: Func(func(...any) (any, error) { return "first", nil })}}
-	second := Plugins{"label": {Name: "label", Path: "second.js", Func: Func(func(...any) (any, error) { return "second", nil })}}
+	first := Plugins{"label": {Name: "label", Path: "first.js", Func: func(...any) (any, error) { return "first", nil }}}
+	second := Plugins{"label": {Name: "label", Path: "second.js", Func: func(...any) (any, error) { return "second", nil }}}
 
 	merged := Merge(first, second)
 	if merged["label"].Path != "second.js" {
@@ -121,7 +101,7 @@ func TestMergeLastPluginGroupWins(t *testing.T) {
 func TestPluginFuncMap(t *testing.T) {
 	plugin := Plugin{
 		Name: "label",
-		Func: Func(func(...any) (any, error) { return "ok", nil }),
+		Func: func(...any) (any, error) { return "ok", nil },
 	}
 
 	funcs := plugin.FuncMap()
@@ -130,6 +110,20 @@ func TestPluginFuncMap(t *testing.T) {
 	}
 	if funcs["label"] == nil {
 		t.Fatal("FuncMap label function = nil")
+	}
+}
+
+func TestPluginsFuncMap_SkipsNilFunc(t *testing.T) {
+	plugins := Plugins{
+		"good": {Name: "good", Func: func(...any) (any, error) { return "ok", nil }},
+		"bad":  {Name: "bad"},
+	}
+	funcs := plugins.FuncMap()
+	if _, ok := funcs["good"]; !ok {
+		t.Fatal("good plugin missing from FuncMap")
+	}
+	if _, ok := funcs["bad"]; ok {
+		t.Fatal("bad plugin (nil Func) leaked into FuncMap")
 	}
 }
 
@@ -228,10 +222,10 @@ function plugin(format = "", input = "") {
 		t.Fatalf("LoadPlugins() error = %v", err)
 	}
 
-	rendered, err := htvalue.RenderString(
+	rendered, err := RenderString(
 		`${ page.updated_at, page.created_at | fmtdate "YYYY-MM-DD" }`,
 		testGetter{"page": map[string]any{"created_at": "2026-04-28T00:00:00Z"}},
-		htvalue.SyntaxDefault,
+		SyntaxDefault,
 		plugins.FuncMap(),
 	)
 	if err != nil {

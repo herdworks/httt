@@ -6,20 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
-Added built-in embedded template fragments and a generic embedded-FS fallback for theme resource lookups. The library now ships a small set of layout slots that themes can override on disk or disable with an empty file.
+Added support for new embedded/builtin template fragments, and simplified the "plugins" implementation. 
 
-* Added `Builtin` struct (`Name`, `Selector`, `Mode`, `Fragment`) describing a layout-injection slot. 
-  Modes are `prepend`, `append`, `before`, `after`.
-* Added `DefaultBuiltins []Builtin` package-level registry with `head_start` builtin (prepend into `head`). 
-  Callers may append to or replace entries.
-* Added `BuiltinsFS fs.FS` package-level variable that defaults to the embedded fragments shipped with the package.
-  Caller programs (e.g. `hypertexting-go`) may replace it with any `fs.FS` to inject their own built-in resource pack.
-* Added `Template.RenderBuiltins()` pipeline pass that runs after `ResolveIncludes` and before all directive evaluation.
-  Injected builtins flow through the rest of the pipeline naturally (`${...}`, `ht-if`, `ht-attrs`, etc., apply to them). 
-  Skipped when `BlockMode` is true.
-* Changed `Template.IncludeFragments` & `Theme.ResourceHTML` to load missing resources from `BuiltinsFS`. 
-  Empty theme files still short-circuit (opt-out); fallback is only consulted on `os.IsNotExist`.
-* Added `MustSubFS(fsys, dir)` helper for callers that ship their own `embed.FS` assign it to `BuiltinsFS`.
+Add a new RenderBuiltins step to the template.Process() procedure, with a new `head_start.html` fragment that prepends the `<head>` element. Callers can override the embedded filesystem with their own resources, and they can configure the default builtins. 
+
+Unified user-facing and internal meaning of plugins by consolidating `hypertemplates-go/plugin` into `hypertemplates-go/scripting` and adding support for plugin Kinds. 
+
+* Unified the user-facing and internal meaning of "plugin": a JavaScript file with a named entrypoint and optional local bindings, with concerns split across `scripting` (runtime), `value` (variable-substitution plugins), and `data` (computed-namespace plugins). The `hypertemplates-go/plugins` package is gone.
+* Added `scripting.Plugin` (`Name`, `Path`, `Source`, `Entrypoint`, `Bindings`) with `Compile()` for reusable callables (variable-substitution shape) and `Run(ctx)` for one-shot evaluation with bindings (computed-namespace shape).
+* Added `scripting.LoadPlugin` / `LoadPlugins` for reading `.js` files into unbound `Plugin` values; callers set `Entrypoint` and `Bindings`.
+* Added `value.Plugin` / `value.Plugins` / `value.LoadPlugin` / `value.LoadPlugins` / `value.Merge`. Reserved names: `get`, `plugin`. Filenames must match `^[A-Za-z_][A-Za-z0-9_]*$`.
+* Added `data.Plugin` / `data.LoadPlugin` / `data.NamespaceSegmentsFromRelPath`. Reserved names: `namespace`, `data`. Namespace segments accept `^[A-Za-z0-9_]+$` (leading digits allowed).
+* Removed the package-level `scripting.Function` / `NamedFunction` / `SeededFunction` and their `*Context` / `*Timeout` variants. Use `scripting.Plugin{Source, Entrypoint, ...}.Compile()` or `.Run(ctx)` instead. The `*Engine` methods are retained as internal building blocks; `Eval` / `EvalString` / `Script*` are unchanged.
+* Changed `Template.Plugins` and `Theme.Plugins` from `plugins.Plugins` to `value.Plugins`. `Theme.DiscoverPlugins` and equivalent helpers in consumer packages call `value.LoadPlugins` directly.
+* Added built-in embedded template fragments and a generic embedded-FS fallback for theme resource lookups. The library ships a small set of layout slots that themes can override on disk or disable with an empty file.
+* Added `Builtin` struct (`Name`, `Selector`, `Mode`, `Fragment`) describing a layout-injection slot. Modes are `prepend`, `append`, `before`, `after`.
+* Added `DefaultBuiltins []Builtin` package-level registry with a `head_start` builtin (prepend into `head`). Callers may append to or replace entries.
+* Added `BuiltinsFS fs.FS` package-level variable that defaults to the embedded fragments shipped with the package. Caller programs (e.g. `hypertexting-go`) may replace it with any `fs.FS` to inject their own built-in resource pack.
+* Added `Template.RenderBuiltins()` pipeline pass that runs after `ResolveIncludes` and before all directive evaluation; injected builtins flow through the rest of the pipeline naturally (`${...}`, `ht-if`, `ht-attrs`, etc., apply to them). Skipped when `BlockMode` is true.
+* Added `MustSubFS(fsys, dir)` helper for callers that ship their own `embed.FS` and want to assign it to `BuiltinsFS`.
+* Changed `Template.IncludeFragments` and `Theme.ResourceHTML` to load missing resources from `BuiltinsFS`; empty theme files still short-circuit (opt-out), and the fallback is only consulted on `os.IsNotExist`.
 
 ## v0.26.1 (2026-05-05)
 

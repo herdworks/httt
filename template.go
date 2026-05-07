@@ -15,7 +15,6 @@ import (
 
 	"github.com/andybalholm/cascadia"
 	htmarkdown "github.com/herdworks/hypertemplates-go/markdown"
-	htplugins "github.com/herdworks/hypertemplates-go/plugins"
 	htvalue "github.com/herdworks/hypertemplates-go/value"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -31,7 +30,7 @@ type Template struct {
 	StrictMode     bool // enforce HTML5 custom attribute syntax (data-ht-*)
 	TidyMode       bool
 	MarkdownConfig *HyperMarkConfig
-	Plugins        htplugins.Plugins
+	Plugins        htvalue.Plugins
 
 	// Internal state
 	BlockMode bool

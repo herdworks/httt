@@ -14,19 +14,19 @@ import (
 
 	"golang.org/x/net/html"
 
-	htplugins "github.com/herdworks/hypertemplates-go/plugins"
+	htvalue "github.com/herdworks/hypertemplates-go/value"
 )
 
 type Theme struct {
-	URI          *url.URL          `json:"-" yaml:"-"`
-	Href         string            `json:"href,omitempty" yaml:"href,omitempty"`
-	Name         string            `json:"name,omitempty" yaml:"name,omitempty"`
-	Description  string            `json:"description,omitempty" yaml:"description,omitempty"`
-	Version      string            `json:"version,omitempty" yaml:"version,omitempty"`
-	Config       ThemeConfig       `json:"config,omitempty" yaml:"config,omitempty"`
-	TemplateData TemplateData      `json:"data,omitempty" yaml:"data,omitempty"`
-	Assets       []string          `json:"-" yaml:"-"` // paths relative to StaticDirName()
-	Plugins      htplugins.Plugins `json:"-" yaml:"-"`
+	URI          *url.URL        `json:"-" yaml:"-"`
+	Href         string          `json:"href,omitempty" yaml:"href,omitempty"`
+	Name         string          `json:"name,omitempty" yaml:"name,omitempty"`
+	Description  string          `json:"description,omitempty" yaml:"description,omitempty"`
+	Version      string          `json:"version,omitempty" yaml:"version,omitempty"`
+	Config       ThemeConfig     `json:"config,omitempty" yaml:"config,omitempty"`
+	TemplateData TemplateData    `json:"data,omitempty" yaml:"data,omitempty"`
+	Assets       []string        `json:"-" yaml:"-"` // paths relative to StaticDirName()
+	Plugins      htvalue.Plugins `json:"-" yaml:"-"`
 }
 
 type ThemeConfig struct {
@@ -257,7 +257,7 @@ func (theme *Theme) DiscoverPlugins() error {
 	if err != nil {
 		return err
 	}
-	theme.Plugins, err = htplugins.LoadPlugins(paths)
+	theme.Plugins, err = htvalue.LoadPlugins(paths)
 	if err != nil {
 		return err
 	}
