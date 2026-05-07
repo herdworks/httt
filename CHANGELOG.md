@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## 0.27.0 (2026-05-06)
+
 Added support for new embedded/builtin template fragments, and simplified the "plugins" implementation. 
 
 Add a new RenderBuiltins step to the template.Process() procedure, with a new `head_start.html` fragment that prepends the `<head>` element. Callers can override the embedded filesystem with their own resources, and they can configure the default builtins. 
