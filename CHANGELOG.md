@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.28.0 (2026-05-08)
+
 Standardized scripting plugins on ESM default exports.
 
 **BREAKING:** replaced the `Entrypoint`-based plugin authoring
