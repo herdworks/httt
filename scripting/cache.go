@@ -14,7 +14,8 @@ func (e *Engine) programForArg(src string, arg any) (*goja.Program, error) {
 }
 
 // programForShape returns the compiled *goja.Program for (src, binding-shape),
-// compiling and caching it on a miss.
+// compiling and caching it on a miss. Used by Eval/Script — i.e. inline
+// expression evaluation against a per-call data context.
 func (e *Engine) programForShape(src string, shape bindingShape) (*goja.Program, error) {
 	key := shape.cacheKey(src)
 
@@ -36,76 +37,81 @@ func (e *Engine) programForShape(src string, shape bindingShape) (*goja.Program,
 	return actual.(*goja.Program), nil
 }
 
-func (e *Engine) programForNamedFunction(src, entrypoint string) (*goja.Program, error) {
-	const cachePrefix = "named-function"
-	key := cachePrefix + "\x00" + entrypoint + "\x00" + src
+// programForPlugin returns the compiled *goja.Program for an esbuild-
+// transformed plugin source wrapped in the plugin IIFE, parameterized by
+// the sorted bindings key list. Plugin sources are expected to be CJS-
+// shaped (the output of esbuild Transform with FormatCommonJS).
+func (e *Engine) programForPlugin(transformedSrc string, sortedKeys []string) (*goja.Program, error) {
+	key := pluginCacheKey(transformedSrc, sortedKeys)
 
 	if cached, ok := e.cache.Load(key); ok {
 		return cached.(*goja.Program), nil
 	}
 
-	wrapped := namedFunctionWrapperSource(src, entrypoint)
+	wrapped := pluginWrapperSource(transformedSrc, sortedKeys)
 	prog, err := goja.Compile("cache.go", wrapped, true)
 	if err != nil {
-		return nil, compileError(src, err)
+		return nil, compileError(transformedSrc, err)
 	}
 
 	actual, _ := e.cache.LoadOrStore(key, prog)
 	return actual.(*goja.Program), nil
 }
 
-func namedFunctionWrapperSource(src, entrypoint string) string {
+// pluginWrapperSource produces the outer IIFE that wraps an esbuild-
+// transformed plugin source. The wrapper takes two arguments —
+// `__bindings` and `__args` — optionally destructures bindings into
+// top-level locals, defines a `require` stub, then runs the esbuild IIFE
+// (which assigns the module's exports to the global named in
+// pluginGlobalName, e.g. __pluginMod). After the inner IIFE returns, the
+// wrapper extracts __pluginMod.default, validates it's callable, and
+// invokes it with the supplied args.
+//
+// The require stub throws a JS Error tagged with name === "PluginError"
+// and pluginErrorFeature === "require"; asPluginError converts those back
+// to a *PluginError on the Go side so callers can use errors.As.
+//
+// To re-enable CJS-style authoring (`module.exports = function(){…}`) in
+// the future:
+//  1. transform.go: switch `Format: api.FormatIIFE` back to
+//     `api.FormatCommonJS` and remove `GlobalName: pluginGlobalName`.
+//  2. Below: re-introduce `const module = { exports: {} }; const exports
+//     = module.exports;` before the user source, and replace the
+//     extraction line with the dual-form fallback
+//     `(module.exports && module.exports.default !== undefined) ?
+//     module.exports.default : module.exports`. The require stub
+//     and bindings prelude stay as-is.
+func pluginWrapperSource(transformedSrc string, sortedKeys []string) string {
 	var b strings.Builder
-	b.Grow(len(src) + 160)
-	b.WriteString(`(function(__args){ "use strict"; `)
-	b.WriteString(src)
-	b.WriteString("\n")
-	b.WriteString(`; if (typeof `)
-	b.WriteString(entrypoint)
-	b.WriteString(` !== "function") { throw new TypeError("`)
-	b.WriteString(entrypoint)
-	b.WriteString(` is not a function"); } return `)
-	b.WriteString(entrypoint)
-	b.WriteString(`(...__args); })`)
-	return b.String()
-}
+	b.Grow(len(transformedSrc) + 512)
 
-func (e *Engine) programForSeededFunction(src, entrypoint string, sortedKeys []string) (*goja.Program, error) {
-	const cachePrefix = "seeded"
-	key := cachePrefix + "\x00" + entrypoint + "\x00" + strings.Join(sortedKeys, ",") + "\x00" + src
+	b.WriteString(`(function(__bindings, __args) { "use strict"; `)
 
-	if cached, ok := e.cache.Load(key); ok {
-		return cached.(*goja.Program), nil
-	}
-
-	wrapped := seededWrapperSource(src, entrypoint, sortedKeys)
-	prog, err := goja.Compile("cache.go", wrapped, true)
-	if err != nil {
-		return nil, compileError(src, err)
-	}
-
-	actual, _ := e.cache.LoadOrStore(key, prog)
-	return actual.(*goja.Program), nil
-}
-
-func seededWrapperSource(src, entrypoint string, sortedKeys []string) string {
-	var b strings.Builder
-	b.Grow(len(src) + 192)
-	b.WriteString(`(function(__bindings){ "use strict"; `)
 	if len(sortedKeys) > 0 {
 		b.WriteString(`const {`)
 		b.WriteString(strings.Join(sortedKeys, ","))
 		b.WriteString(`} = __bindings; `)
 	}
-	b.WriteString(src)
+
+	b.WriteString(`const require = function(__spec) { `)
+	b.WriteString(`const __err = new Error("PluginError: require is not supported in plugins yet"); `)
+	b.WriteString(`__err.name = "PluginError"; `)
+	b.WriteString(`__err.pluginErrorFeature = "require"; `)
+	b.WriteString(`throw __err; `)
+	b.WriteString(`}; `)
+
 	b.WriteString("\n")
-	b.WriteString(`; if (typeof `)
-	b.WriteString(entrypoint)
-	b.WriteString(` !== "function") { throw new TypeError("`)
-	b.WriteString(entrypoint)
-	b.WriteString(` is not a function"); } return `)
-	b.WriteString(entrypoint)
-	b.WriteString(`(); })`)
+	b.WriteString(transformedSrc)
+	b.WriteString("\n")
+
+	b.WriteString(`const __plugin = (typeof `)
+	b.WriteString(pluginGlobalName)
+	b.WriteString(` !== "undefined") ? `)
+	b.WriteString(pluginGlobalName)
+	b.WriteString(`.default : undefined; `)
+	b.WriteString(`if (typeof __plugin !== "function") { throw new TypeError("plugin default export is not a function"); } `)
+	b.WriteString(`return __plugin.apply(undefined, __args || []); })`)
+
 	return b.String()
 }
 

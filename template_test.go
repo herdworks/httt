@@ -2,6 +2,7 @@ package hypertemplates
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/url"
 	"os"
@@ -332,15 +333,17 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 
 	upperPlugin := scripting.Plugin{
 		Source: `
-			function plugin(input) {
+			export default function(input) {
 				return input.toUpperCase()
 			}
 		`,
-		Entrypoint: "plugin",
 	}
-	upper, err := upperPlugin.Compile()
+	upperCallable, err := upperPlugin.Compile(nil)
 	if err != nil {
 		t.Fatalf("error compiling scripting plugin: %v", err)
+	}
+	upper := func(args ...any) (any, error) {
+		return upperCallable(context.Background(), nil, args...)
 	}
 
 	data := TemplateData{

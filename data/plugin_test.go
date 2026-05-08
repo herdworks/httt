@@ -9,13 +9,13 @@ import (
 )
 
 const namespacePluginSrc = `
-function namespace() {
+export default function() {
 	return { count: site.pages.length, kind: typeof build }
 }
 `
 
 const namespaceArrowSrc = `
-const namespace = () => ({ greeting: "hello " + site.name })
+export default () => ({ greeting: "hello " + site.name })
 `
 
 func TestLoadPlugin_ReadsAndValidates(t *testing.T) {
@@ -80,7 +80,7 @@ func TestLoadPlugin_ArrowEntrypoint(t *testing.T) {
 }
 
 func TestLoadPlugin_RejectsReservedNames(t *testing.T) {
-	for _, name := range []string{"namespace", "data"} {
+	for _, name := range []string{"data"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, name+".js")

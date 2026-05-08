@@ -2,10 +2,18 @@
 // small JavaScript scripts and plugin function files against per-call Go
 // arguments.
 //
-// The engine compiles scripts into reusable bytecode wrappers that either
-// expose top-level map keys as local constants or bind a single local
-// `input` constant, so per-call values never leak across calls sharing the
-// same pooled runtime.
+// Two evaluation surfaces are exposed:
+//
+//   - Eval/Script: inline expression evaluation against a per-call data
+//     context. Top-level map keys can become local constants inside the
+//     script, or a single `input` constant when the arg isn't a plain map.
+//
+//   - Function/Plugin: compile a JavaScript file whose default export is a
+//     function (idiomatic ES module syntax: `export default function(...)`).
+//     The engine pre-scans for unsupported features, transforms the source
+//     through esbuild, and wraps the result in an IIFE that synthesizes
+//     module/exports plus a require() stub. Plugin-level callers can supply
+//     bindings that the wrapper exposes as top-level lexical locals.
 package scripting
 
 import (
@@ -41,11 +49,10 @@ type Options struct {
 // per-call data contexts.
 //
 // An Engine pools a single set of hardened goja runtimes, shared across all
-// evaluation entry points (Eval, Script, NamedFunction, SeededFunction). Each
-// entry point's wrapper is an IIFE whose locals are scoped to the call, so
-// no per-call data leaks across runtimes that pass through the pool. Callers
-// that want pool isolation between workloads should construct distinct
-// Engines.
+// evaluation entry points. Each entry point's wrapper is an IIFE whose
+// locals are scoped to the call, so no per-call data leaks across runtimes
+// that pass through the pool. Callers that want pool isolation between
+// workloads should construct distinct Engines.
 //
 // An Engine is safe for concurrent use by multiple goroutines.
 type Engine struct {
@@ -179,46 +186,37 @@ func (e *Engine) ScriptTimeout(src string, sampleArg any, timeout time.Duration)
 	}, nil
 }
 
-// Function compiles a JavaScript file that defines a top-level
-// `function plugin(...)` into a reusable Go callable. Each invocation passes
-// ordered Go arguments to JavaScript as `plugin(...args)`. The plugin name is
-// not derived from the source — callers (e.g. plugins.LoadPlugin) determine
-// the public name from the file path.
+// Function compiles a JavaScript file whose default export is a function
+// into a reusable Go callable. Each invocation passes ordered Go arguments
+// to JavaScript as positional arguments to the default-exported function.
+// The default per-call timeout is applied.
+//
+// The source must be ES module-shaped (`export default function(...)`) or
+// CJS-shaped (`module.exports = function(...)`). esbuild handles the
+// transformation; see scripting/cache.go pluginWrapperSource for the
+// extraction logic.
 func (e *Engine) Function(src string) (func(...any) (any, error), error) {
-	return e.NamedFunctionTimeout(src, "plugin", defaultFunctionTimeout)
+	return e.FunctionTimeout(src, defaultFunctionTimeout)
 }
 
 // FunctionContext is the context-accepting variant of Function.
 func (e *Engine) FunctionContext(src string) (func(context.Context, ...any) (any, error), error) {
-	return e.NamedFunctionContext(src, "plugin")
-}
-
-// FunctionTimeout is the timeout variant of Function.
-func (e *Engine) FunctionTimeout(src string, timeout time.Duration) (func(...any) (any, error), error) {
-	return e.NamedFunctionTimeout(src, "plugin", timeout)
-}
-
-// NamedFunction compiles a JavaScript file that defines a top-level function
-// named `entrypoint` into a reusable Go callable. Each invocation passes
-// ordered Go arguments to JavaScript as `<entrypoint>(...args)`.
-func (e *Engine) NamedFunction(src, entrypoint string) (func(...any) (any, error), error) {
-	return e.NamedFunctionTimeout(src, entrypoint, defaultFunctionTimeout)
-}
-
-// NamedFunctionContext is the context-accepting variant of NamedFunction.
-func (e *Engine) NamedFunctionContext(src, entrypoint string) (func(context.Context, ...any) (any, error), error) {
-	if !isValidJSIdentifier(entrypoint) {
-		return nil, fmt.Errorf("scripting: NamedFunctionContext: %q is not a valid JS identifier", entrypoint)
+	transformed, err := transform(src, "")
+	if err != nil {
+		return nil, err
 	}
 
-	prog, err := e.programForNamedFunction(src, entrypoint)
+	prog, err := e.programForPlugin(transformed, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	return func(ctx context.Context, args ...any) (any, error) {
-		v, err := e.evalProgramArgs(ctx, prog, args)
+		v, err := e.evalPluginProgram(ctx, prog, nil, args)
 		if err != nil {
+			if perr := asPluginError(err, ""); perr != nil {
+				return nil, perr
+			}
 			return nil, err
 		}
 		if v == nil {
@@ -228,13 +226,13 @@ func (e *Engine) NamedFunctionContext(src, entrypoint string) (func(context.Cont
 	}, nil
 }
 
-// NamedFunctionTimeout is the timeout variant of NamedFunction.
-func (e *Engine) NamedFunctionTimeout(src, entrypoint string, timeout time.Duration) (func(...any) (any, error), error) {
+// FunctionTimeout is the timeout variant of Function.
+func (e *Engine) FunctionTimeout(src string, timeout time.Duration) (func(...any) (any, error), error) {
 	if timeout <= 0 {
-		return nil, fmt.Errorf("scripting: NamedFunctionTimeout: timeout must be greater than zero")
+		return nil, fmt.Errorf("scripting: FunctionTimeout: timeout must be greater than zero")
 	}
 
-	fn, err := e.NamedFunctionContext(src, entrypoint)
+	fn, err := e.FunctionContext(src)
 	if err != nil {
 		return nil, err
 	}
@@ -246,202 +244,12 @@ func (e *Engine) NamedFunctionTimeout(src, entrypoint string, timeout time.Durat
 	}, nil
 }
 
-// SeededFunction evaluates src inside a runtime borrowed from the engine's
-// pool: each key in bindings becomes a lexical binding visible to the script,
-// then entrypoint() is called with no arguments and its return value is
-// exported back to Go. Bindings are scoped to the IIFE (not on globalThis),
-// so they do not leak across calls sharing the same pooled runtime.
-//
-// Binding names are reserved symbols: entrypoint MUST NOT appear in bindings,
-// and every binding name must be a valid JS identifier. Pre-flight validation
-// runs on every call (not cached) so collisions are caught even if the same
-// src has been compiled before.
-func (e *Engine) SeededFunction(ctx context.Context, src, entrypoint string, bindings map[string]any) (any, error) {
-	if err := validateSeededCall(entrypoint, bindings); err != nil {
-		return nil, err
-	}
-
-	keys := sortedKeys(bindings)
-	prog, err := e.programForSeededFunction(src, entrypoint, keys)
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := e.evalSeededProgram(ctx, prog, bindings)
-	if err != nil {
-		return nil, err
-	}
-	if v == nil {
-		return nil, nil
-	}
-	return v.Export(), nil
-}
-
-// SeededFunctionTimeout is the timeout variant of SeededFunction.
-func (e *Engine) SeededFunctionTimeout(src, entrypoint string, bindings map[string]any, timeout time.Duration) (any, error) {
-	if timeout <= 0 {
-		return nil, fmt.Errorf("scripting: SeededFunctionTimeout: timeout must be greater than zero")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return e.SeededFunction(ctx, src, entrypoint, bindings)
-}
-
-func validateSeededCall(entrypoint string, bindings map[string]any) error {
-	if !isValidJSIdentifier(entrypoint) {
-		return fmt.Errorf("scripting: entrypoint %q is not a valid JS identifier", entrypoint)
-	}
-	for k := range bindings {
-		if !isValidJSIdentifier(k) {
-			return fmt.Errorf("scripting: binding name %q is not a valid JS identifier", k)
-		}
-	}
-	if _, collides := bindings[entrypoint]; collides {
-		return fmt.Errorf("scripting: entrypoint %q collides with a binding of the same name; rename the entrypoint or the binding", entrypoint)
-	}
-	return nil
-}
-
 func isValidJSIdentifier(name string) bool {
 	if name == "" {
 		return false
 	}
 	return bindingKeyIsValid(name)
 }
-
-// -----------------------------------------------------------------------------
-// Future convenience wrappers — commented stubs for reference.
-//
-// The pattern established by EvalString/EvalStringStrict generalizes to other
-// JS primitive and compound types. Each method is a few lines delegating to
-// evalValue and differs only in how it unwraps the returned goja.Value.
-//
-// These are left commented out because each one involves a coercion-vs-strict
-// design decision that is easier to make with a concrete caller in hand. The
-// sketches below are starting points, not commitments: uncomment, revisit the
-// semantics against the use case, add tests, and ship.
-//
-// Uncommenting EvalNumber will also require importing "math" for math.NaN().
-// -----------------------------------------------------------------------------
-
-// EvalNumber evaluates src and returns its value as a float64, applying
-// JavaScript's ToNumber coercion. Strings of digits become their numeric
-// value, true/false become 1/0, null becomes 0, undefined becomes NaN,
-// objects become NaN (unless they define valueOf() returning a number).
-//
-// func (e *Engine) EvalNumber(ctx context.Context, src string, arg any) (float64, error) {
-// 	v, err := e.evalValue(ctx, src, arg)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	if v == nil {
-// 		return math.NaN(), nil
-// 	}
-// 	return v.ToFloat(), nil
-// }
-
-// EvalNumberStrict behaves like EvalNumber but returns an error if the
-// script did not return a JavaScript number. JS numbers export
-// to either int64 (when the value is an integer that fits) or float64,
-// so both are accepted here and normalized to float64.
-//
-// func (e *Engine) EvalNumberStrict(ctx context.Context, src string, arg any) (float64, error) {
-// 	v, err := e.evalValue(ctx, src, arg)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	if v == nil {
-// 		return 0, fmt.Errorf("scripting: EvalNumberStrict: expected number, got undefined/null")
-// 	}
-// 	switch n := v.Export().(type) {
-// 	case int64:
-// 		return float64(n), nil
-// 	case float64:
-// 		return n, nil
-// 	default:
-// 		return 0, fmt.Errorf("scripting: EvalNumberStrict: expected number, got %T", n)
-// 	}
-// }
-
-// EvalBool evaluates src and returns its value as a bool, applying
-// JavaScript's ToBoolean coercion. Falsy values: 0, "", null, undefined,
-// NaN. Everything else is truthy — including empty arrays and empty objects,
-// which is a JS quirk worth warning callers about.
-//
-// func (e *Engine) EvalBool(ctx context.Context, src string, arg any) (bool, error) {
-// 	v, err := e.evalValue(ctx, src, arg)
-// 	if err != nil {
-// 		return false, err
-// 	}
-// 	if v == nil {
-// 		return false, nil
-// 	}
-// 	return v.ToBoolean(), nil
-// }
-
-// EvalBoolStrict behaves like EvalBool but returns an error if the
-// script did not return a JavaScript boolean.
-//
-// func (e *Engine) EvalBoolStrict(ctx context.Context, src string, arg any) (bool, error) {
-// 	v, err := e.evalValue(ctx, src, arg)
-// 	if err != nil {
-// 		return false, err
-// 	}
-// 	if v == nil {
-// 		return false, fmt.Errorf("scripting: EvalBoolStrict: expected boolean, got undefined/null")
-// 	}
-// 	b, ok := v.Export().(bool)
-// 	if !ok {
-// 		return false, fmt.Errorf("scripting: EvalBoolStrict: expected boolean, got %T", v.Export())
-// 	}
-// 	return b, nil
-// }
-
-// EvalObject evaluates src and returns its value as a map[string]any.
-// Lenient: null and undefined yield a nil map with no error (Go callers
-// can range over a nil map safely). Plain JS objects export directly.
-// Arrays — which goja exports as []any — will fail the type assertion;
-// callers that want arrays should use Eval and type-assert themselves.
-//
-// func (e *Engine) EvalObject(ctx context.Context, src string, arg any) (map[string]any, error) {
-// 	v, err := e.evalValue(ctx, src, arg)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	if v == nil {
-// 		return nil, nil
-// 	}
-// 	exported := v.Export()
-// 	if exported == nil {
-// 		return nil, nil
-// 	}
-// 	m, ok := exported.(map[string]any)
-// 	if !ok {
-// 		return nil, fmt.Errorf("scripting: EvalObject: expected object, got %T", exported)
-// 	}
-// 	return m, nil
-// }
-
-// EvalObjectStrict behaves like EvalObject but rejects null/undefined and
-// anything else that isn't a plain JS object.
-//
-// func (e *Engine) EvalObjectStrict(ctx context.Context, src string, arg any) (map[string]any, error) {
-// 	v, err := e.evalValue(ctx, src, arg)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	if v == nil {
-// 		return nil, fmt.Errorf("scripting: EvalObjectStrict: expected object, got undefined/null")
-// 	}
-// 	m, ok := v.Export().(map[string]any)
-// 	if !ok {
-// 		return nil, fmt.Errorf("scripting: EvalObjectStrict: expected object, got %T", v.Export())
-// 	}
-// 	return m, nil
-// }
-
-// -----------------------------------------------------------------------------
 
 func (e *Engine) ensureUsable(ctx context.Context) error {
 	if e.closed.Load() {
@@ -453,9 +261,9 @@ func (e *Engine) ensureUsable(ctx context.Context) error {
 	return nil
 }
 
-// evalValue is the shared core: compile (or reuse), borrow a runtime, run,
-// and return the raw goja.Value. Public methods wrap this with the
-// appropriate unwrap strategy (Export, String, strict assertion, etc.).
+// evalValue is the shared core for Eval/Script: compile (or reuse), borrow a
+// runtime, run, and return the raw goja.Value. Public methods wrap this with
+// the appropriate unwrap strategy (Export, String, strict assertion, etc.).
 func (e *Engine) evalValue(ctx context.Context, src string, arg any) (goja.Value, error) {
 	if err := e.ensureUsable(ctx); err != nil {
 		return nil, err
@@ -470,14 +278,6 @@ func (e *Engine) evalValue(ctx context.Context, src string, arg any) (goja.Value
 }
 
 func (e *Engine) evalProgram(ctx context.Context, prog *goja.Program, arg any) (goja.Value, error) {
-	return e.evalProgramCall(ctx, prog, []any{arg})
-}
-
-func (e *Engine) evalProgramArgs(ctx context.Context, prog *goja.Program, args []any) (goja.Value, error) {
-	return e.evalProgramCall(ctx, prog, []any{args})
-}
-
-func (e *Engine) evalSeededProgram(ctx context.Context, prog *goja.Program, bindings map[string]any) (goja.Value, error) {
 	if err := e.ensureUsable(ctx); err != nil {
 		return nil, err
 	}
@@ -497,15 +297,20 @@ func (e *Engine) evalSeededProgram(ctx context.Context, prog *goja.Program, bind
 		return nil, fmt.Errorf("scripting: compiled wrapper is not callable")
 	}
 
-	bindingsArg := vm.ToValue(jsPlainValue(bindings))
-	result, err := fn(goja.Undefined(), bindingsArg)
+	argVal := vm.ToValue(jsPlainValue(arg))
+	result, err := fn(goja.Undefined(), argVal)
 	if err != nil {
 		return nil, wrapRunError(err, ctx)
 	}
 	return result, nil
 }
 
-func (e *Engine) evalProgramCall(ctx context.Context, prog *goja.Program, args []any) (goja.Value, error) {
+// evalPluginProgram runs a compiled plugin wrapper. The wrapper IIFE takes
+// (__bindings, __args); bindings is forwarded as a JS object (or null when
+// nil), and args is forwarded as a JS array. The wrapper internally
+// destructures bindings (if its keys list is non-empty) and applies args
+// to the default-exported function.
+func (e *Engine) evalPluginProgram(ctx context.Context, prog *goja.Program, bindings map[string]any, args []any) (goja.Value, error) {
 	if err := e.ensureUsable(ctx); err != nil {
 		return nil, err
 	}
@@ -522,17 +327,21 @@ func (e *Engine) evalProgramCall(ctx context.Context, prog *goja.Program, args [
 	}
 	fn, ok := goja.AssertFunction(fnVal)
 	if !ok {
-		// Wrapper synthesis always produces a function expression; this is
-		// an internal invariant failure.
-		return nil, fmt.Errorf("scripting: compiled wrapper is not callable")
+		return nil, fmt.Errorf("scripting: compiled plugin wrapper is not callable")
 	}
 
-	values := make([]goja.Value, 0, len(args))
-	for _, arg := range args {
-		values = append(values, vm.ToValue(jsPlainValue(arg)))
+	var bindingsVal goja.Value = goja.Null()
+	if bindings != nil {
+		bindingsVal = vm.ToValue(jsPlainValue(bindings))
 	}
 
-	result, err := fn(goja.Undefined(), values...)
+	argsForJS := make([]any, 0, len(args))
+	for _, a := range args {
+		argsForJS = append(argsForJS, jsPlainValue(a))
+	}
+	argsVal := vm.ToValue(argsForJS)
+
+	result, err := fn(goja.Undefined(), bindingsVal, argsVal)
 	if err != nil {
 		return nil, wrapRunError(err, ctx)
 	}

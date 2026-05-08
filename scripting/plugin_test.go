@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,17 +10,17 @@ import (
 )
 
 const upperPluginSrc = `
-function plugin(input) {
+export default function(input) {
 	return input.toUpperCase()
 }
 `
 
 const arrowPluginSrc = `
-const plugin = (input) => input.toUpperCase()
+export default (input) => input.toUpperCase()
 `
 
 const namespacePluginSrc = `
-function namespace() {
+export default function() {
 	return { count: site.pages.length }
 }
 `
@@ -41,14 +42,8 @@ func TestLoadPlugin_DerivesNameAndKeepsSource(t *testing.T) {
 	if plugin.Path != path {
 		t.Fatalf("Path = %q, want %q", plugin.Path, path)
 	}
-	if !strings.Contains(plugin.Source, "function plugin") {
-		t.Fatalf("Source missing entrypoint declaration: %q", plugin.Source)
-	}
-	if plugin.Entrypoint != "" {
-		t.Fatalf("Entrypoint = %q, want empty (caller sets it)", plugin.Entrypoint)
-	}
-	if plugin.Bindings != nil {
-		t.Fatalf("Bindings = %v, want nil", plugin.Bindings)
+	if !strings.Contains(plugin.Source, "export default") {
+		t.Fatalf("Source missing default export: %q", plugin.Source)
 	}
 }
 
@@ -60,7 +55,7 @@ func TestLoadPlugins_PreservesOrder(t *testing.T) {
 		filepath.Join(root, "c.js"),
 	}
 	for _, path := range paths {
-		if err := os.WriteFile(path, []byte("function plugin() { return 0 }"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("export default function() { return 0 }"), 0644); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
 	}
@@ -90,106 +85,116 @@ func TestLoadPlugin_ReadsErrorsAreReported(t *testing.T) {
 }
 
 func TestPluginCompile_RoundTrip(t *testing.T) {
-	plugin := Plugin{
-		Name:       "upper",
-		Source:     upperPluginSrc,
-		Entrypoint: "plugin",
-	}
-	fn, err := plugin.Compile()
-	if err != nil {
-		t.Fatalf("Compile error = %v", err)
-	}
-	got, err := fn("hello")
-	if err != nil {
-		t.Fatalf("Call error = %v", err)
-	}
-	if got != "HELLO" {
-		t.Fatalf("Call = %q, want HELLO", got)
-	}
-}
-
-func TestPluginCompile_ArrowEntrypoint(t *testing.T) {
-	plugin := Plugin{
-		Name:       "upper",
-		Source:     arrowPluginSrc,
-		Entrypoint: "plugin",
-	}
-	fn, err := plugin.Compile()
-	if err != nil {
-		t.Fatalf("Compile error = %v", err)
-	}
-	got, err := fn("hello")
-	if err != nil {
-		t.Fatalf("Call error = %v", err)
-	}
-	if got != "HELLO" {
-		t.Fatalf("Call = %q, want HELLO", got)
-	}
-}
-
-func TestPluginCompile_RejectsBindings(t *testing.T) {
-	plugin := Plugin{
-		Name:       "upper",
-		Source:     upperPluginSrc,
-		Entrypoint: "plugin",
-		Bindings:   map[string]any{"site": map[string]any{}},
-	}
-	if _, err := plugin.Compile(); err == nil {
-		t.Fatal("Compile with Bindings: error = nil, want non-nil")
-	} else if !strings.Contains(err.Error(), "use Run") {
-		t.Fatalf("Compile error = %v, want substring %q", err, "use Run")
-	}
-}
-
-func TestPluginCompile_RequiresEntrypoint(t *testing.T) {
 	plugin := Plugin{Name: "upper", Source: upperPluginSrc}
-	if _, err := plugin.Compile(); err == nil {
-		t.Fatal("Compile without Entrypoint: error = nil, want non-nil")
-	} else if !strings.Contains(err.Error(), "Entrypoint is required") {
-		t.Fatalf("Compile error = %v, want substring %q", err, "Entrypoint is required")
+	fn, err := plugin.Compile(nil)
+	if err != nil {
+		t.Fatalf("Compile error = %v", err)
+	}
+	got, err := fn(context.Background(), nil, "hello")
+	if err != nil {
+		t.Fatalf("Call error = %v", err)
+	}
+	if got != "HELLO" {
+		t.Fatalf("Call = %q, want HELLO", got)
 	}
 }
 
-func TestPluginRun_WithBindings(t *testing.T) {
-	plugin := Plugin{
-		Name:       "stats",
-		Source:     namespacePluginSrc,
-		Entrypoint: "namespace",
-		Bindings: map[string]any{
-			"site": map[string]any{
-				"pages": []any{1, 2, 3},
-			},
+func TestPluginCompile_ArrowDefaultExport(t *testing.T) {
+	plugin := Plugin{Name: "upper", Source: arrowPluginSrc}
+	fn, err := plugin.Compile(nil)
+	if err != nil {
+		t.Fatalf("Compile error = %v", err)
+	}
+	got, err := fn(context.Background(), nil, "hello")
+	if err != nil {
+		t.Fatalf("Call error = %v", err)
+	}
+	if got != "HELLO" {
+		t.Fatalf("Call = %q, want HELLO", got)
+	}
+}
+
+func TestPluginCompile_WithBindings(t *testing.T) {
+	plugin := Plugin{Name: "stats", Source: namespacePluginSrc}
+	fn, err := plugin.Compile([]string{"site"})
+	if err != nil {
+		t.Fatalf("Compile error = %v", err)
+	}
+	bindings := map[string]any{
+		"site": map[string]any{
+			"pages": []any{1, 2, 3},
 		},
 	}
-	got, err := plugin.Run(context.Background())
+	got, err := fn(context.Background(), bindings)
 	if err != nil {
-		t.Fatalf("Run error = %v", err)
+		t.Fatalf("Call error = %v", err)
 	}
 	m, ok := got.(map[string]any)
 	if !ok {
-		t.Fatalf("Run = %T, want map[string]any", got)
+		t.Fatalf("Call = %T, want map[string]any", got)
 	}
 	if count, _ := m["count"].(int64); count != 3 {
 		t.Fatalf("count = %v, want 3", m["count"])
 	}
 }
 
-func TestPluginRun_RequiresEntrypoint(t *testing.T) {
-	plugin := Plugin{Source: namespacePluginSrc}
-	if _, err := plugin.Run(context.Background()); err == nil {
-		t.Fatal("Run without Entrypoint: error = nil, want non-nil")
-	} else if !strings.Contains(err.Error(), "Entrypoint is required") {
-		t.Fatalf("Run error = %v", err)
+func TestPluginCompile_RejectsInvalidBindingsKey(t *testing.T) {
+	plugin := Plugin{Name: "stats", Source: namespacePluginSrc}
+	if _, err := plugin.Compile([]string{"bad-name"}); err == nil {
+		t.Fatal("Compile with invalid bindings key: error = nil, want non-nil")
 	}
 }
 
-func TestPluginRunTimeout_RejectsZero(t *testing.T) {
-	plugin := Plugin{
-		Name:       "stats",
-		Source:     namespacePluginSrc,
-		Entrypoint: "namespace",
+func TestPluginCompile_RejectsImport(t *testing.T) {
+	src := `
+import foo from './foo.js'
+export default function() { return foo }
+`
+	plugin := Plugin{Name: "x", Source: src, Path: "x.js"}
+	_, err := plugin.Compile(nil)
+	if err == nil {
+		t.Fatal("Compile with import: error = nil, want *PluginError")
 	}
-	if _, err := plugin.RunTimeout(0); err == nil {
-		t.Fatal("RunTimeout(0) error = nil, want non-nil")
+	var perr *PluginError
+	if !errors.As(err, &perr) {
+		t.Fatalf("Compile error = %v, want *PluginError", err)
+	}
+	if perr.Feature != "import" {
+		t.Fatalf("PluginError.Feature = %q, want import", perr.Feature)
+	}
+}
+
+func TestPluginCompile_RuntimeRequireSurfacesPluginError(t *testing.T) {
+	src := `
+const lib = require('lodash')
+export default function() { return lib }
+`
+	plugin := Plugin{Name: "x", Source: src, Path: "x.js"}
+	fn, err := plugin.Compile(nil)
+	if err != nil {
+		t.Fatalf("Compile error = %v", err)
+	}
+	_, err = fn(context.Background(), nil)
+	if err == nil {
+		t.Fatal("Call invoking require: error = nil, want *PluginError")
+	}
+	var perr *PluginError
+	if !errors.As(err, &perr) {
+		t.Fatalf("Call error = %v, want *PluginError", err)
+	}
+	if perr.Feature != "require" {
+		t.Fatalf("PluginError.Feature = %q, want require", perr.Feature)
+	}
+}
+
+func TestPluginCompile_NonFunctionDefault(t *testing.T) {
+	src := `export default 42`
+	plugin := Plugin{Name: "x", Source: src}
+	fn, err := plugin.Compile(nil)
+	if err != nil {
+		t.Fatalf("Compile error = %v", err)
+	}
+	if _, err := fn(context.Background(), nil); err == nil {
+		t.Fatal("Call with non-function default: error = nil, want non-nil")
 	}
 }

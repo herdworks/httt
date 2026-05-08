@@ -1,27 +1,30 @@
 package value
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"regexp"
+	"time"
 
 	"github.com/herdworks/hypertemplates-go/scripting"
 )
 
-// PluginEntrypoint is the JavaScript entrypoint name expected in
-// value-pipeline plugin files. Plugin sources must declare a top-level
-// `function plugin(...)` or `const plugin = <callable>`.
-const PluginEntrypoint = "plugin"
-
 // Plugin is a compiled value-pipeline plugin: a JavaScript file whose
-// `plugin` entrypoint is invoked with caller-provided arguments during
-// template rendering. The pipeline-binding contract — explicit arguments
-// first, upstream pipeline value last — is documented in value/PLUGIN.md.
+// default-exported function is invoked with caller-provided arguments
+// during template rendering. The pipeline-binding contract — explicit
+// arguments first, upstream pipeline value last — is documented in
+// value/PLUGIN.md.
 type Plugin struct {
 	Name string
 	Path string
 	Func func(...any) (any, error)
 }
+
+// pluginCallTimeout caps each value-plugin invocation. The text/template
+// rendering path has no native context plumbing, so each call gets its own
+// background-derived timeout.
+const pluginCallTimeout = 250 * time.Millisecond
 
 // FuncMap returns the plugin as a single-entry text/template-compatible
 // function map.
@@ -58,15 +61,13 @@ var pluginNameRegexp = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // reservedPluginNames are identifiers that the value DSL reserves:
 //   - "get": the value-DSL primitive (rewritten into pipelines).
-//   - "plugin": the JS entrypoint name expected in plugin files.
 var reservedPluginNames = map[string]struct{}{
 	getFuncName: {},
-	"plugin":    {},
 }
 
 // LoadPlugin reads a JavaScript file from path, validates its name against
-// the value-pipeline naming rules, and compiles its `plugin` entrypoint
-// into a callable Plugin.
+// the value-pipeline naming rules, and compiles its default-exported
+// function into a callable Plugin.
 func LoadPlugin(path string) (Plugin, error) {
 	raw, err := scripting.LoadPlugin(path)
 	if err != nil {
@@ -75,10 +76,14 @@ func LoadPlugin(path string) (Plugin, error) {
 	if err := validatePluginName(raw.Name); err != nil {
 		return Plugin{}, fmt.Errorf("value: load %q: %w", path, err)
 	}
-	raw.Entrypoint = PluginEntrypoint
-	fn, err := raw.Compile()
+	callable, err := raw.Compile(nil)
 	if err != nil {
 		return Plugin{}, fmt.Errorf("value: compile %q: %w", path, err)
+	}
+	fn := func(args ...any) (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), pluginCallTimeout)
+		defer cancel()
+		return callable(ctx, nil, args...)
 	}
 	return Plugin{Name: raw.Name, Path: raw.Path, Func: fn}, nil
 }

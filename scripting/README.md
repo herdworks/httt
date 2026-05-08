@@ -23,7 +23,7 @@ The package import path is `github.com/herdworks/hypertemplates-go/scripting`, a
 `EvalString` applies JavaScript string coercion and is the best fit for template-style rendering.
 `EvalStringStrict` requires the returned JavaScript value to already be a string.
 `Script`, `ScriptContext`, and `ScriptTimeout` compile reusable script-body callables backed by a lazy package-default engine.
-`Function`, `FunctionContext`, and `FunctionTimeout` compile JavaScript plugin files that declare `const plugin = name`.
+`Function`, `FunctionContext`, and `FunctionTimeout` compile JavaScript plugin files that declare `export default <function>`.
 Matching `Engine` methods are available when you want explicit engine ownership.
 `Options.EvalTimeout` applies an engine-level timeout to each evaluation.
 
@@ -114,22 +114,34 @@ func main() {
 
 ## Compile JavaScript Files
 
-`Function` accepts one JavaScript plugin file. Plugin files declare ordinary
-JavaScript functions or function-valued constants, then select the plugin
-entrypoint with a top-level `const plugin = name`.
-To compile scripting-backed plugins from local JavaScript files, pass the
-ordered file list to `plugins.LoadPlugins`.
+`Function` accepts one JavaScript plugin file. Plugin files use ES module
+syntax — they default-export a function:
+
+```js
+// scripts/upper.js
+export default function(input) {
+	if (typeof input !== "string") {
+		return input
+	}
+
+	return input.toUpperCase()
+}
+```
+
+The plugin name is derived from the filename (sans extension), so
+`scripts/upper.js` registers an `upper` plugin usable as
+`${ page.title | upper }`. To compile a batch of plugin files for use with
+the `value` package, call `value.LoadPlugins`:
 
 ```go
 package main
 
 import (
-	htplugins "github.com/herdworks/hypertemplates-go/plugins"
 	htvalue "github.com/herdworks/hypertemplates-go/value"
 )
 
 func main() {
-	plugins, err := htplugins.LoadPlugins([]string{"scripts/upper.js", "scripts/title.js"})
+	plugins, err := htvalue.LoadPlugins([]string{"scripts/upper.js", "scripts/title.js"})
 	if err != nil {
 		panic(err)
 	}
@@ -139,34 +151,23 @@ func main() {
 }
 ```
 
-The selector identifier becomes the value pipeline function name.
-Comments and filenames are ignored for plugin naming.
 If multiple files resolve to the same plugin name, the last file wins.
-For example, `scripts/upper.js` registers an `upper` plugin usable as `${ page.title | upper }`.
 
-```js
-function upper(input) {
-	if (typeof input !== "string") {
-		return input
-	}
-
-	return input.toUpperCase()
-}
-
-const plugin = upper
-```
+The runtime is `goja`. There is no Node, no npm, no `fs`, no `fetch`, and
+no module system: `import` declarations are rejected at load time and
+`require()` calls throw `*PluginError` at runtime. The features you have
+access to are the standard ECMAScript built-ins (`Math`, `JSON`, `Object`,
+etc.), `console`, and whatever you compose from there.
 
 Plugin functions can write diagnostic output with `console`:
 
 ```js
 const logger = console.logger("plugin/upper")
 
-function upper(input) {
+export default function(input) {
 	logger.log("rendering", input)
 	return String(input).toUpperCase()
 }
-
-const plugin = upper
 ```
 
 ```go
@@ -181,11 +182,12 @@ if err != nil {
 }
 ```
 
-Plugin files can also select function-valued constants, including arrow
-functions:
+Plugin files can use any function shape that's a valid expression — arrow
+functions, async functions, named or anonymous:
 
 ```js
-const title = (input) => {
+// scripts/title.js
+export default (input) => {
 	if (input == null) {
 		return input
 	}
@@ -195,8 +197,6 @@ const title = (input) => {
 		.map(word => word.charAt(0).toUpperCase() + word.slice(1))
 		.join(" ")
 }
-
-const plugin = title
 ```
 
 Plugins receive ordered arguments. In a `text/template` pipeline, explicit
@@ -308,7 +308,9 @@ func main() {
 * If evaluation fails before running because of a top-level map key, rename that key to a valid strict-mode JavaScript binding name such as `user_name` or nest it under a valid parent key.
 * If you pass a struct, slice, scalar, or any other non-map value, access it through `input`.
 * If a compiled script rejects an argument, check whether the runtime argument still matches the sample shape you used at compile time.
-* If a plugin file fails to compile, confirm it has exactly one top-level `const plugin = name` selector and that `name` refers to a top-level callable binding.
+* If a plugin file fails to compile, confirm it has exactly one `export default <expression>` and that the expression evaluates to a function. CJS-style `module.exports = …` is **not** supported — esbuild rejects it in IIFE format.
+* If a plugin fails at load time with `PluginError: import is not supported in plugins yet`, remove the `import` declaration. There is no module system; helpers must live in the same file.
+* If a plugin fails at runtime with `PluginError: require is not supported in plugins yet`, the wrapper's `require` stub was invoked. This usually means esbuild transformed an `import` (which the pre-scan should normally catch) or the source called `require()` directly.
 * If a script gets a `TypeError` while assigning to `globalThis` or a core prototype, runtime hardening blocked a persistent side effect on the pooled VM.
 * If `Script` or `Function` interrupts unexpectedly, switch to the matching `Context` or `Timeout` variant so the timeout policy is explicit.
 

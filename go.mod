@@ -6,9 +6,7 @@ module github.com/herdworks/hypertemplates-go
 go 1.23.5
 
 // first-party dependencies
-require (
-	github.com/herdworks/hyperfeed-go v0.19.1
-)
+require github.com/herdworks/hyperfeed-go v0.19.1
 
 // direct dependencies
 require (
@@ -34,8 +32,13 @@ require (
 )
 
 require (
-	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c // indirect
+	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
+	github.com/evanw/esbuild v0.28.0
+)
+
+require (
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 )

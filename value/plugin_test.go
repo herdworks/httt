@@ -8,13 +8,13 @@ import (
 )
 
 const upperPluginSrc = `
-function plugin(input) {
+export default function(input) {
 	return input.toUpperCase()
 }
 `
 
 const titlePluginSrc = `
-const plugin = (input) => input.replace(/\b\w/g, c => c.toUpperCase())
+export default (input) => input.replace(/\b\w/g, c => c.toUpperCase())
 `
 
 func TestLoadPlugins(t *testing.T) {
@@ -68,10 +68,10 @@ func TestLoadPluginsLastPluginWins(t *testing.T) {
 	}
 	firstPath := filepath.Join(firstDir, "label.js")
 	secondPath := filepath.Join(secondDir, "label.js")
-	if err := os.WriteFile(firstPath, []byte("function plugin() { return 'first' }"), 0644); err != nil {
+	if err := os.WriteFile(firstPath, []byte("export default function() { return 'first' }"), 0644); err != nil {
 		t.Fatalf("write first plugin: %v", err)
 	}
-	if err := os.WriteFile(secondPath, []byte("function plugin() { return 'second' }"), 0644); err != nil {
+	if err := os.WriteFile(secondPath, []byte("export default function() { return 'second' }"), 0644); err != nil {
 		t.Fatalf("write second plugin: %v", err)
 	}
 
@@ -128,11 +128,11 @@ func TestPluginsFuncMap_SkipsNilFunc(t *testing.T) {
 }
 
 func TestLoadPluginsRejectsReservedNames(t *testing.T) {
-	for _, name := range []string{"get", "plugin"} {
+	for _, name := range []string{"get"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, name+".js")
-			if err := os.WriteFile(path, []byte("function plugin(input) { return input }"), 0644); err != nil {
+			if err := os.WriteFile(path, []byte("export default function(input) { return input }"), 0644); err != nil {
 				t.Fatalf("write reserved plugin: %v", err)
 			}
 
@@ -158,7 +158,7 @@ func TestLoadPluginsRejectsInvalidFilenames(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, name+".js")
-			if err := os.WriteFile(path, []byte("function plugin(input) { return input }"), 0644); err != nil {
+			if err := os.WriteFile(path, []byte("export default function(input) { return input }"), 0644); err != nil {
 				t.Fatalf("write invalid plugin: %v", err)
 			}
 
@@ -183,10 +183,10 @@ func TestLoadPluginsReportsCompileErrors(t *testing.T) {
 	}
 }
 
-func TestLoadPluginsRequiresPluginFunction(t *testing.T) {
+func TestLoadPluginsRequiresDefaultExport(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "upper.js")
-	// No `function plugin` and no `const plugin = ...`.
+	// No default export — just a free function declaration.
 	if err := os.WriteFile(path, []byte("function upper(input) { return input.toUpperCase() }"), 0644); err != nil {
 		t.Fatalf("write missing-entry plugin: %v", err)
 	}
@@ -196,10 +196,10 @@ func TestLoadPluginsRequiresPluginFunction(t *testing.T) {
 		t.Fatalf("LoadPlugins() unexpected compile error: %v", err)
 	}
 	// Compile succeeds (LoadPlugin doesn't run the script). The error is
-	// surfaced when the plugin is invoked, since the wrapper checks
-	// typeof plugin === "function".
+	// surfaced when the plugin is invoked: the wrapper extracts
+	// module.exports.default (or module.exports) and asserts callability.
 	if _, err := plugins["upper"].Func("hello"); err == nil {
-		t.Fatal("plugins[upper].Func() missing-entry error = nil")
+		t.Fatal("plugins[upper].Func() missing-default error = nil")
 	}
 }
 
@@ -207,7 +207,7 @@ func TestLoadPluginsVariadicPipelineArgs(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "fmtdate.js")
 	if err := os.WriteFile(path, []byte(`
-function plugin(format = "", input = "") {
+export default function(format = "", input = "") {
 	if (typeof input !== "string") {
 		return input
 	}

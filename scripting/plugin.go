@@ -5,27 +5,36 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
-	"time"
 )
 
-// Plugin is a JavaScript file with a named entrypoint and optional local
-// bindings.
+// Plugin is a JavaScript file whose default export is a function. Plugin
+// authors write idiomatic ES module syntax:
 //
-// Two evaluation modes are supported:
+//	export default function(input) {
+//		return input.toUpperCase()
+//	}
 //
-//   - Compile() produces a reusable callable that invokes Entrypoint with
-//     caller-provided arguments. Use this for plugins where the same
-//     function is invoked many times during a build (e.g. value-pipeline
-//     plugins).
+// and the engine takes care of:
 //
-//   - Run(ctx) evaluates the plugin once. If Bindings is non-nil, each
-//     binding is exposed as a lexical local in JavaScript. Entrypoint is
-//     called with no arguments. Use this for plugins where the JS runs
-//     once at build time to produce a value (e.g. computed-data plugins).
+//   - Pre-scanning for unsupported features (`import`, `export ... from`)
+//     and surfacing them as load-time *PluginError values.
+//   - Transforming ESM to a CommonJS-shaped form via esbuild.
+//   - Wrapping the result in an IIFE that synthesizes module/exports and a
+//     require() stub (which throws a runtime PluginError if invoked), then
+//     extracts the default-exported callable.
 //
-// A plugin with Bindings should use Run; a plugin that needs per-call
-// arguments should use Compile.
+// Plugin distinguishes two host-side properties:
+//
+//   - bindings: optional top-level local consts injected before the user's
+//     source executes (used by computed-data plugins that need access to
+//     build-time data like `data`, `userData`, `site`). The plugin's body
+//     references these as plain identifiers.
+//   - per-call arguments: passed positionally to the default-exported
+//     function on every invocation (used by value-pipeline plugins).
+//
+// Both flow through Compile uniformly.
 type Plugin struct {
 	// Name is a logical identifier for the plugin, typically derived from
 	// the source file name (e.g. "upper" for upper.js). Consumer packages
@@ -35,80 +44,68 @@ type Plugin struct {
 	// Path is the source file path, retained for diagnostics. Optional.
 	Path string
 
-	// Source is the JavaScript source.
+	// Source is the JavaScript source as authored (ESM, with `export
+	// default <function>`).
 	Source string
-
-	// Entrypoint is the name of the top-level JS function or const-bound
-	// callable that runtime invocation targets (e.g. "plugin",
-	// "namespace"). Required.
-	Entrypoint string
-
-	// Bindings, when non-nil, exposes each map key as a lexical local in
-	// the JavaScript runtime during Run. Bindings are scoped to the call
-	// and do not leak across pooled runtimes. Compile rejects plugins with
-	// Bindings; for that mode use Run.
-	Bindings map[string]any
 }
 
-// Compile returns a reusable callable that invokes Entrypoint with
-// caller-provided arguments. Each call uses the package-default timeout.
-func (p Plugin) Compile() (func(...any) (any, error), error) {
-	if err := p.validateForCompile(); err != nil {
+// PluginCallable is the shape returned by Plugin.Compile. ctx supervises
+// the JS execution; bindings supplies values for the top-level lexical
+// locals declared by Compile's bindingsKeys argument (pass nil if the
+// plugin has no bindings); args are forwarded positionally to the
+// default-exported function.
+type PluginCallable func(ctx context.Context, bindings map[string]any, args ...any) (any, error)
+
+// Compile transforms the plugin source, builds and caches the wrapped
+// program, and returns a callable. bindingsKeys names the top-level lexical
+// locals the wrapper exposes from the bindings argument; pass nil for
+// plugins that take no bindings. The returned callable is safe for
+// concurrent use.
+//
+// Errors returned at Compile time are typically *PluginError (unsupported
+// syntax detected by the pre-scan) or wrapped esbuild/goja compile errors.
+// Errors returned by the callable can be *PluginError when JavaScript
+// throws a PluginError-tagged exception (e.g. invoking the require stub).
+func (p Plugin) Compile(bindingsKeys []string) (PluginCallable, error) {
+	keys := append([]string(nil), bindingsKeys...)
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		if !isValidJSIdentifier(k) {
+			return nil, fmt.Errorf("scripting: Plugin %q: bindings key %q is not a valid JS identifier", p.Name, k)
+		}
+	}
+
+	transformed, err := transform(p.Source, p.Path)
+	if err != nil {
 		return nil, err
 	}
-	return shared().NamedFunctionTimeout(p.Source, p.Entrypoint, defaultFunctionTimeout)
-}
 
-// CompileContext returns a reusable callable that accepts a caller-owned
-// context on every invocation.
-func (p Plugin) CompileContext() (func(context.Context, ...any) (any, error), error) {
-	if err := p.validateForCompile(); err != nil {
-		return nil, err
+	prog, err := shared().programForPlugin(transformed, keys)
+	if err != nil {
+		return nil, fmt.Errorf("scripting: Plugin %q: %w", p.Name, err)
 	}
-	return shared().NamedFunctionContext(p.Source, p.Entrypoint)
-}
 
-// CompileTimeout returns a reusable callable that applies timeout to every
-// invocation.
-func (p Plugin) CompileTimeout(timeout time.Duration) (func(...any) (any, error), error) {
-	if err := p.validateForCompile(); err != nil {
-		return nil, err
-	}
-	return shared().NamedFunctionTimeout(p.Source, p.Entrypoint, timeout)
-}
+	path := p.Path
 
-// Run evaluates the plugin once and returns Entrypoint's return value.
-// If Bindings is non-nil, each binding is exposed as a lexical local.
-// Entrypoint is called with no arguments.
-func (p Plugin) Run(ctx context.Context) (any, error) {
-	if p.Entrypoint == "" {
-		return nil, fmt.Errorf("scripting: Plugin %q: Entrypoint is required", p.Name)
-	}
-	return shared().SeededFunction(ctx, p.Source, p.Entrypoint, p.Bindings)
-}
-
-// RunTimeout is the timeout variant of Run.
-func (p Plugin) RunTimeout(timeout time.Duration) (any, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return p.Run(ctx)
-}
-
-func (p Plugin) validateForCompile() error {
-	if p.Entrypoint == "" {
-		return fmt.Errorf("scripting: Plugin %q: Entrypoint is required", p.Name)
-	}
-	if len(p.Bindings) > 0 {
-		return fmt.Errorf("scripting: Plugin %q has bindings; use Run, not Compile", p.Name)
-	}
-	return nil
+	return func(ctx context.Context, bindings map[string]any, args ...any) (any, error) {
+		v, err := shared().evalPluginProgram(ctx, prog, bindings, args)
+		if err != nil {
+			if perr := asPluginError(err, path); perr != nil {
+				return nil, perr
+			}
+			return nil, err
+		}
+		if v == nil {
+			return nil, nil
+		}
+		return v.Export(), nil
+	}, nil
 }
 
 // LoadPlugin reads a JavaScript file from path and returns a Plugin with
 // Name derived from the file's basename (sans extension), Path set to path,
-// and Source set to the file contents. Entrypoint and Bindings are not set;
-// callers are responsible for setting them and for validating Name against
-// any kind-specific naming rules.
+// and Source set to the file contents.
 func LoadPlugin(path string) (Plugin, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
@@ -124,7 +121,7 @@ func LoadPlugin(path string) (Plugin, error) {
 
 // LoadPlugins reads multiple JavaScript files, in input order. The returned
 // slice preserves order so callers can implement "last wins" semantics by
-// index. Entrypoint and Bindings are not set on the returned plugins.
+// index.
 func LoadPlugins(paths []string) ([]Plugin, error) {
 	plugins := make([]Plugin, 0, len(paths))
 	for _, path := range paths {

@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+Standardized scripting plugins on ESM default exports.
+
+**BREAKING:** replaced the `Entrypoint`-based plugin authoring
+contract (`const plugin = …`, `function namespace()`) with an idiomatic ES
+module default-export contract: every plugin file declares
+`export default <function>`. Plugin sources are pre-scanned for
+unsupported syntax, transformed via `esbuild` (Format=IIFE,
+GlobalName=`__pluginMod`), and wrapped in an outer IIFE that injects
+optional bindings as top-level locals, defines a `require` stub, and
+extracts `__pluginMod.default` after the inner IIFE returns. Existing
+plugin files must be migrated. CJS-style `module.exports = …` authoring
+is not supported (esbuild rejects it in IIFE format).
+
+* Added `github.com/evanw/esbuild` v0.28.0 as a direct dependency.
+  Pinned in `go.mod` because the CJS output shape has shifted across major
+  versions and the wrapper's default-export extraction depends on it.
+* Added `scripting.PluginError` typed error for unsupported plugin features
+  (`import` declarations rejected at load time; runtime `require()` calls
+  rejected by the wrapper stub). Both surface through `errors.As`.
+* Added `scripting/transform.go` (pre-scan + esbuild Transform) and
+  `scripting/plugin_error.go`.
+* Replaced 3 binding-shape wrapper variants + 2 plugin wrapper sources +
+  4 cache helpers + 2 evaluation paths with a single
+  `pluginWrapperSource` + `programForPlugin` + `evalPluginProgram` per
+  plugin. The script/inline-eval paths (`Eval*`, `Script*`) are unchanged
+  and continue to use `bindingShape`.
+* Removed `scripting.Plugin.Entrypoint` field, `Compile()` /
+  `CompileContext()` / `CompileTimeout()` / `Run(ctx)` / `RunTimeout()`.
+  New surface: `Plugin.Compile(bindingsKeys []string)` returns a
+  `PluginCallable` (`func(ctx, bindings, args...) (any, error)`).
+* Removed `Engine.NamedFunction*`, `Engine.SeededFunction*` and their
+  `*Context` / `*Timeout` variants. The `Engine.Function` /
+  `FunctionContext` / `FunctionTimeout` public surface is retained but
+  rewritten to use the new transform pipeline; sources must be ESM-shaped.
+* Removed `value.PluginEntrypoint` and `data.PluginEntrypoint` constants.
+  Reserved plugin names: `get` (was `get`, `plugin`). Reserved namespace
+  names: `data` (was `namespace`, `data`).
+
 ## 0.27.0 (2026-05-06)
 
 Added support for new embedded/builtin template fragments, and simplified the "plugins" implementation. 

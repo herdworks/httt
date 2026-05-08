@@ -5,43 +5,40 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/herdworks/hypertemplates-go/scripting"
 )
 
-// PluginEntrypoint is the JavaScript entrypoint name expected in
-// computed-namespace plugin files. Plugin sources must declare a top-level
-// `function namespace()` or `const namespace = <callable>`.
-const PluginEntrypoint = "namespace"
-
 // Plugin is a computed-namespace plugin: a JavaScript file whose
-// `namespace` entrypoint is invoked once with caller-provided bindings.
-// The return value is installed at the file's keypath in the surrounding
-// TemplateData. Bindings expose a snapshot of the build-time environment
-// (typically `ht`, `site`, `build`, `env`, `theme`, `data`) as lexical
-// locals to the running JavaScript.
+// default-exported function is invoked once with caller-provided bindings
+// exposed as top-level lexical locals. The return value is installed at the
+// file's keypath in the surrounding TemplateData. Bindings expose a snapshot
+// of the build-time environment (typically `ht`, `site`, `build`, `env`,
+// `theme`, `data`) as locals to the running JavaScript.
 type Plugin struct {
 	Name     string
 	Path     string
 	Bindings map[string]any
-	raw      scripting.Plugin
+	callable scripting.PluginCallable
 }
 
-// Run evaluates the plugin's `namespace` entrypoint with no arguments and
-// returns its result. Bindings declared on the Plugin are exposed as
+// Run evaluates the plugin's default-exported function with no arguments
+// and returns its result. Bindings declared on the Plugin are exposed as
 // lexical locals during evaluation.
 func (p Plugin) Run(ctx context.Context) (any, error) {
-	plugin := p.raw
-	plugin.Entrypoint = PluginEntrypoint
-	plugin.Bindings = p.Bindings
-	return plugin.Run(ctx)
+	if p.callable == nil {
+		return nil, fmt.Errorf("data: Plugin %q is not compiled", p.Name)
+	}
+	return p.callable(ctx, p.Bindings)
 }
 
 // LoadPlugin reads a JavaScript file from path, validates that the
 // derived plugin name conforms to the namespace naming rules, and returns
 // a Plugin ready to Run. bindings is captured by reference and exposed to
-// the JS runtime when Run is called.
+// the JS runtime when Run is called; its keys at load time determine the
+// set of lexical locals the wrapper will declare.
 func LoadPlugin(path string, bindings map[string]any) (Plugin, error) {
 	raw, err := scripting.LoadPlugin(path)
 	if err != nil {
@@ -50,11 +47,23 @@ func LoadPlugin(path string, bindings map[string]any) (Plugin, error) {
 	if err := validateNamespaceName(raw.Name); err != nil {
 		return Plugin{}, fmt.Errorf("data: load %q: %w", path, err)
 	}
+
+	keys := make([]string, 0, len(bindings))
+	for k := range bindings {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	callable, err := raw.Compile(keys)
+	if err != nil {
+		return Plugin{}, fmt.Errorf("data: compile %q: %w", path, err)
+	}
+
 	return Plugin{
 		Name:     raw.Name,
 		Path:     raw.Path,
 		Bindings: bindings,
-		raw:      raw,
+		callable: callable,
 	}, nil
 }
 
@@ -67,11 +76,9 @@ var namespaceSegmentRegexp = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
 // reservedNamespaceNames are leaf-segment names reserved by the
 // computed-namespace plugin convention:
-//   - "namespace": the JS entrypoint name expected in plugin files.
 //   - "data": reserved to avoid colliding with the top-level data namespace.
 var reservedNamespaceNames = map[string]struct{}{
-	PluginEntrypoint: {},
-	"data":           {},
+	"data": {},
 }
 
 // NamespaceSegmentsFromRelPath turns a slash-separated relative path like
