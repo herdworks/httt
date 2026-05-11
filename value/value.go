@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	htmltemplate "html/template"
 	"io"
 	"strconv"
 	"strings"
@@ -45,11 +44,9 @@ type FuncMap = texttemplate.FuncMap
 
 // execute renders a parsed template value. If the rendered output contains
 // text/template's "<no value>" marker (indicating that at least one action
-// resolved to nil), the original user-visible template source is emitted
-// instead. This all-or-nothing behavior keeps unresolved templates visible in
-// the output rather than leaking "<no value>" placeholders; callers that need
-// partial resolution on multi-action templates should give individual actions
-// an explicit string-literal fallback.
+// resolved to nil), a MissingValueError is returned. Callers that need
+// soft fallbacks on multi-action templates should give individual actions an
+// explicit string-literal fallback (e.g. ${ page.title, "Untitled" }).
 func (t *tmpl) execute(writer io.Writer, data Getter) error {
 	compiled, err := buildTemplate(t.normalized, data, t.funcs)
 	if err != nil {
@@ -63,7 +60,7 @@ func (t *tmpl) execute(writer io.Writer, data Getter) error {
 
 	result := buffer.String()
 	if strings.Contains(result, "<no value>") {
-		result = t.source
+		return &MissingValueError{Source: t.source}
 	}
 
 	if _, err = io.WriteString(writer, result); err != nil {
@@ -100,25 +97,17 @@ func RenderString(source string, data Getter, syntax Syntax, funcs ...FuncMap) (
 
 // RenderNodes parses and executes template values into a slice of HTML nodes.
 // Used for text-node content where the rendered output may include HTML
-// produced by funcmap entries returning html/template.HTML. Backed by
-// html/template (so user data is auto-escaped, while template.HTML returns
-// pass through raw). The rendered string is parsed as a fragment using parent
-// as the parsing context, mirroring the html: branch of Template.RenderContent.
+// produced by funcmap entries returning strings of HTML markup. Backed by
+// text/template; the rendered string is parsed as a fragment using parent as
+// the parsing context (so author data is interpreted as HTML — there is no
+// auto-escaping).
 //
 // A source that renders to plain text returns a single TextNode. A source
 // that mixes text and html-returning funcmap entries returns multiple nodes
 // (text + element + text, etc.). When any expression in source resolves to
-// nil, the original source is restored as a single TextNode (matching
-// RenderString's all-or-nothing fallback).
+// nil with no fallback, a MissingValueError is returned.
 func RenderNodes(source string, data Getter, parent *html.Node, funcs ...FuncMap) ([]*html.Node, error) {
-	merged := mergeFuncMaps(funcs...)
-
-	normalized, err := rewriteWithFuncs(source, SyntaxDefault, merged)
-	if err != nil {
-		return nil, err
-	}
-
-	rendered, err := executeHTMLTemplate(normalized, source, data, merged)
+	rendered, err := RenderString(source, data, SyntaxDefault, funcs...)
 	if err != nil {
 		return nil, err
 	}
@@ -246,59 +235,6 @@ func buildTemplate(source string, data Getter, funcs FuncMap) (parsed *texttempl
 	}
 
 	return parsed, nil
-}
-
-// executeHTMLTemplate compiles normalized via html/template and executes it
-// against data. Mirrors buildTemplate + tmpl.execute but uses html/template
-// for context-aware auto-escaping of user data while honoring the
-// template.HTML type returned by funcmap entries that produce HTML.
-//
-// html/template formats nil function returns as the empty string rather than
-// "<no value>" (text/template's behavior), so the all-or-nothing source
-// restoration is gated on a per-execution miss flag set by the wrapped get
-// function. User funcs that return nil are not tracked here; they render as
-// empty per html/template's default.
-func executeHTMLTemplate(normalized, source string, data Getter, funcs FuncMap) (rendered string, err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			rendered = ""
-			err = fmt.Errorf("failed configuring template value %q: %v", templateName, recovered)
-		}
-	}()
-
-	var missed bool
-	compiledFuncs := htmltemplate.FuncMap{
-		getFuncName: func(args ...string) any {
-			value := getFunc(data, args...)
-			if value == nil {
-				missed = true
-			}
-			return value
-		},
-		cssDefaultFuncName: cssDefaultFunc,
-	}
-	for name, fn := range funcs {
-		if _, reserved := compiledFuncs[name]; reserved {
-			return "", fmt.Errorf("template value function %q is reserved", name)
-		}
-		compiledFuncs[name] = fn
-	}
-
-	compiled, err := htmltemplate.New(templateName).Delims("${", "}").Funcs(compiledFuncs).Parse(normalized)
-	if err != nil {
-		return "", fmt.Errorf("failed parsing template value %q: %w", templateName, err)
-	}
-
-	var buffer bytes.Buffer
-	if err := compiled.Execute(&buffer, data); err != nil {
-		return "", fmt.Errorf("failed executing template value %q: %w", templateName, err)
-	}
-
-	if missed {
-		return source, nil
-	}
-
-	return buffer.String(), nil
 }
 
 func mergeFuncMaps(funcMaps ...FuncMap) FuncMap {

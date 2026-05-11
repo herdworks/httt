@@ -63,6 +63,39 @@ func TestExtensionNormalization(t *testing.T) {
 	}
 }
 
+func TestUnmarshalCSV(t *testing.T) {
+	d, err := Unmarshal([]byte("name,age\nAlice,30\nBob,40\n"), ".csv")
+	if err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got := d.Len("rows"); got != 2 {
+		t.Fatalf("rows length = %d, want 2", got)
+	}
+	if got := d.Get("rows.1.name"); got != "Alice" {
+		t.Errorf("rows.1.name = %v, want Alice", got)
+	}
+}
+
+func TestUnmarshalTSV(t *testing.T) {
+	d, err := Unmarshal([]byte("name\tage\nAlice\t30\n"), ".tsv")
+	if err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got := d.Get("rows.1.age"); got != "30" {
+		t.Errorf("rows.1.age = %v, want \"30\" (delimiter not honored)", got)
+	}
+}
+
+func TestUnmarshalCSVHeaderValidationError(t *testing.T) {
+	_, err := Unmarshal([]byte(",age\nAlice,30\n"), ".csv")
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "header") {
+		t.Errorf("error %q does not mention header", err)
+	}
+}
+
 func TestReadFile(t *testing.T) {
 	d, err := ReadFile("testdata/keypaths.yaml")
 	if err != nil {

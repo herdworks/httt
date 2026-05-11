@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+Changed the value package DSL to return errors on missing data, and improved HTML variable parsing; added CSV/TSV data file support, and implicit `ht-apply` on `ht-block` fragments.
+
+**BREAKING:** value DSL actions whose final value is `nil` now return `*value.MissingValueError` instead of restoring the literal `${...}` source — add a fallback (`${ page.foo, "default" }` or `--ht-value("page.foo", "red")`) to opt out. Empty strings remain valid values and render as empty; errors are wrapped at `Template.RenderValues` call sites with the surrounding HTML element (tag name, id, class, attribute) and callers can detect via `errors.As(err, &miss)` and read `miss.Source` for the failing template source. Separately, `value.RenderNodes` now uses `text/template` and parses output with `html.ParseFragment`; `html/template` is no longer used, so author data with literal `<`/`>` is interpreted as HTML markup — there is no auto-escape in text nodes. Authors who need literal angle brackets must encode them in their data, or use the new `text` value func.
+
+* Added a `text` value func in text-node contexts. Thin alias for `text/template`'s built-in `html` predefined function (`text/template.HTMLEscaper`); HTML-escapes its input. `text(nil)` renders the literal escaped string `&lt;no value&gt;`; use bare `${ page.foo }` when a missing keypath should error instead.
+* Added CSV and TSV data file support via a new `csvdata` package. `csvdata.UnmarshalTemplateDataSet` returns a `data.TemplateDataSet` (slice-shaped, natural for record data); `csvdata.UnmarshalTemplateData` wraps that slice as `{"rows": TemplateDataSet{...}}` to satisfy `parse.Unmarshal`'s map-only contract. Options: `WithDelimiter(rune)` (defaults to `,`; pass `'\t'` for TSV), `WithRowsKey(string)` (defaults to `"rows"`).
+* Added `.csv` and `.tsv` to `parse.Unmarshal`'s extension dispatcher. `.tsv` uses tab as its delimiter; both produce `{"rows": TemplateDataSet{...}}` shapes.
+* Added CSV header-row validation: empty or whitespace-only header cells error with a hint that the row looks like values, not headers; duplicate headers (after `strings.TrimSpace`) error with both column numbers. Headers themselves are stored unmodified as map keys. Cell values are always strings (no type inference; matches `encoding/csv` defaults).
+* Added UTF-8 BOM stripping at the start of CSV/TSV files so Excel-exported CSVs do not produce a corrupted first header key.
+* Added "implicit ht-apply" on ht-block fragment roots — `${ ... }` expressions in a block template's root element attributes and direct text now resolve without an explicit `ht-apply` attribute. Mirrors the v0.26.1 behavior for `ht-template` elements; descendants still require their own `ht-apply`.
+* Changed pipeline semantics so `nil` flows mid-pipeline (e.g. `${ myfunc page.foo }` calls `myfunc` with `nil`); only a nil final value errors.
+* Changed the `markdown` value func to return a plain `string` (previously `html/template.HTML`). Existing templates using `${ page.body | markdown }` are unaffected.
+* Removed the `html` value func. Bare `${ page.body }` where `page.body` contains HTML markup now inserts real elements; the explicit `| html` filter is no longer needed. To render literal `<`/`>` as text instead of markup, use `| text`.
+
 ## v0.28.0 (2026-05-08)
 
 Standardized scripting plugins on ESM default exports.

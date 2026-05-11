@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/herdworks/hypertemplates-go/csvdata"
 	"github.com/herdworks/hypertemplates-go/data"
 	"github.com/herdworks/hypertemplates-go/htmldata"
 	"github.com/herdworks/hypertemplates-go/markdown"
@@ -63,6 +64,10 @@ func Unmarshal(b []byte, ext string, opts ...Option) (data.TemplateData, error) 
 		return opmldata.UnmarshalTemplateData(b)
 	case ".html", ".htm":
 		return htmldata.UnmarshalTemplateData(b)
+	case ".csv":
+		return csvdata.UnmarshalTemplateData(b)
+	case ".tsv":
+		return csvdata.UnmarshalTemplateData(b, csvdata.WithDelimiter('\t'))
 	}
 	return nil, fmt.Errorf("parse: unsupported file type: %s", ext)
 }

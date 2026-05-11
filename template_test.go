@@ -565,11 +565,13 @@ func TestRenderValuesStyleAttribute(t *testing.T) {
 	}
 }
 
-func TestRenderValuesHtmlFunc(t *testing.T) {
+func TestRenderValuesTextNodeIsParsedAsHTML(t *testing.T) {
+	// Text-node output is always parsed as HTML — no auto-escaping. A bare
+	// keypath whose value is HTML markup gets inserted as real elements.
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<div ht-apply>${ page.body | html }</div>
+				<div ht-apply>${ page.body }</div>
 			</body>
 		</html>
 	`))
@@ -629,11 +631,15 @@ func TestRenderValuesMarkdownFunc(t *testing.T) {
 	}
 }
 
-func TestRenderValuesAutoEscapesUserData(t *testing.T) {
+func TestRenderValuesTextFuncEscapesHTML(t *testing.T) {
+	// `${ x | text }` HTML-escapes the value so author data containing `<`,
+	// `>`, etc. renders as literal text rather than markup. Round-trips
+	// through text/template (escape) → html.ParseFragment (decode entities
+	// into text-node chars) → html.Render (re-escape on serialize).
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<h1 ht-apply>${ page.title }</h1>
+				<h1 ht-apply>${ page.title | text }</h1>
 			</body>
 		</html>
 	`))
@@ -653,12 +659,172 @@ func TestRenderValuesAutoEscapesUserData(t *testing.T) {
 		t.Fatalf("error processing template: %v", err)
 	}
 
-	// The title must be escaped — no real <script> element in the tree.
 	if bytes.Contains(htmlBytes, []byte("<script>alert(1)")) {
-		t.Fatalf("expected <script> tag to be escaped in output, got:\n%s", htmlBytes)
+		t.Fatalf("expected escaped output, got live <script> tag:\n%s", htmlBytes)
 	}
 	if !bytes.Contains(htmlBytes, []byte("&lt;script&gt;")) {
-		t.Fatalf("expected escaped &lt;script&gt; in output, got:\n%s", htmlBytes)
+		t.Fatalf("expected &lt;script&gt; in output, got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderValuesTextFuncWithPlainText(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<h1 ht-apply>${ page.title | text }</h1>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"title": "Hello world",
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("Hello world")) {
+		t.Fatalf("expected plain text in output, got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderValuesTextFuncNilRendersLiteral(t *testing.T) {
+	// `text` is a direct alias for text/template.HTMLEscaper. Nil values
+	// flow through HTMLEscaper's printableValue path which renders an
+	// invalid reflect.Value as the literal string `<no value>`, which is then
+	// escaped to `&lt;no value&gt;`. This documents the literal-alias
+	// semantics — authors who want missing-keypath errors should use bare
+	// `${ page.foo }` instead of `${ page.foo | text }`.
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<h1 ht-apply>${ page.missing | text }</h1>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	if err != nil {
+		t.Fatalf("Process() error = %v, want no error", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("&lt;no value&gt;")) {
+		t.Fatalf("expected &lt;no value&gt; in output, got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderValuesUserDataInterpretedAsHTML(t *testing.T) {
+	// Authors own their data; we no longer auto-escape. Markup in data is
+	// interpreted as live HTML elements when injected into a text node.
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<h1 ht-apply>${ page.title }</h1>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"title": "<em>hi</em>",
+		},
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	htmlBytes, err := template.Process(&data, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("<em>hi</em>")) {
+		t.Fatalf("expected live <em>hi</em> in output, got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderValuesMissingErrorIncludesElementContext(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(
+		`<html><body><a ht-apply id="home" class="nav" href="${ page.missing }" target="_blank">link</a></body></html>`,
+	))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	_, err = template.Process(&TemplateData{}, nil)
+	if err == nil {
+		t.Fatal("Process() error = nil, want MissingValueError wrapped with element context")
+	}
+
+	var miss *htvalue.MissingValueError
+	if !errors.As(err, &miss) {
+		t.Fatalf("Process() error = %v, want errors.As(MissingValueError) to succeed", err)
+	}
+	if miss.Source != `${ page.missing }` {
+		t.Fatalf("MissingValueError.Source = %q, want %q", miss.Source, `${ page.missing }`)
+	}
+
+	msg := err.Error()
+	// Full element (with children) is included after the message so the
+	// failing variable can be traced back to its source location, regardless
+	// of whether it failed in an attribute or a text node.
+	for _, want := range []string{
+		`a template variable in ${ page.missing } didn't return a value`,
+		`<a`,
+		`ht-apply`,
+		`id="home"`,
+		`class="nav"`,
+		`href="${ page.missing }"`,
+		`target="_blank"`,
+		`>link</a>`,
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error message missing %q:\n%s", want, msg)
+		}
+	}
+}
+
+func TestRenderValuesMissingErrorIncludesElementForTextNode(t *testing.T) {
+	// When the failing variable is in a text node (not an attribute), the
+	// full element render is what reveals the failing variable.
+	layout, err := html.Parse(strings.NewReader(
+		`<html><body><h1 ht-apply id="title">Welcome, ${ page.username }!</h1></body></html>`,
+	))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	template := &Template{Layout: layout, TidyMode: true}
+	_, err = template.Process(&TemplateData{}, nil)
+	if err == nil {
+		t.Fatal("Process() error = nil, want MissingValueError")
+	}
+
+	msg := err.Error()
+	for _, want := range []string{
+		`a template variable in Welcome, ${ page.username }! didn't return a value`,
+		`<h1`,
+		`id="title"`,
+		`Welcome, ${ page.username }!`,
+		`</h1>`,
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error message missing %q:\n%s", want, msg)
+		}
 	}
 }
 
@@ -983,5 +1149,214 @@ func TestImplicitApplyNoMarker(t *testing.T) {
 	}
 	if bytes.Contains(htmlBytes, []byte("data-ht-apply")) || bytes.Contains(htmlBytes, []byte("ht-apply")) {
 		t.Fatalf("synthetic ht-apply attribute leaked into output:\n%s", htmlBytes)
+	}
+}
+
+// TestImplicitApplyOnBlockText verifies that ${ ... } in the direct text
+// children of an ht-block fragment root resolve without an explicit ht-apply.
+func TestImplicitApplyOnBlockText(t *testing.T) {
+	theme := &Theme{URI: &url.URL{Path: "testdata/ht-block/theme.json"}}
+	theme.ResolveConfig()
+
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<ia-text ht-block title="hello"></ia-text>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	template := &Template{Layout: layout, Theme: theme, TidyMode: true}
+	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	matches := QueryAll(rendered, "body ia-text")
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 rendered <ia-text>, got %d; output:\n%s", len(matches), htmlBytes)
+	}
+	if matches[0].FirstChild == nil || strings.TrimSpace(matches[0].FirstChild.Data) != "hello" {
+		got := ""
+		if matches[0].FirstChild != nil {
+			got = strings.TrimSpace(matches[0].FirstChild.Data)
+		}
+		t.Fatalf("expected text %q, got %q; output:\n%s", "hello", got, htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("data-ht-apply")) || bytes.Contains(htmlBytes, []byte("ht-apply")) {
+		t.Fatalf("synthetic ht-apply attribute leaked into output:\n%s", htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("${")) {
+		t.Fatalf("expected ${ ... } expressions to be rendered; got:\n%s", htmlBytes)
+	}
+}
+
+// TestImplicitApplyOnBlockAttribute verifies that ${ ... } expressions on an
+// ht-block fragment root's own attributes resolve without an explicit ht-apply.
+func TestImplicitApplyOnBlockAttribute(t *testing.T) {
+	theme := &Theme{URI: &url.URL{Path: "testdata/ht-block/theme.json"}}
+	theme.ResolveConfig()
+
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<ia-attr ht-block title="hello"></ia-attr>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	template := &Template{Layout: layout, Theme: theme, TidyMode: true}
+	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	matches := QueryAll(rendered, "body ia-attr[data-x]")
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 rendered <ia-attr> with data-x, got %d; output:\n%s", len(matches), htmlBytes)
+	}
+	if got := getAttributeString(matches[0], "data-x"); got != "hello" {
+		t.Fatalf("expected data-x=%q, got %q; output:\n%s", "hello", got, htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("data-ht-apply")) || bytes.Contains(htmlBytes, []byte("ht-apply")) {
+		t.Fatalf("synthetic ht-apply attribute leaked into output:\n%s", htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("${")) {
+		t.Fatalf("expected ${ ... } expressions to be rendered; got:\n%s", htmlBytes)
+	}
+}
+
+// TestImplicitApplyOnBlockDoesNotClobberExplicit confirms that an
+// author-supplied ht-apply on the block fragment root is preserved (the
+// synthetic injection is a no-op when ht-apply is already present).
+func TestImplicitApplyOnBlockDoesNotClobberExplicit(t *testing.T) {
+	theme := &Theme{URI: &url.URL{Path: "testdata/ht-block/theme.json"}}
+	theme.ResolveConfig()
+
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<ia-explicit ht-block title="hello"></ia-explicit>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	template := &Template{Layout: layout, Theme: theme, TidyMode: true}
+	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	matches := QueryAll(rendered, "body ia-explicit")
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 rendered <ia-explicit>, got %d; output:\n%s", len(matches), htmlBytes)
+	}
+	if matches[0].FirstChild == nil || strings.TrimSpace(matches[0].FirstChild.Data) != "hello" {
+		got := ""
+		if matches[0].FirstChild != nil {
+			got = strings.TrimSpace(matches[0].FirstChild.Data)
+		}
+		t.Fatalf("expected text %q, got %q; output:\n%s", "hello", got, htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("${")) {
+		t.Fatalf("expected ${ ... } expressions to be rendered; got:\n%s", htmlBytes)
+	}
+}
+
+// TestImplicitApplyOnBlockNoMarker confirms that a block fragment without any
+// ${ ... } expressions renders cleanly; the synthetic RenderValues pass is a
+// no-op and no stray ht-apply attribute is emitted.
+func TestImplicitApplyOnBlockNoMarker(t *testing.T) {
+	theme := &Theme{URI: &url.URL{Path: "testdata/ht-block/theme.json"}}
+	theme.ResolveConfig()
+
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<ia-static ht-block></ia-static>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	template := &Template{Layout: layout, Theme: theme, TidyMode: true}
+	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+	if err != nil {
+		t.Fatalf("error parsing rendered html: %v", err)
+	}
+
+	matches := QueryAll(rendered, "body ia-static")
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 rendered <ia-static>, got %d; output:\n%s", len(matches), htmlBytes)
+	}
+	if matches[0].FirstChild == nil || strings.TrimSpace(matches[0].FirstChild.Data) != "just static text" {
+		got := ""
+		if matches[0].FirstChild != nil {
+			got = strings.TrimSpace(matches[0].FirstChild.Data)
+		}
+		t.Fatalf("expected text %q, got %q; output:\n%s", "just static text", got, htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("data-ht-apply")) || bytes.Contains(htmlBytes, []byte("ht-apply")) {
+		t.Fatalf("synthetic ht-apply attribute leaked into output:\n%s", htmlBytes)
+	}
+}
+
+// TestImplicitApplyOnBlockCleanupNonTidy verifies that the synthetic ht-apply
+// attribute is stripped from the block fragment regardless of TidyMode, so it
+// never reaches the serialized output.
+func TestImplicitApplyOnBlockCleanupNonTidy(t *testing.T) {
+	theme := &Theme{URI: &url.URL{Path: "testdata/ht-block/theme.json"}}
+	theme.ResolveConfig()
+
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<ia-text ht-block title="hello"></ia-text>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	template := &Template{Layout: layout, Theme: theme, TidyMode: false}
+	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if bytes.Contains(htmlBytes, []byte("data-ht-apply")) {
+		t.Fatalf("synthetic data-ht-apply leaked into non-tidy output:\n%s", htmlBytes)
 	}
 }

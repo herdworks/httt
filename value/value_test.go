@@ -1,6 +1,7 @@
 package value
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -290,7 +291,7 @@ func TestParse_ExposesNormalizedTemplate(t *testing.T) {
 	}
 }
 
-func TestRender_MissingKeypathRestoresSource(t *testing.T) {
+func TestRender_MissingKeypathErrors(t *testing.T) {
 	tests := []struct {
 		name   string
 		source string
@@ -303,29 +304,91 @@ func TestRender_MissingKeypathRestoresSource(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			rendered, err := RenderString(tc.source, testGetter{}, SyntaxDefault)
-			if err != nil {
-				t.Fatalf("RenderString() error = %v", err)
+			_, err := RenderString(tc.source, testGetter{}, SyntaxDefault)
+			if err == nil {
+				t.Fatal("RenderString() error = nil, want MissingValueError")
 			}
-			if rendered != tc.source {
-				t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", tc.source, rendered)
+			var miss *MissingValueError
+			if !errors.As(err, &miss) {
+				t.Fatalf("RenderString() error = %v, want MissingValueError", err)
+			}
+			if miss.Source != tc.source {
+				t.Fatalf("MissingValueError.Source = %q, want %q", miss.Source, tc.source)
 			}
 		})
 	}
 }
 
-func TestRender_MultiActionAnyMissRestoresWholeSource(t *testing.T) {
+func TestRender_MultiActionAnyMissErrors(t *testing.T) {
 	data := testGetter{
 		"page": map[string]any{"title": "Hello"},
 	}
 
 	source := `${ page.title } and ${ page.missing }`
-	rendered, err := RenderString(source, data, SyntaxDefault)
+	_, err := RenderString(source, data, SyntaxDefault)
+	if err == nil {
+		t.Fatal("RenderString() error = nil, want MissingValueError")
+	}
+	var miss *MissingValueError
+	if !errors.As(err, &miss) {
+		t.Fatalf("RenderString() error = %v, want MissingValueError", err)
+	}
+	if miss.Source != source {
+		t.Fatalf("MissingValueError.Source = %q, want %q", miss.Source, source)
+	}
+}
+
+func TestRender_NullValueErrors(t *testing.T) {
+	data := testGetter{
+		"page": map[string]any{"title": nil},
+	}
+	_, err := RenderString(`${ page.title }`, data, SyntaxDefault)
+	if err == nil {
+		t.Fatal("RenderString() error = nil, want MissingValueError")
+	}
+	var miss *MissingValueError
+	if !errors.As(err, &miss) {
+		t.Fatalf("RenderString() error = %v, want MissingValueError", err)
+	}
+}
+
+func TestRender_NullDescendantErrors(t *testing.T) {
+	data := testGetter{
+		"page": map[string]any{"foo": nil},
+	}
+	_, err := RenderString(`${ page.foo.bar }`, data, SyntaxDefault)
+	if err == nil {
+		t.Fatal("RenderString() error = nil, want MissingValueError")
+	}
+	var miss *MissingValueError
+	if !errors.As(err, &miss) {
+		t.Fatalf("RenderString() error = %v, want MissingValueError", err)
+	}
+}
+
+func TestRender_EmptyStringIsValidNoError(t *testing.T) {
+	data := testGetter{
+		"page": map[string]any{"title": ""},
+	}
+	rendered, err := RenderString(`${ page.title }`, data, SyntaxDefault)
+	if err != nil {
+		t.Fatalf("RenderString() error = %v, want no error for empty string value", err)
+	}
+	if rendered != "" {
+		t.Fatalf("RenderString() = %q, want empty string", rendered)
+	}
+}
+
+func TestRender_NullValueWithFallbackUsesFallback(t *testing.T) {
+	data := testGetter{
+		"page": map[string]any{"title": nil},
+	}
+	rendered, err := RenderString(`${ page.title, "Untitled" }`, data, SyntaxDefault)
 	if err != nil {
 		t.Fatalf("RenderString() error = %v", err)
 	}
-	if rendered != source {
-		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", source, rendered)
+	if rendered != "Untitled" {
+		t.Fatalf("RenderString() = %q, want %q", rendered, "Untitled")
 	}
 }
 

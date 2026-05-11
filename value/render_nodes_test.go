@@ -2,7 +2,7 @@ package value
 
 import (
 	"bytes"
-	htmltemplate "html/template"
+	"errors"
 	"strings"
 	"testing"
 
@@ -53,32 +53,27 @@ func TestRenderNodes_KeypathSubstitution(t *testing.T) {
 	}
 }
 
-func TestRenderNodes_AutoEscapesUserData(t *testing.T) {
-	data := testGetter{"page": map[string]any{"title": "<script>alert(1)</script>"}}
-	nodes, err := RenderNodes("Title: ${ page.title }", data, divParent())
+func TestRenderNodes_UserDataParsedAsHTML(t *testing.T) {
+	// Text-node output is parsed as HTML — there is no auto-escape. Authors
+	// who embed `<` literals in data get markup interpretation.
+	data := testGetter{"page": map[string]any{"body": "<em>hi</em>"}}
+	nodes, err := RenderNodes(`${ page.body }`, data, divParent())
 	if err != nil {
 		t.Fatalf("RenderNodes() error = %v", err)
 	}
-	if len(nodes) != 1 || nodes[0].Type != html.TextNode {
-		t.Fatalf("expected single text node, got %d nodes", len(nodes))
-	}
-	if nodes[0].Data != "Title: <script>alert(1)</script>" {
-		t.Fatalf("text node data = %q, want literal angle brackets (escaped at serialize time)", nodes[0].Data)
-	}
-	// Serialized output must escape the script tag — i.e., no live <script> element in the tree.
 	got := renderNodesString(t, nodes)
-	if strings.Contains(got, "<script>") {
-		t.Fatalf("serialized output contains live <script> element: %q", got)
+	if got != "<em>hi</em>" {
+		t.Fatalf("rendered = %q, want %q", got, "<em>hi</em>")
 	}
-	if !strings.Contains(got, "&lt;script&gt;") {
-		t.Fatalf("serialized output missing escaped script tag: %q", got)
+	if len(nodes) != 1 || nodes[0].Type != html.ElementNode || nodes[0].Data != "em" {
+		t.Fatalf("expected single <em> ElementNode, got %d nodes", len(nodes))
 	}
 }
 
-func TestRenderNodes_TemplateHTMLPassesThrough(t *testing.T) {
+func TestRenderNodes_FuncReturningHTMLString(t *testing.T) {
 	funcs := FuncMap{
-		"raw": func(value any) htmltemplate.HTML {
-			return htmltemplate.HTML(value.(string))
+		"raw": func(value any) string {
+			return value.(string)
 		},
 	}
 	data := testGetter{"page": map[string]any{"body": "<em>hi</em>"}}
@@ -90,16 +85,15 @@ func TestRenderNodes_TemplateHTMLPassesThrough(t *testing.T) {
 	if got != "<em>hi</em>" {
 		t.Fatalf("rendered = %q, want %q", got, "<em>hi</em>")
 	}
-	// Confirm we got a real <em> element, not an escaped text node.
 	if len(nodes) != 1 || nodes[0].Type != html.ElementNode || nodes[0].Data != "em" {
 		t.Fatalf("expected single <em> ElementNode, got %d nodes", len(nodes))
 	}
 }
 
-func TestRenderNodes_MixedTextAndTemplateHTML(t *testing.T) {
+func TestRenderNodes_MixedTextAndHTML(t *testing.T) {
 	funcs := FuncMap{
-		"raw": func(value any) htmltemplate.HTML {
-			return htmltemplate.HTML(value.(string))
+		"raw": func(value any) string {
+			return value.(string)
 		},
 	}
 	data := testGetter{"page": map[string]any{"body": "<em>hi</em>"}}
@@ -138,15 +132,56 @@ func TestRenderNodes_ParentContextHonored(t *testing.T) {
 	}
 }
 
-func TestRenderNodes_MissingKeypathRestoresSource(t *testing.T) {
+func TestRenderNodes_MissingKeypathErrors(t *testing.T) {
 	source := `${ page.missing }`
-	nodes, err := RenderNodes(source, testGetter{}, divParent())
+	_, err := RenderNodes(source, testGetter{}, divParent())
+	if err == nil {
+		t.Fatal("RenderNodes() error = nil, want MissingValueError")
+	}
+	var miss *MissingValueError
+	if !errors.As(err, &miss) {
+		t.Fatalf("RenderNodes() error = %v, want MissingValueError", err)
+	}
+	if miss.Source != source {
+		t.Fatalf("MissingValueError.Source = %q, want %q", miss.Source, source)
+	}
+}
+
+func TestRenderNodes_FunctionHandlesNilNonNilReturn(t *testing.T) {
+	// A user func that accepts nil and returns a non-nil value avoids the
+	// MissingValueError — the final action value is non-nil.
+	funcs := FuncMap{
+		"orFallback": func(value any) string {
+			if value == nil {
+				return "fallback"
+			}
+			return value.(string)
+		},
+	}
+	nodes, err := RenderNodes(`${ page.missing | orFallback }`, testGetter{}, divParent(), funcs)
 	if err != nil {
-		t.Fatalf("RenderNodes() error = %v", err)
+		t.Fatalf("RenderNodes() error = %v, want no error", err)
 	}
 	got := renderNodesString(t, nodes)
-	if got != source {
-		t.Fatalf("rendered = %q, want literal source %q", got, source)
+	if got != "fallback" {
+		t.Fatalf("rendered = %q, want %q", got, "fallback")
+	}
+}
+
+func TestRenderNodes_FunctionReturningNilErrors(t *testing.T) {
+	// A user func that returns nil triggers MissingValueError just like a bare
+	// missing keypath.
+	funcs := FuncMap{
+		"passthrough": func(value any) any { return value },
+	}
+	source := `${ page.missing | passthrough }`
+	_, err := RenderNodes(source, testGetter{}, divParent(), funcs)
+	if err == nil {
+		t.Fatal("RenderNodes() error = nil, want MissingValueError")
+	}
+	var miss *MissingValueError
+	if !errors.As(err, &miss) {
+		t.Fatalf("RenderNodes() error = %v, want MissingValueError", err)
 	}
 }
 

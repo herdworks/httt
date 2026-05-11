@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	htmltemplate "html/template"
+	stdhtml "html"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	texttemplate "text/template"
 
 	"github.com/andybalholm/cascadia"
 	htmarkdown "github.com/herdworks/hypertemplates-go/markdown"
@@ -358,6 +359,25 @@ func containsSyntaxMarker(source string, syntax htvalue.Syntax) bool {
 	}
 }
 
+// wrapValueError annotates a MissingValueError from the value package with
+// the surrounding HTML element (serialized in full, including children) so
+// the failing template variable can be traced back to its source location.
+// Non-matching errors pass through unchanged.
+func wrapValueError(err error, element *html.Node) error {
+	var miss *htvalue.MissingValueError
+	var buffer bytes.Buffer
+	var elementString string
+	if !errors.As(err, &miss) {
+		return err
+	}
+	if err := html.Render(&buffer, element); err != nil {
+		elementString = ""
+	} else {
+		elementString = stdhtml.UnescapeString(buffer.String())
+	}
+	return fmt.Errorf("%w:\n%s\n", err, elementString)
+}
+
 func (template *Template) RenderValues(element *html.Node, data *TemplateData) (err error) {
 	if element == nil {
 		return nil
@@ -379,9 +399,13 @@ func (template *Template) RenderValues(element *html.Node, data *TemplateData) (
 		if !containsSyntaxMarker(attribute.Val, syntax) {
 			continue
 		}
-		if element.Attr[index].Val, err = htvalue.RenderString(attribute.Val, data, syntax, funcs); err != nil {
-			return err
+		rendered, err := htvalue.RenderString(attribute.Val, data, syntax, funcs)
+		if err != nil {
+			// Don't clobber the attribute on error — wrapValueError serializes
+			// the element for diagnostics and needs the original source visible.
+			return wrapValueError(err, element)
 		}
+		element.Attr[index].Val = rendered
 	}
 
 	if element.Data == "style" {
@@ -393,13 +417,15 @@ func (template *Template) RenderValues(element *html.Node, data *TemplateData) (
 			if !containsSyntaxMarker(child.Data, htvalue.SyntaxCSS) {
 				continue
 			}
-			if child.Data, err = htvalue.RenderString(child.Data, data, htvalue.SyntaxCSS, funcs); err != nil {
-				return err
+			rendered, err := htvalue.RenderString(child.Data, data, htvalue.SyntaxCSS, funcs)
+			if err != nil {
+				return wrapValueError(err, element)
 			}
+			child.Data = rendered
 		}
 	} else {
 		nodeFuncs := htvalue.FuncMap{
-			"html":     htmlValueFunc(element),
+			"text":     texttemplate.HTMLEscaper,
 			"markdown": markdownValueFunc(element, template.MarkdownConfig),
 		}
 		// Snapshot text-node children before iterating: RenderNodes splices
@@ -417,7 +443,7 @@ func (template *Template) RenderValues(element *html.Node, data *TemplateData) (
 			}
 			nodes, err := htvalue.RenderNodes(child.Data, data, element, funcs, nodeFuncs)
 			if err != nil {
-				return err
+				return wrapValueError(err, element)
 			}
 			for _, node := range nodes {
 				element.InsertBefore(node, child)
@@ -517,6 +543,13 @@ func (template *Template) RenderBlock(element *html.Node, userData *TemplateData
 		// block templates can insert wrapped content into block layouts.
 		fragmentData.Set("block.content", string(template.HTML(fragmentNodes...)))
 	}
+
+	var implicitApply bool // Implicit ht-apply ensures template variables are processed on ht-block fragment roots
+	if fragment.Type == html.ElementNode && !hasAttribute(fragment, HyperValueAttributeStrings...) {
+		implicitApply = true
+		setAttribute(fragment, "data-ht-apply", "")
+	}
+
 	shortcode := Template{
 		Layout:         fragment,
 		Theme:          template.Theme,
@@ -526,6 +559,9 @@ func (template *Template) RenderBlock(element *html.Node, userData *TemplateData
 		BlockMode:      true,
 	}
 	shortcode.Process(&fragmentData, userData) // RECURSION!
+	if implicitApply {
+		removeAttributes(fragment, "data-ht-apply") // synthetic; do not leak into output
+	}
 	element.Parent.InsertBefore(shortcode.Layout, element)
 	if template.TidyMode {
 		removeElement(element) // cleanup
@@ -618,39 +654,28 @@ func markdownContent(parent *html.Node, config *HyperMarkConfig, value any) ([]*
 	return html.ParseFragment(strings.NewReader(md.Content), parent)
 }
 
-// htmlValueFunc returns a value-funcmap entry that wraps htmlContent and
-// serializes the resulting nodes back to a template.HTML string for
-// composition with html/template's auto-escaping.
-func htmlValueFunc(parent *html.Node) func(any) (htmltemplate.HTML, error) {
-	return func(value any) (htmltemplate.HTML, error) {
-		nodes, err := htmlContent(parent, value)
-		if err != nil {
-			return "", err
-		}
-		return nodesToHTML(nodes)
-	}
-}
-
 // markdownValueFunc returns a value-funcmap entry that wraps markdownContent
-// and serializes the resulting nodes back to a template.HTML string.
-func markdownValueFunc(parent *html.Node, config *HyperMarkConfig) func(any) (htmltemplate.HTML, error) {
-	return func(value any) (htmltemplate.HTML, error) {
+// and serializes the resulting nodes back to an HTML string. Text-node values
+// in templates are parsed as HTML (no auto-escaping), so callers get the
+// rendered markdown inserted as real elements.
+func markdownValueFunc(parent *html.Node, config *HyperMarkConfig) func(any) (string, error) {
+	return func(value any) (string, error) {
 		nodes, err := markdownContent(parent, config, value)
 		if err != nil {
 			return "", err
 		}
-		return nodesToHTML(nodes)
+		return nodesToHTMLString(nodes)
 	}
 }
 
-func nodesToHTML(nodes []*html.Node) (htmltemplate.HTML, error) {
+func nodesToHTMLString(nodes []*html.Node) (string, error) {
 	var buf bytes.Buffer
 	for _, node := range nodes {
 		if err := html.Render(&buf, node); err != nil {
 			return "", err
 		}
 	}
-	return htmltemplate.HTML(buf.String()), nil
+	return buf.String(), nil
 }
 
 // =============================================================================

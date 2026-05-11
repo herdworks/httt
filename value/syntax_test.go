@@ -610,7 +610,7 @@ func TestHTFallback_InDefaultSyntax(t *testing.T) {
 	}
 }
 
-func TestRenderCSS_MissingRestoresCSSSource(t *testing.T) {
+func TestRenderCSS_MissingErrors(t *testing.T) {
 	tests := []struct {
 		name   string
 		source string
@@ -622,12 +622,13 @@ func TestRenderCSS_MissingRestoresCSSSource(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			rendered, err := RenderString(tc.source, testGetter{}, SyntaxCSS)
-			if err != nil {
-				t.Fatalf("RenderString() error = %v", err)
+			_, err := RenderString(tc.source, testGetter{}, SyntaxCSS)
+			if err == nil {
+				t.Fatal("RenderString() error = nil, want MissingValueError")
 			}
-			if rendered != tc.source {
-				t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", tc.source, rendered)
+			var miss *MissingValueError
+			if !errors.As(err, &miss) {
+				t.Fatalf("RenderString() error = %v, want MissingValueError", err)
 			}
 		})
 	}
@@ -643,17 +644,18 @@ func TestRenderCSS_FallbackOnMissPreventsRestore(t *testing.T) {
 	}
 }
 
-func TestRenderCSS_MultiActionAnyMissRestoresWholeCSS(t *testing.T) {
+func TestRenderCSS_MultiActionAnyMissErrors(t *testing.T) {
 	data := testGetter{
 		"theme": map[string]any{"color": "red"},
 	}
 	source := `.a { color: --ht-value("theme.color"); bg: --ht-value("theme.bg"); }`
 
-	rendered, err := RenderString(source, data, SyntaxCSS)
-	if err != nil {
-		t.Fatalf("RenderString() error = %v", err)
+	_, err := RenderString(source, data, SyntaxCSS)
+	if err == nil {
+		t.Fatal("RenderString() error = nil, want MissingValueError")
 	}
-	if rendered != source {
-		t.Fatalf("RenderString() mismatch:\nwant: %q\n got: %q", source, rendered)
+	var miss *MissingValueError
+	if !errors.As(err, &miss) {
+		t.Fatalf("RenderString() error = %v, want MissingValueError", err)
 	}
 }

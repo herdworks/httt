@@ -93,18 +93,25 @@ rejects them at parse/validate time at both pipeline head and tail with a
   attribute values and other contexts that need an inline string. Backed by
   `text/template`. Returns the rendered string.
 - `RenderNodes(source, data, parent, funcs...) ([]*html.Node, error)` — for
-  text-node content where the rendered output may include HTML produced by
-  funcmap entries returning `html/template.HTML`. Backed by `html/template`
-  so user data is auto-escaped while `template.HTML` returns pass through
-  raw. The rendered string is parsed as a fragment using `parent` as
-  context.
+  text-node content. Renders the source as a string via `text/template`, then
+  parses the result with `html.ParseFragment` using `parent` as the context.
+  There is no auto-escaping: author data containing `<`/`>` is interpreted as
+  HTML markup, and funcmap entries that return HTML strings inject real
+  elements. The top-level `Template.RenderValues` caller registers two
+  built-in text-node funcs in the funcmap: `text` (HTML-escapes its input —
+  a thin alias for `text/template.HTMLEscaper`) and `markdown` (renders
+  markdown to HTML).
 
 ## Missing Values
 
-If any action in a rendered template value source resolves to
-`text/template`'s `"<no value>"` marker, rendering discards the partial output
-and emits the original user-visible source verbatim. That keeps unresolved
-values visible instead of leaking partial substitutions.
+If any action in a rendered template value source resolves to `nil` (and no
+fallback is supplied), rendering aborts and returns a `*MissingValueError`.
+The error's `Source` field reports the template source that produced the nil;
+callers using `errors.As` can detect and inspect it. The
+`Template.RenderValues` call site additionally wraps the error with the
+surrounding HTML element (tag name, id, class, attribute name) for context.
+
+Empty strings are valid values and render as empty.
 
 Use a final string literal for per-value fallbacks:
 
@@ -113,6 +120,10 @@ ${ page.title, "Untitled" }
 ```
 
 The fallback is returned when the value is nil or an empty string.
+
+Pipelines see nil values directly: `${ myfunc page.missing }` calls
+`myfunc(nil)`. If `myfunc` returns a non-nil value (including `""`), the
+action succeeds. Only a nil final value triggers `MissingValueError`.
 
 ## CSS Values
 
