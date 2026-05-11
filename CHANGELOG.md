@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.29.0 (2026-05-11)
+
 Changed the value package DSL to return errors on missing data, and improved HTML variable parsing; added CSV/TSV data file support, and implicit `ht-apply` on `ht-block` fragments.
 
 **BREAKING:** value DSL actions whose final value is `nil` now return `*value.MissingValueError` instead of restoring the literal `${...}` source — add a fallback (`${ page.foo, "default" }` or `--ht-value("page.foo", "red")`) to opt out. Empty strings remain valid values and render as empty; errors are wrapped at `Template.RenderValues` call sites with the surrounding HTML element (tag name, id, class, attribute) and callers can detect via `errors.As(err, &miss)` and read `miss.Source` for the failing template source. Separately, `value.RenderNodes` now uses `text/template` and parses output with `html.ParseFragment`; `html/template` is no longer used, so author data with literal `<`/`>` is interpreted as HTML markup — there is no auto-escape in text nodes. Authors who need literal angle brackets must encode them in their data, or use the new `text` value func.
