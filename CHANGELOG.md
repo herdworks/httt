@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.30.0 (2026-05-28)
+
 * **BREAKING:** Changed exported logging/debug output APIs to accept explicit `io.Writer` arguments. Affected APIs include `Render`, `Theme.Parse`, `Theme.Archive`, `Template.Process`, `Template.EvaluateElement`, `Template.RenderTemplate`, `Template.RenderBasedElement`, `Template.ResolveBasedAttributes`, `Template.RenderBlock`, `Template.RenderQueryParams`, `Template.Debug`, and `Parameter.Evaluate`. Passing nil preserves previous stdout behavior; non-nil writers are used directly.
 * Changed template debug output, conditional regex warnings, base-URL resolution debug output, URL query debug output, and theme archive progress output to write to the supplied writer instead of printing directly to stdout.
 * Removed an unstructured stdout print from unknown mention-kind parsing.
