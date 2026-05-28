@@ -2,6 +2,8 @@ package hypertemplates
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
@@ -100,7 +102,11 @@ func (parameter *Parameter) ValueSet() (values []any) {
 	return []any{parameter.Value()}
 }
 
-func (parameter *Parameter) Evaluate() bool {
+func (parameter *Parameter) Evaluate(w io.Writer) bool {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	if len(parameter.Values) == 0 {
 		return false // no values are set
 	}
@@ -124,7 +130,7 @@ func (parameter *Parameter) Evaluate() bool {
 						return true
 					}
 				} else {
-					fmt.Printf("warning: invalid regex condition '%v' in parameter '%v'\n", condition, parameter.Raw)
+					fmt.Fprintf(w, "warning: invalid regex condition '%v' in parameter '%v'\n", condition, parameter.Raw)
 				}
 			}
 		}

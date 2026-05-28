@@ -109,7 +109,6 @@ func (p *MentionParser) Kind(node ast.Node) string {
 	if p.Trigger()[0] == HashtagMentionTrigger[0] {
 		return "hashtag"
 	}
-	fmt.Printf("unknown mention kind: %s\n", p.Trigger())
 	return "unknown"
 }
 func (p *MentionParser) Parse(_ ast.Node, block text.Reader, pc parser.Context) ast.Node {

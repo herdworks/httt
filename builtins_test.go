@@ -43,7 +43,7 @@ func setupBuiltinTest(t *testing.T, layoutHTML string, themeFiles map[string]str
 
 func processOrFatal(t *testing.T, tmpl *Template) string {
 	t.Helper()
-	out, err := tmpl.Process(&TemplateData{}, &TemplateData{})
+	out, err := tmpl.Process(&TemplateData{}, &TemplateData{}, nil)
 	if err != nil {
 		t.Fatalf("Process: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestBuiltinsDirectiveEvaluation(t *testing.T) {
 	)
 	data := &TemplateData{}
 	data.Set("page.title", "Hello")
-	out, err := tmpl.Process(data, &TemplateData{})
+	out, err := tmpl.Process(data, &TemplateData{}, nil)
 	if err != nil {
 		t.Fatalf("Process: %v", err)
 	}

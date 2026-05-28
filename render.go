@@ -1,12 +1,18 @@
 package hypertemplates
 
 import (
+	"io"
 	"net/url"
+	"os"
 
 	"golang.org/x/net/html"
 )
 
-func Render(dataPath string, layoutPath string, themePath string, untidy bool, markdownConfig *HyperMarkConfig) ([]byte, error) {
+func Render(dataPath string, layoutPath string, themePath string, untidy bool, markdownConfig *HyperMarkConfig, w io.Writer) ([]byte, error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	var data TemplateData
 	var layout *html.Node
 	var theme *Theme
@@ -28,5 +34,5 @@ func Render(dataPath string, layoutPath string, themePath string, untidy bool, m
 		TidyMode:       !untidy,
 		MarkdownConfig: markdownConfig,
 	}
-	return template.Process(&data, nil)
+	return template.Process(&data, nil, w)
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	stdhtml "html"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -38,7 +39,11 @@ type Template struct {
 }
 
 // TODO: add strict mode toggle (only process data-attributes)
-func (template *Template) Process(data *TemplateData, userData *TemplateData) (htmlBytes []byte, err error) {
+func (template *Template) Process(data *TemplateData, userData *TemplateData, w io.Writer) (htmlBytes []byte, err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	if template.Layout == nil {
 		return nil, errors.New("template layout empty, nothing to do") // guard
 	}
@@ -62,22 +67,22 @@ func (template *Template) Process(data *TemplateData, userData *TemplateData) (h
 
 	// process conditionals and debuggers, then render template
 	for _, element := range template.HyperIfElements() {
-		if err = template.EvaluateElement(element, data, true); err != nil {
+		if err = template.EvaluateElement(element, data, true, w); err != nil {
 			return nil, err
 		}
 	}
 	for _, element := range template.HyperNotElements() {
-		if err = template.EvaluateElement(element, data, false); err != nil {
+		if err = template.EvaluateElement(element, data, false, w); err != nil {
 			return nil, err
 		}
 	}
 	for _, element := range template.HyperDebugElements() {
-		if err = template.Debug(element, data); err != nil {
+		if err = template.Debug(element, data, w); err != nil {
 			return nil, err
 		}
 	}
 	for _, element := range template.HyperTemplateElements() {
-		if err = template.RenderTemplate(element, data, userData); err != nil {
+		if err = template.RenderTemplate(element, data, userData, w); err != nil {
 			return nil, err
 		}
 	}
@@ -92,7 +97,7 @@ func (template *Template) Process(data *TemplateData, userData *TemplateData) (h
 		}
 	}
 	for _, element := range template.HyperQueryElements() {
-		if err = template.RenderQueryParams(element, data); err != nil {
+		if err = template.RenderQueryParams(element, data, w); err != nil {
 			return nil, err
 		}
 	}
@@ -107,7 +112,7 @@ func (template *Template) Process(data *TemplateData, userData *TemplateData) (h
 		}
 	}
 	for _, element := range template.HyperBlockElements() {
-		if err = template.RenderBlock(element, userData); err != nil {
+		if err = template.RenderBlock(element, userData, w); err != nil {
 			return nil, err
 		}
 	}
@@ -117,7 +122,7 @@ func (template *Template) Process(data *TemplateData, userData *TemplateData) (h
 		}
 	}
 	for _, element := range template.HyperBaseElements() {
-		if err = template.RenderBasedElement(element, data); err != nil {
+		if err = template.RenderBasedElement(element, data, w); err != nil {
 			return nil, err
 		}
 	}
@@ -189,10 +194,14 @@ func (template *Template) IncludeFragment(element *html.Node, path string) (frag
 	return fragments[0], nil // fallback to the first element, which could be a comment node
 }
 
-func (template *Template) EvaluateElement(element *html.Node, data *TemplateData, inclusive bool) (err error) {
+func (template *Template) EvaluateElement(element *html.Node, data *TemplateData, inclusive bool, w io.Writer) (err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	paramString := getAttributeString(element, HyperConditionalAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, data) {
-		if param.Evaluate() == inclusive {
+		if param.Evaluate(w) == inclusive {
 			removeAttributes(element, "hidden") // remove "hidden" attribute if set
 		} else {
 			setAttribute(element, "hidden", "true") // hide conditional content
@@ -207,7 +216,11 @@ func (template *Template) EvaluateElement(element *html.Node, data *TemplateData
 	return nil
 }
 
-func (template *Template) RenderTemplate(element *html.Node, data *TemplateData, userData *TemplateData) (err error) {
+func (template *Template) RenderTemplate(element *html.Node, data *TemplateData, userData *TemplateData, w io.Writer) (err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	var params Parameters
 	var offset int = getAttributeInt(element, HyperTemplateOffsetAttributeStrings...)
 	var limit int = getAttributeInt(element, HyperTemplateLimitAttributeStrings...)
@@ -245,7 +258,7 @@ func (template *Template) RenderTemplate(element *html.Node, data *TemplateData,
 		}
 
 		// RECURSION — forward userData unchanged
-		if _, err = nestedTemplate.Process(nestedData, userData); err != nil {
+		if _, err = nestedTemplate.Process(nestedData, userData, w); err != nil {
 			return err
 		}
 		if implicitApply {
@@ -298,7 +311,11 @@ func (template *Template) RenderAttributes(element *html.Node, data *TemplateDat
 	return nil
 }
 
-func (template *Template) RenderBasedElement(element *html.Node, data *TemplateData) (err error) {
+func (template *Template) RenderBasedElement(element *html.Node, data *TemplateData, w io.Writer) (err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	paramString := getAttributeString(element, HyperBaseAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, data) {
 		if len(param.Values) == 0 {
@@ -313,14 +330,18 @@ func (template *Template) RenderBasedElement(element *html.Node, data *TemplateD
 		if baseURL, err = url.Parse(baseHref); err != nil {
 			return nil
 		}
-		if template.ResolveBasedAttributes(element, param.Target, baseURL) != nil {
+		if template.ResolveBasedAttributes(element, param.Target, baseURL, w) != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (template *Template) ResolveBasedAttributes(element *html.Node, attribute string, baseURL *url.URL) (err error) {
+func (template *Template) ResolveBasedAttributes(element *html.Node, attribute string, baseURL *url.URL, w io.Writer) (err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	debug := hasAttribute(element, HyperDebugAttributeStrings...)
 	selectors := fmt.Sprintf("[%[1]s]:not([data-ht-template] [%[1]s], [data-ht-template][%[1]s], [data-ht-base] [%[1]s], [data-ht-base][%[1]s])", attribute)
 	if !template.StrictMode {
@@ -330,7 +351,7 @@ func (template *Template) ResolveBasedAttributes(element *html.Node, attribute s
 		var resolvedHref string
 		targetHref := getAttributeString(el, attribute)
 		if debug {
-			fmt.Printf("base %s='%s' resolving\n", attribute, targetHref)
+			fmt.Fprintf(w, "base %s='%s' resolving\n", attribute, targetHref)
 		}
 		if strings.HasPrefix(targetHref, "data:") {
 			continue // skip data URIs
@@ -343,7 +364,7 @@ func (template *Template) ResolveBasedAttributes(element *html.Node, attribute s
 			return err // unescape the URL
 		}
 		if debug {
-			fmt.Printf("base %[1]s='%[2]s' => %[1]s='%[3]s' resolved\n", attribute, targetHref, resolvedHref) // debug output
+			fmt.Fprintf(w, "base %[1]s='%[2]s' => %[1]s='%[3]s' resolved\n", attribute, targetHref, resolvedHref) // debug output
 		}
 		setAttribute(el, attribute, resolvedHref)
 	}
@@ -522,7 +543,11 @@ func (template *Template) RenderParams(element *html.Node, data *TemplateData) (
 	return nil
 }
 
-func (template *Template) RenderBlock(element *html.Node, userData *TemplateData) (err error) {
+func (template *Template) RenderBlock(element *html.Node, userData *TemplateData, w io.Writer) (err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	var fragment *html.Node
 	var fragmentRef string = filepath.Join(template.Theme.BlocksDirName(), element.Data)
 	var fragmentData TemplateData
@@ -558,7 +583,7 @@ func (template *Template) RenderBlock(element *html.Node, userData *TemplateData
 		Plugins:        template.Plugins,
 		BlockMode:      true,
 	}
-	shortcode.Process(&fragmentData, userData) // RECURSION!
+	shortcode.Process(&fragmentData, userData, w) // RECURSION!
 	if implicitApply {
 		removeAttributes(fragment, "data-ht-apply") // synthetic; do not leak into output
 	}
@@ -593,7 +618,11 @@ func (template *Template) RenderPipe(element *html.Node) (err error) {
 	return nil
 }
 
-func (template *Template) RenderQueryParams(element *html.Node, data *TemplateData) (err error) {
+func (template *Template) RenderQueryParams(element *html.Node, data *TemplateData, w io.Writer) (err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	debug := hasAttribute(element, HyperDebugAttributeStrings...)
 	paramString := getAttributeString(element, HyperQueryAttributeStrings...)
 	for _, param := range template.ParseParameters(paramString, data) {
@@ -606,7 +635,7 @@ func (template *Template) RenderQueryParams(element *html.Node, data *TemplateDa
 		if attributeName, attributeQuery, hasQuery = strings.Cut(param.Target, "?"); !hasQuery {
 			continue // guard
 		}
-		if err = setAttributeQueryParam(element, attributeName, attributeQuery, fmt.Sprintf("%v", param.Value()), debug); err != nil {
+		if err = setAttributeQueryParam(element, attributeName, attributeQuery, fmt.Sprintf("%v", param.Value()), debug, w); err != nil {
 			return err // set the query parameter
 		}
 		removeAttributes(element, HyperQueryAttributeStrings...) // cleanup
@@ -614,7 +643,11 @@ func (template *Template) RenderQueryParams(element *html.Node, data *TemplateDa
 	return nil
 }
 
-func (template *Template) Debug(element *html.Node, data *TemplateData) (err error) {
+func (template *Template) Debug(element *html.Node, data *TemplateData, w io.Writer) (err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	var modes []string
 	modesString := strings.ReplaceAll(getAttributeString(element, HyperDebugAttributeStrings...), " ", "") // remove spaces
 	if len(modesString) > 0 {
@@ -632,7 +665,7 @@ func (template *Template) Debug(element *html.Node, data *TemplateData) (err err
 		statement = fmt.Appendf(statement, "%s\n", dataBytes)
 	}
 	statement = fmt.Appendf(statement, "====================\n")
-	fmt.Println(string(statement)) // print debug statement to stdout
+	fmt.Fprintln(w, string(statement))
 	removeAttributes(element, HyperDebugAttributeStrings...)
 	return nil
 }
@@ -1081,7 +1114,7 @@ func setAttribute(element *html.Node, key string, value string) {
 	}
 }
 
-func setAttributeQueryParam(element *html.Node, attribute string, queryParam string, value string, debug bool) (err error) {
+func setAttributeQueryParam(element *html.Node, attribute string, queryParam string, value string, debug bool, w io.Writer) (err error) {
 	var attributeURL *url.URL
 	attributeHref := getAttributeString(element, attribute)
 	if attributeURL, err = url.Parse(attributeHref); err != nil {
@@ -1091,7 +1124,7 @@ func setAttributeQueryParam(element *html.Node, attribute string, queryParam str
 	query.Set(queryParam, value)           // set the query parameter
 	attributeURL.RawQuery = query.Encode() // update URL with new query parameters
 	if debug {
-		fmt.Printf("urlquery %s => %s updating\n", attributeHref, attributeURL.String())
+		fmt.Fprintf(w, "urlquery %s => %s updating\n", attributeHref, attributeURL.String())
 	}
 	setAttribute(element, attribute, attributeURL.String()) // update the element attribute with the modified URL
 	return nil

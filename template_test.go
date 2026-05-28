@@ -172,7 +172,7 @@ func TestRenderBlocks(t *testing.T) {
 			}
 
 			// render the template
-			if htmlBytes, err = template.Process(&data, nil); err != nil {
+			if htmlBytes, err = template.Process(&data, nil, nil); err != nil {
 				t.Fatalf("error processing template: %v", err)
 			}
 
@@ -229,7 +229,7 @@ func TestRenderBlockPageFallback(t *testing.T) {
 	// wraps the page data under the "page" key explicitly.
 	userData := &TemplateData{"page": pageData}
 
-	htmlBytes, err := template.Process(&pageData, userData)
+	htmlBytes, err := template.Process(&pageData, userData, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestRenderValues(t *testing.T) {
 		TidyMode: true,
 	}
 
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 		},
 	}
 
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestRenderValuesNested(t *testing.T) {
 		TidyMode: true,
 	}
 
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -475,7 +475,7 @@ func TestRenderValuesStyleElement(t *testing.T) {
 		TidyMode: true,
 	}
 
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -513,7 +513,7 @@ func TestRenderValuesStyleElementFallback(t *testing.T) {
 		TidyMode: true,
 	}
 
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -549,7 +549,7 @@ func TestRenderValuesStyleAttribute(t *testing.T) {
 		TidyMode: true,
 	}
 
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -586,7 +586,7 @@ func TestRenderValuesTextNodeIsParsedAsHTML(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -618,7 +618,7 @@ func TestRenderValuesMarkdownFunc(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestRenderValuesTextFuncEscapesHTML(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -686,7 +686,7 @@ func TestRenderValuesTextFuncWithPlainText(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -715,7 +715,7 @@ func TestRenderValuesTextFuncNilRendersLiteral(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	htmlBytes, err := template.Process(&TemplateData{}, nil, nil)
 	if err != nil {
 		t.Fatalf("Process() error = %v, want no error", err)
 	}
@@ -746,7 +746,7 @@ func TestRenderValuesUserDataInterpretedAsHTML(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -765,7 +765,7 @@ func TestRenderValuesMissingErrorIncludesElementContext(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	_, err = template.Process(&TemplateData{}, nil)
+	_, err = template.Process(&TemplateData{}, nil, nil)
 	if err == nil {
 		t.Fatal("Process() error = nil, want MissingValueError wrapped with element context")
 	}
@@ -809,7 +809,7 @@ func TestRenderValuesMissingErrorIncludesElementForTextNode(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	_, err = template.Process(&TemplateData{}, nil)
+	_, err = template.Process(&TemplateData{}, nil, nil)
 	if err == nil {
 		t.Fatal("Process() error = nil, want MissingValueError")
 	}
@@ -851,7 +851,7 @@ func TestRenderContentHtmlMarkdownRefactorRegression(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -889,7 +889,7 @@ func TestImplicitApplyOnTemplateAttribute(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -935,7 +935,7 @@ func TestImplicitApplyOnTemplateText(t *testing.T) {
 	data := TemplateData{"items": []any{"x", "y"}}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -986,7 +986,7 @@ func TestImplicitApplyDoesNotClobberExplicit(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -1033,7 +1033,7 @@ func TestImplicitApplyStrictMode(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: true, StrictMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -1083,7 +1083,7 @@ func TestImplicitApplyCleanupNonTidy(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, TidyMode: false}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -1128,7 +1128,7 @@ func TestImplicitApplyNoMarker(t *testing.T) {
 	data := TemplateData{"items": []any{"a", "b", "c"}}
 
 	template := &Template{Layout: layout, TidyMode: true}
-	htmlBytes, err := template.Process(&data, nil)
+	htmlBytes, err := template.Process(&data, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -1170,7 +1170,7 @@ func TestImplicitApplyOnBlockText(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, Theme: theme, TidyMode: true}
-	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	htmlBytes, err := template.Process(&TemplateData{}, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -1217,7 +1217,7 @@ func TestImplicitApplyOnBlockAttribute(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, Theme: theme, TidyMode: true}
-	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	htmlBytes, err := template.Process(&TemplateData{}, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -1261,7 +1261,7 @@ func TestImplicitApplyOnBlockDoesNotClobberExplicit(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, Theme: theme, TidyMode: true}
-	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	htmlBytes, err := template.Process(&TemplateData{}, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -1306,7 +1306,7 @@ func TestImplicitApplyOnBlockNoMarker(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, Theme: theme, TidyMode: true}
-	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	htmlBytes, err := template.Process(&TemplateData{}, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}
@@ -1351,7 +1351,7 @@ func TestImplicitApplyOnBlockCleanupNonTidy(t *testing.T) {
 	}
 
 	template := &Template{Layout: layout, Theme: theme, TidyMode: false}
-	htmlBytes, err := template.Process(&TemplateData{}, nil)
+	htmlBytes, err := template.Process(&TemplateData{}, nil, nil)
 	if err != nil {
 		t.Fatalf("error processing template: %v", err)
 	}

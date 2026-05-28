@@ -40,12 +40,16 @@ type ThemeConfig struct {
 	StaticDirectory       string `json:"static_dir,omitempty" yaml:"static_dir,omitempty"`
 }
 
-func (theme *Theme) Parse() (err error) {
+func (theme *Theme) Parse(w io.Writer) (err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	var fileBytes []byte
 	if fileBytes, err = os.ReadFile(theme.URI.Path); err == nil {
 		return json.Unmarshal(fileBytes, &theme)
 	} else {
-		fmt.Printf("theme \"%s\" warning: %v\n", theme.URI.Path, err)
+		fmt.Fprintf(w, "theme \"%s\" warning: %v\n", theme.URI.Path, err)
 	}
 	return nil
 }
@@ -316,7 +320,11 @@ func (theme *Theme) FilePaths() (paths []string, err error) {
 }
 
 // Archive writes a zip archive containing every file returned by theme.FilePaths().
-func (theme *Theme) Archive(archive string) (err error) {
+func (theme *Theme) Archive(archive string, w io.Writer) (err error) {
+	if w == nil {
+		w = os.Stdout
+	}
+
 	var paths []string
 	var archiveFile *os.File
 	var zipper *zip.Writer
@@ -396,7 +404,7 @@ func (theme *Theme) Archive(archive string) (err error) {
 			return fmt.Errorf("open theme file %q: %w", sourcePath, err)
 		}
 
-		fmt.Printf("file %q writing\n", header.Name)
+		fmt.Fprintf(w, "file %q writing\n", header.Name)
 
 		if written, err = io.Copy(entryWriter, sourceFile); err != nil {
 			sourceFile.Close()
@@ -407,7 +415,7 @@ func (theme *Theme) Archive(archive string) (err error) {
 			return fmt.Errorf("close theme file %q: %w", sourcePath, err)
 		}
 
-		fmt.Printf("file %q written (%d bytes)\n", header.Name, written)
+		fmt.Fprintf(w, "file %q written (%d bytes)\n", header.Name, written)
 	}
 
 	return nil
