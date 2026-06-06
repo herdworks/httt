@@ -17,7 +17,7 @@ import (
 // UnmarshalTemplateData parses OPML bytes and projects the result into a
 // TemplateData whose shape mirrors the JSON-tagged opml.OPML struct.
 func UnmarshalTemplateData(b []byte) (data.TemplateData, error) {
-	doc, err := opml.ParseOPML(b)
+	doc, err := opml.Parse(b)
 	if err != nil {
 		return nil, err
 	}
