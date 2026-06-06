@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.31.0 (2026-06-06)
+
+* Updated github.com/herdworks/hyperfeed-go to version 0.22.0
+
 ## v0.30.0 (2026-05-28)
 
 * **BREAKING:** Changed exported logging/debug output APIs to accept explicit `io.Writer` arguments. Affected APIs include `Render`, `Theme.Parse`, `Theme.Archive`, `Template.Process`, `Template.EvaluateElement`, `Template.RenderTemplate`, `Template.RenderBasedElement`, `Template.ResolveBasedAttributes`, `Template.RenderBlock`, `Template.RenderQueryParams`, `Template.Debug`, and `Parameter.Evaluate`. Passing nil preserves previous stdout behavior; non-nil writers are used directly.
