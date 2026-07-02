@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.32.0 (2026-07-01)
+
 * Added `TemplateDataKeyPath` as the branch/leaf representation for TemplateData mutation paths.
 * Added `TemplateData.Add`, `TemplateData.Replace`, and `TemplateData.Append` mutation helpers for dot-notation TemplateData paths.
 * Changed mutation helpers to share key-path validation. `Set`, `Add`, `Replace`, and `Append` now reject empty path segments and computed function-style accessors such as `length()`, `count()`, and `keys()`.
