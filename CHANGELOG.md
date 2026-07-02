@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* Added `TemplateDataKeyPath` as the branch/leaf representation for TemplateData mutation paths.
+* Added `TemplateData.Add`, `TemplateData.Replace`, and `TemplateData.Append` mutation helpers for dot-notation TemplateData paths.
+* Changed mutation helpers to share key-path validation. `Set`, `Add`, `Replace`, and `Append` now reject empty path segments and computed function-style accessors such as `length()`, `count()`, and `keys()`.
+* Changed `TemplateData.Append` to support a fixed JSON-like slice set (`[]any`, `[]string`, `[]bool`, `[]int`, `[]int64`, `[]float64`, and `[]float32`) without reflection.
+
 ## v0.31.0 (2026-06-06)
 
 * Updated github.com/herdworks/hyperfeed-go to version 0.22.0

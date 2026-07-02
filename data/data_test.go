@@ -191,6 +191,244 @@ func TestSetEmptyKeyErrors(t *testing.T) {
 	}
 }
 
+func TestTemplateDataKeyPathParse(t *testing.T) {
+	var keyPath TemplateDataKeyPath
+	if err := keyPath.parse("page.author.name"); err != nil {
+		t.Fatalf("parse() error = %v", err)
+	}
+	if keyPath.Raw != "page.author.name" {
+		t.Fatalf("Raw = %q, want page.author.name", keyPath.Raw)
+	}
+	if !slices.Equal(keyPath.Path, []string{"page", "author"}) {
+		t.Fatalf("Path = %v, want [page author]", keyPath.Path)
+	}
+	if keyPath.Key != "name" {
+		t.Fatalf("Key = %q, want name", keyPath.Key)
+	}
+
+	var topLevel TemplateDataKeyPath
+	if err := topLevel.parse("title"); err != nil {
+		t.Fatalf("top-level parse() error = %v", err)
+	}
+	if topLevel.Raw != "title" || len(topLevel.Path) != 0 || topLevel.Key != "title" {
+		t.Fatalf("top-level parse = %#v, want Raw:title Path:nil Key:title", topLevel)
+	}
+}
+
+func TestTemplateDataKeyPathReachability(t *testing.T) {
+	d := TemplateData{
+		"page": TemplateData{
+			"metadata": map[string]any{},
+			"tags":     []any{"go"},
+		},
+	}
+
+	var existing TemplateDataKeyPath
+	if err := existing.parse("page.metadata.title"); err != nil {
+		t.Fatalf("parse existing path: %v", err)
+	}
+	if err := existing.isReachable(d); err != nil {
+		t.Fatalf("existing path should be reachable: %v", err)
+	}
+	if !existing.branchExists(d) {
+		t.Fatalf("existing branch path should exist")
+	}
+
+	var missing TemplateDataKeyPath
+	if err := missing.parse("page.details.title"); err != nil {
+		t.Fatalf("parse missing path: %v", err)
+	}
+	if err := missing.isReachable(d); err != nil {
+		t.Fatalf("missing branch path should be reachable: %v", err)
+	}
+	if missing.branchExists(d) {
+		t.Fatalf("missing branch path should not exist")
+	}
+
+	var blocked TemplateDataKeyPath
+	if err := blocked.parse("page.tags.slug"); err != nil {
+		t.Fatalf("parse blocked path: %v", err)
+	}
+	if err := blocked.isReachable(d); err == nil {
+		t.Fatalf("array branch path should not be reachable")
+	}
+}
+
+func TestAdd(t *testing.T) {
+	d := TemplateData{}
+	if err := d.Add("a.b", "new"); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	if got := d.Get("a.b"); got != "new" {
+		t.Fatalf("a.b = %v, want new", got)
+	}
+	if err := d.Add("a.b", "duplicate"); err == nil {
+		t.Fatalf("Add() duplicate error = nil, want error")
+	}
+	if got := d.Get("a.b"); got != "new" {
+		t.Fatalf("duplicate Add mutated a.b = %v, want new", got)
+	}
+}
+
+func TestAddBlockedByScalar(t *testing.T) {
+	d := TemplateData{"a": "scalar"}
+	err := d.Add("a.b", 1)
+	if err == nil {
+		t.Fatalf("Add() error = nil, want scalar path error")
+	}
+	if got := d.Get("a"); got != "scalar" {
+		t.Fatalf("Add should not mutate blocked path; got a=%v", got)
+	}
+}
+
+func TestReplace(t *testing.T) {
+	d := TemplateData{"a": TemplateData{"b": "old"}}
+	if err := d.Replace("a.b", "new"); err != nil {
+		t.Fatalf("Replace() error = %v", err)
+	}
+	if got := d.Get("a.b"); got != "new" {
+		t.Fatalf("a.b = %v, want new", got)
+	}
+	if err := d.Replace("a.c", "missing"); err == nil {
+		t.Fatalf("Replace() missing leaf error = nil, want error")
+	}
+	if got := d.Get("a.c"); got != nil {
+		t.Fatalf("Replace created missing a.c = %v", got)
+	}
+}
+
+func TestReplaceBlockedByMissingParentAndScalar(t *testing.T) {
+	missing := TemplateData{}
+	if err := missing.Replace("a.b", 1); err == nil {
+		t.Fatalf("Replace() missing parent error = nil, want error")
+	}
+	scalar := TemplateData{"a": "scalar"}
+	if err := scalar.Replace("a.b", 1); err == nil {
+		t.Fatalf("Replace() scalar parent error = nil, want error")
+	}
+}
+
+func TestAppend(t *testing.T) {
+	d := TemplateData{
+		"tags":    []string{"existing"},
+		"items":   []any{1},
+		"flags":   []bool{true},
+		"numbers": []int{1},
+		"large":   []int64{1},
+		"ratios":  []float64{1.5},
+		"small":   []float32{1.5},
+	}
+	if err := d.Append("tags", "new"); err != nil {
+		t.Fatalf("Append(tags) error = %v", err)
+	}
+	if got := d.Get("tags"); !reflect.DeepEqual(got, []string{"existing", "new"}) {
+		t.Fatalf("tags = %#v, want appended []string", got)
+	}
+	if err := d.Append("items", 2); err != nil {
+		t.Fatalf("Append(items) error = %v", err)
+	}
+	if got := d.Get("items"); !reflect.DeepEqual(got, []any{1, 2}) {
+		t.Fatalf("items = %#v, want appended []any", got)
+	}
+	if err := d.Append("flags", false); err != nil {
+		t.Fatalf("Append(flags) error = %v", err)
+	}
+	if got := d.Get("flags"); !reflect.DeepEqual(got, []bool{true, false}) {
+		t.Fatalf("flags = %#v, want appended []bool", got)
+	}
+	if err := d.Append("numbers", 2); err != nil {
+		t.Fatalf("Append(numbers) error = %v", err)
+	}
+	if got := d.Get("numbers"); !reflect.DeepEqual(got, []int{1, 2}) {
+		t.Fatalf("numbers = %#v, want appended []int", got)
+	}
+	if err := d.Append("large", int64(2)); err != nil {
+		t.Fatalf("Append(large) error = %v", err)
+	}
+	if got := d.Get("large"); !reflect.DeepEqual(got, []int64{1, 2}) {
+		t.Fatalf("large = %#v, want appended []int64", got)
+	}
+	if err := d.Append("ratios", 2.5); err != nil {
+		t.Fatalf("Append(ratios) error = %v", err)
+	}
+	if got := d.Get("ratios"); !reflect.DeepEqual(got, []float64{1.5, 2.5}) {
+		t.Fatalf("ratios = %#v, want appended []float64", got)
+	}
+	if err := d.Append("small", float32(2.5)); err != nil {
+		t.Fatalf("Append(small) error = %v", err)
+	}
+	if got := d.Get("small"); !reflect.DeepEqual(got, []float32{1.5, 2.5}) {
+		t.Fatalf("small = %#v, want appended []float32", got)
+	}
+	if err := d.Append("categories", "created"); err != nil {
+		t.Fatalf("Append(categories) error = %v", err)
+	}
+	if got := d.Get("categories"); !reflect.DeepEqual(got, []any{"created"}) {
+		t.Fatalf("categories = %#v, want created []any", got)
+	}
+	if err := d.Append("nested.values", true); err != nil {
+		t.Fatalf("Append(nested.values) error = %v", err)
+	}
+	if got := d.Get("nested.values"); !reflect.DeepEqual(got, []any{true}) {
+		t.Fatalf("nested.values = %#v, want created nested []any", got)
+	}
+}
+
+func TestAppendRejectsScalarIncompatibleAndUnsupportedSlices(t *testing.T) {
+	scalar := TemplateData{"tags": "not an array"}
+	if err := scalar.Append("tags", "new"); err == nil {
+		t.Fatalf("Append() scalar target error = nil, want error")
+	}
+	if got := scalar.Get("tags"); got != "not an array" {
+		t.Fatalf("Append mutated scalar target = %v", got)
+	}
+	typed := TemplateData{"numbers": []int{1}}
+	if err := typed.Append("numbers", "two"); err == nil {
+		t.Fatalf("Append() incompatible typed slice error = nil, want error")
+	}
+	if got := typed.Get("numbers"); !reflect.DeepEqual(got, []int{1}) {
+		t.Fatalf("Append mutated incompatible typed slice = %#v", got)
+	}
+	unsupported := TemplateData{"numbers": []uint{1}}
+	if err := unsupported.Append("numbers", uint(2)); err == nil {
+		t.Fatalf("Append() unsupported typed slice error = nil, want error")
+	}
+	if got := unsupported.Get("numbers"); !reflect.DeepEqual(got, []uint{1}) {
+		t.Fatalf("Append mutated unsupported typed slice = %#v", got)
+	}
+	array := TemplateData{"numbers": [1]int{1}}
+	if err := array.Append("numbers", 2); err == nil {
+		t.Fatalf("Append() array error = nil, want error")
+	}
+	if got := array.Get("numbers"); !reflect.DeepEqual(got, [1]int{1}) {
+		t.Fatalf("Append mutated array = %#v", got)
+	}
+}
+
+func TestMutationKeysRejectEmptyAndFunctionSegments(t *testing.T) {
+	for _, mutate := range []struct {
+		name string
+		fn   func(string, any) error
+	}{
+		{name: "Set", fn: TemplateData{}.Set},
+		{name: "Add", fn: TemplateData{}.Add},
+		{name: "Replace", fn: TemplateData{"a": 1}.Replace},
+		{name: "Append", fn: TemplateData{}.Append},
+	} {
+		t.Run(mutate.name, func(t *testing.T) {
+			if err := mutate.fn("", "x"); err == nil {
+				t.Fatalf("%s empty key error = nil, want error", mutate.name)
+			}
+			if err := mutate.fn("a..b", "x"); err == nil {
+				t.Fatalf("%s empty segment error = nil, want error", mutate.name)
+			}
+			if err := mutate.fn("a.length()", "x"); err == nil {
+				t.Fatalf("%s function segment error = nil, want error", mutate.name)
+			}
+		})
+	}
+}
+
 func TestDelete(t *testing.T) {
 	d := TemplateData{
 		"a": "x",
