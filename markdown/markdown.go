@@ -85,7 +85,10 @@ func New(config *HyperMarkConfig) *HyperMark {
 			hypermark.WordCounterExtension(),
 			hypermark.HTBlockHTMLParserExtension(),
 		),
-		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
+		goldmark.WithParserOptions(
+			parser.WithAutoHeadingID(),
+			parser.WithAttribute(),
+		),
 		goldmark.WithRendererOptions(
 			html.WithXHTML(),
 			html.WithUnsafe(),

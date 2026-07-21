@@ -131,22 +131,22 @@ export default function(input) {
 The plugin name is derived from the filename (sans extension), so
 `scripts/upper.js` registers an `upper` plugin usable as
 `${ page.title | upper }`. To compile a batch of plugin files for use with
-the `value` package, call `value.LoadPlugins`:
+the `variable` package, call `variable.LoadPlugins`:
 
 ```go
 package main
 
 import (
-	htvalue "github.com/herdworks/hypertemplates-go/value"
+	htvariable "github.com/herdworks/hypertemplates-go/variable"
 )
 
 func main() {
-	plugins, err := htvalue.LoadPlugins([]string{"scripts/upper.js", "scripts/title.js"})
+	plugins, err := htvariable.LoadPlugins([]string{"scripts/upper.js", "scripts/title.js"})
 	if err != nil {
 		panic(err)
 	}
 
-	// Use plugins with Template.Plugins, or pass plugins.FuncMap() to value.RenderString / value.RenderNodes.
+	// Use plugins with Document.Plugins, or pass plugins.FuncMap() to variable.RenderString / variable.RenderNodes.
 	_ = plugins
 }
 ```
@@ -171,10 +171,10 @@ export default function(input) {
 ```
 
 ```go
-rendered, err := htvalue.RenderString(
+rendered, err := htvariable.RenderString(
 	`${ page.title | upper }`,
 	data,
-	htvalue.SyntaxDefault,
+	htvariable.SyntaxDefault,
 	plugins.FuncMap(),
 )
 if err != nil {

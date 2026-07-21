@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **BREAKING:** Renamed the `value` package to `variable` to align the Go API with the documented template-variable terminology. Callers must replace imports of `github.com/herdworks/hypertemplates-go/value` with `github.com/herdworks/hypertemplates-go/variable`; the old package has been removed.
+* **BREAKING:** Refactored the template runtime into explicit `files`, `theme`, `document`, and `directives` packages. New callers should use `theme.Theme`, `document.Document`, and `directives.Process`; the root package keeps `Render` plus the existing data and markdown re-exports.
+* **BREAKING:** Removed root-level production compatibility for `Template`, `Theme`, builtin resource state, directive errors, directive parameter types, and file/path helper wrappers. Builtin resource APIs now live in `theme`, directive processing and errors live in `directives`, document/DOM helpers live in `document`, and path/list helpers live in `files`.
+* Added caller-replaceable `theme.BuiltinsFS` resource packs, with default builtin metadata and resource lookup helpers owned by the `theme` package.
+* Added non-stuttering public file helper names in `files`: `List`, `ListByPattern`, `CleanRelativePath`, `ValidateRelativePath`, `LocalPath`, `LocalPaths`, and `RelativePath`.
+* Enabled Goldmark parser attribute support in HyperMark alongside automatic heading IDs.
+* Split directive implementations into focused files under `directives` while preserving the existing directive pass order and behavior.
+* Changed `ht-include` resource loading to use `theme.Theme.ResourceBytes`, preserving theme-over-builtin precedence and empty-file opt-out while rejecting unsafe resource references.
+* Moved directive, file, and theme regression coverage into the owning package test suites, with directive fixtures now scoped under `directives/testdata`.
+
 ## v0.32.0 (2026-07-01)
 
 * Added `TemplateDataKeyPath` as the branch/leaf representation for TemplateData mutation paths.
