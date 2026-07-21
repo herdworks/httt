@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.33.0 (2026-07-20)
+
 * **BREAKING:** Renamed the `value` package to `variable` to align the Go API with the documented template-variable terminology. Callers must replace imports of `github.com/herdworks/hypertemplates-go/value` with `github.com/herdworks/hypertemplates-go/variable`; the old package has been removed.
 * **BREAKING:** Refactored the template runtime into explicit `files`, `theme`, `document`, and `directives` packages. New callers should use `theme.Theme`, `document.Document`, and `directives.Process`; the root package keeps `Render` plus the existing data and markdown re-exports.
 * **BREAKING:** Removed root-level production compatibility for `Template`, `Theme`, builtin resource state, directive errors, directive parameter types, and file/path helper wrappers. Builtin resource APIs now live in `theme`, directive processing and errors live in `directives`, document/DOM helpers live in `document`, and path/list helpers live in `files`.

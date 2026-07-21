@@ -7,6 +7,6 @@ import (
 // VARIABLES
 // =============================================================================
 var (
-	LibVersion        string = "0.32.0"
-	LibReleaseDate, _        = time.Parse(time.RFC3339, "2026-07-01T17:00:00-07:00")
+	LibVersion        string = "0.33.0"
+	LibReleaseDate, _        = time.Parse(time.RFC3339, "2026-07-20:19:00-07:00")
 )
