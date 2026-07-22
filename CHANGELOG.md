@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* Added `migrate.Migration` and its per-rule/per-file `Job` pipeline for incremental theme migrations, including interactive review, durable completed passes, and optional complete-theme output copies.
+* Added the public stateless migration-rule API with shared candidate, proposal, report, and typed-error values, plus initial `ht-param` migration and optional `ht-debug` cleanup rules.
+* Fixed `document.CloneElement` to preserve element namespace metadata.
+
 ## v0.33.0 (2026-07-20)
 
 * **BREAKING:** Renamed the `value` package to `variable` to align the Go API with the documented template-variable terminology. Callers must replace imports of `github.com/herdworks/hypertemplates-go/value` with `github.com/herdworks/hypertemplates-go/variable`; the old package has been removed.

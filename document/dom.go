@@ -292,10 +292,11 @@ func OuterHTML(element *html.Node, template []*html.Node) {
 
 func CloneElement(element *html.Node) *html.Node {
 	clone := &html.Node{
-		Type:     element.Type,
-		DataAtom: element.DataAtom,
-		Data:     element.Data,
-		Attr:     make([]html.Attribute, len(element.Attr)),
+		Type:      element.Type,
+		DataAtom:  element.DataAtom,
+		Data:      element.Data,
+		Namespace: element.Namespace,
+		Attr:      make([]html.Attribute, len(element.Attr)),
 	}
 	copy(clone.Attr, element.Attr)
 	for child := element.FirstChild; child != nil; child = child.NextSibling {
