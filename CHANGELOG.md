@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.33.1 (2026-07-22)
+
 * Added `migrate.Migration` and its per-rule/per-file `Job` pipeline for incremental theme migrations, including interactive review, durable completed passes, and optional complete-theme output copies.
 * Added the public stateless migration-rule API with shared candidate, proposal, report, and typed-error values, plus initial `ht-param` migration and optional `ht-debug` cleanup rules.
 * Fixed `document.CloneElement` to preserve element namespace metadata.
