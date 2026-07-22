@@ -32,8 +32,8 @@ type Migration struct {
 
 // DefaultRules is the ordered migration rule set used when a job supplies no rules.
 var DefaultRules = []migrationrules.Rule{
-	migrationrules.Debug{},
 	migrationrules.Param{},
+	migrationrules.Debug{},
 }
 
 // ErrInterrupted is returned when an interactive migration is quit or reaches EOF.

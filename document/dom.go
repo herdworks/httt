@@ -335,7 +335,7 @@ func MarkdownContent(parent *html.Node, config *htmarkdown.HyperMarkConfig, valu
 	return html.ParseFragment(strings.NewReader(md.Content), parent)
 }
 
-func MarkdownValueFunc(parent *html.Node, config *htmarkdown.HyperMarkConfig) func(any) (string, error) {
+func MarkdownVariableFunc(parent *html.Node, config *htmarkdown.HyperMarkConfig) func(any) (string, error) {
 	return func(value any) (string, error) {
 		nodes, err := MarkdownContent(parent, config, value)
 		if err != nil {

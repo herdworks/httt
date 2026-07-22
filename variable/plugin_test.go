@@ -39,7 +39,7 @@ func TestLoadPlugins(t *testing.T) {
 		t.Fatalf("upper plugin path = %q, want %q", plugins["upper"].Path, upperPath)
 	}
 
-	rendered, err := RenderString(`${ page.title | upper }`, testGetter{"page": map[string]any{"title": "hello"}}, SyntaxDefault, plugins.FuncMap())
+	rendered, err := RenderString(`${ upper(page.title) }`, testGetter{"page": map[string]any{"title": "hello"}}, SyntaxDefault, plugins.FuncMap())
 	if err != nil {
 		t.Fatalf("Render upper plugin error = %v", err)
 	}
@@ -47,7 +47,7 @@ func TestLoadPlugins(t *testing.T) {
 		t.Fatalf("Render upper plugin = %q, want HELLO", rendered)
 	}
 
-	rendered, err = RenderString(`${ page.title | title }`, testGetter{"page": map[string]any{"title": "hello world"}}, SyntaxDefault, plugins.FuncMap())
+	rendered, err = RenderString(`${ title(page.title) }`, testGetter{"page": map[string]any{"title": "hello world"}}, SyntaxDefault, plugins.FuncMap())
 	if err != nil {
 		t.Fatalf("Render title plugin error = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestLoadPluginsLastPluginWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPlugins() error = %v", err)
 	}
-	rendered, err := RenderString(`${ page.title | label }`, testGetter{"page": map[string]any{"title": "ignored"}}, SyntaxDefault, plugins.FuncMap())
+	rendered, err := RenderString(`${ label(page.title) }`, testGetter{"page": map[string]any{"title": "ignored"}}, SyntaxDefault, plugins.FuncMap())
 	if err != nil {
 		t.Fatalf("Render label plugin error = %v", err)
 	}
@@ -88,11 +88,11 @@ func TestLoadPluginsLastPluginWins(t *testing.T) {
 	}
 }
 
-func TestMergeLastPluginGroupWins(t *testing.T) {
+func TestMergePluginsLastPluginGroupWins(t *testing.T) {
 	first := Plugins{"label": {Name: "label", Path: "first.js", Func: func(...any) (any, error) { return "first", nil }}}
 	second := Plugins{"label": {Name: "label", Path: "second.js", Func: func(...any) (any, error) { return "second", nil }}}
 
-	merged := Merge(first, second)
+	merged := MergePlugins(first, second)
 	if merged["label"].Path != "second.js" {
 		t.Fatalf("merged label path = %q, want second.js", merged["label"].Path)
 	}
@@ -128,7 +128,7 @@ func TestPluginsFuncMap_SkipsNilFunc(t *testing.T) {
 }
 
 func TestLoadPluginsRejectsReservedNames(t *testing.T) {
-	for _, name := range []string{"get"} {
+	for _, name := range []string{"get", "text", "markdown"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, name+".js")
@@ -203,11 +203,12 @@ func TestLoadPluginsRequiresDefaultExport(t *testing.T) {
 	}
 }
 
-func TestLoadPluginsVariadicPipelineArgs(t *testing.T) {
+func TestLoadPluginsFunctionArgumentsInSourceOrder(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "fmtdate.js")
 	if err := os.WriteFile(path, []byte(`
-export default function(format = "", input = "") {
+export default function(updated = null, created = null, format = "") {
+	const input = updated ?? created
 	if (typeof input !== "string") {
 		return input
 	}
@@ -223,7 +224,7 @@ export default function(format = "", input = "") {
 	}
 
 	rendered, err := RenderString(
-		`${ page.updated_at, page.created_at | fmtdate "YYYY-MM-DD" }`,
+		`${ fmtdate(page.updated_at, page.created_at, "YYYY-MM-DD") }`,
 		testGetter{"page": map[string]any{"created_at": "2026-04-28T00:00:00Z"}},
 		SyntaxDefault,
 		plugins.FuncMap(),

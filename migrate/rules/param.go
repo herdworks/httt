@@ -61,6 +61,9 @@ func paramReplacement(candidate *migrationtypes.Candidate) (*html.Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(keys) == 0 {
+		return nil, &migrationtypes.ManualMigrationRequiredError{Message: "parameter does not contain a template-data keypath"}
+	}
 	fallback := ""
 	for _, attribute := range candidate.Element.Attr {
 		if strings.EqualFold(attribute.Key, "default") || strings.EqualFold(attribute.Key, "data-default") {
@@ -69,9 +72,11 @@ func paramReplacement(candidate *migrationtypes.Candidate) (*html.Node, error) {
 		}
 	}
 	parts := append(append([]string(nil), keys...), strconv.Quote(fallback))
-	expression := "${ " + strings.Join(parts, ", ")
+	expression := "${ "
 	if mode == "markdown" {
-		expression += " | markdown"
+		expression += "markdown(" + strings.Join(parts, ", ") + ")"
+	} else {
+		expression += strings.Join(parts, ", ")
 	}
 	expression += " }"
 	applyName := "ht-apply"

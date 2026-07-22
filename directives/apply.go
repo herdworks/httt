@@ -1,7 +1,6 @@
 package directives
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -13,9 +12,9 @@ import (
 	"golang.org/x/net/html"
 )
 
-var HyperValueAttributeStrings = []string{"data-hyper-template", "hyper-template", "data-ht-apply", "ht-apply"}
+var HyperApplyAttributeStrings = []string{"data-hyper-template", "hyper-template", "data-ht-apply", "ht-apply"}
 
-func RenderValues(document *htdocument.Document, element *html.Node, data *htdata.TemplateData) (err error) {
+func RenderVariables(document *htdocument.Document, element *html.Node, data *htdata.TemplateData) (err error) {
 	if element == nil {
 		return nil
 	}
@@ -26,7 +25,7 @@ func RenderValues(document *htdocument.Document, element *html.Node, data *htdat
 	funcs := document.Plugins.FuncMap()
 
 	for index, attribute := range element.Attr {
-		if slices.Contains(HyperValueAttributeStrings, attribute.Key) {
+		if slices.Contains(HyperApplyAttributeStrings, attribute.Key) {
 			continue
 		}
 		syntax := variable.SyntaxDefault
@@ -38,7 +37,7 @@ func RenderValues(document *htdocument.Document, element *html.Node, data *htdat
 		}
 		rendered, err := variable.RenderString(attribute.Val, data, syntax, funcs)
 		if err != nil {
-			return wrapValueError(err, element)
+			return wrapVariableError(err, fmt.Sprintf("attribute %q", attribute.Key), element)
 		}
 		element.Attr[index].Val = rendered
 	}
@@ -53,14 +52,14 @@ func RenderValues(document *htdocument.Document, element *html.Node, data *htdat
 			}
 			rendered, err := variable.RenderString(child.Data, data, variable.SyntaxCSS, funcs)
 			if err != nil {
-				return wrapValueError(err, element)
+				return wrapVariableError(err, "<style> text content", element)
 			}
 			child.Data = rendered
 		}
 	} else {
 		nodeFuncs := variable.FuncMap{
 			"text":     texttemplate.HTMLEscaper,
-			"markdown": htdocument.MarkdownValueFunc(element, document.MarkdownConfig),
+			"markdown": htdocument.MarkdownVariableFunc(element, document.MarkdownConfig),
 		}
 		var textChildren []*html.Node
 		for child := element.FirstChild; child != nil; child = child.NextSibling {
@@ -74,7 +73,7 @@ func RenderValues(document *htdocument.Document, element *html.Node, data *htdat
 			}
 			nodes, err := variable.RenderNodes(child.Data, data, element, funcs, nodeFuncs)
 			if err != nil {
-				return wrapValueError(err, element)
+				return wrapVariableError(err, "element text content", element)
 			}
 			for _, node := range nodes {
 				element.InsertBefore(node, child)
@@ -84,13 +83,13 @@ func RenderValues(document *htdocument.Document, element *html.Node, data *htdat
 	}
 
 	if document.TidyMode {
-		htdocument.RemoveAttributes(element, HyperValueAttributeStrings...)
+		htdocument.RemoveAttributes(element, HyperApplyAttributeStrings...)
 	}
 
 	return nil
 }
 
-func HyperValueElements(document *htdocument.Document) []*html.Node {
+func HyperApplyElements(document *htdocument.Document) []*html.Node {
 	selectors := []string{"[data-ht-apply]:not([data-ht-template] [data-ht-apply], [data-ht-template][data-ht-apply])"}
 	selectors = append(selectors, "[data-hyper-template]:not([data-ht-template] [data-hyper-template], [data-ht-template][data-hyper-template])")
 	if document.StrictMode {
@@ -106,16 +105,17 @@ func HyperValueElements(document *htdocument.Document) []*html.Node {
 func containsSyntaxMarker(source string, syntax variable.Syntax) bool {
 	switch syntax {
 	case variable.SyntaxCSS:
-		return strings.Contains(source, "--ht-value(")
+		return strings.Contains(source, "--ht-var(")
 	default:
 		return strings.Contains(source, "${")
 	}
 }
 
-func wrapValueError(err error, element *html.Node) error {
-	var miss *variable.MissingValueError
-	if !errors.As(err, &miss) {
-		return err
-	}
-	return fmt.Errorf("%w:\n%s\n", err, htdocument.ElementString(element))
+func wrapVariableError(err error, location string, element *html.Node) error {
+	return fmt.Errorf(
+		"failed rendering variables in %s:\n%s\n%w",
+		location,
+		htdocument.ElementString(element),
+		err,
+	)
 }

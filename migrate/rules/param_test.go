@@ -41,17 +41,12 @@ func TestParamMigratesLegacyParameterElements(t *testing.T) {
 		{
 			name:   "data alias markdown and first default in source order",
 			source: `<param data-ht-param="markdown:post.summary,post.content" default="First" data-default="Second" class="discarded">`,
-			want:   `<div data-ht-apply="">${ post.summary, post.content, &#34;First&#34; | markdown }</div>`,
+			want:   `<div data-ht-apply="">${ markdown(post.summary, post.content, &#34;First&#34;) }</div>`,
 		},
 		{
 			name:   "html mode and implicit empty fallback",
 			source: `<param ht-param="html:page.body">`,
 			want:   `<div ht-apply="">${ page.body, &#34;&#34; }</div>`,
-		},
-		{
-			name:   "empty source with explicit fallback",
-			source: `<param ht-param default="Fallback">`,
-			want:   `<div ht-apply="">${ &#34;Fallback&#34; }</div>`,
 		},
 	}
 
@@ -83,6 +78,8 @@ func TestParamRequiresManualMigrationForAmbiguousReplacement(t *testing.T) {
 		{name: "multiple parameter attributes", source: `<span ht-param="page.title" data-ht-param="site.title"></span>`},
 		{name: "multiple declarations", source: `<span ht-param="page.title;site.title"></span>`},
 		{name: "unsupported mode", source: `<span ht-param="json:page.data"></span>`},
+		{name: "empty source with explicit fallback", source: `<param ht-param default="Fallback">`},
+		{name: "empty source without fallback", source: `<param ht-param>`},
 	}
 
 	for _, test := range tests {
@@ -102,7 +99,7 @@ func TestParamRequiresManualMigrationForAmbiguousReplacement(t *testing.T) {
 	}
 }
 
-func TestDefaultRulesContainOnlyDebugAndParam(t *testing.T) {
+func TestDefaultRulesContainOnlyParamAndDebug(t *testing.T) {
 	if len(migrate.DefaultRules) != 2 {
 		t.Fatalf("DefaultRules length = %d, want 2", len(migrate.DefaultRules))
 	}
@@ -110,7 +107,7 @@ func TestDefaultRulesContainOnlyDebugAndParam(t *testing.T) {
 		strings.Join(selectorStrings(migrate.DefaultRules[0]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[1]), ","),
 	}
-	if got, want := strings.Join(selectors, ";"), "[ht-debug],[data-ht-debug];[ht-param],[data-ht-param]"; got != want {
+	if got, want := strings.Join(selectors, ";"), "[ht-param],[data-ht-param];[ht-debug],[data-ht-debug]"; got != want {
 		t.Fatalf("DefaultRules selectors = %q, want %q", got, want)
 	}
 }

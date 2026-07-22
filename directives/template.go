@@ -36,7 +36,7 @@ func RenderTemplate(document *htdocument.Document, element *html.Node, data *htd
 		htdocument.RemoveAttributes(layoutFragment, HyperTemplateAttributeStrings...)
 
 		var implicitApply bool
-		if layoutFragment.Type == html.ElementNode && !htdocument.HasAttribute(layoutFragment, HyperValueAttributeStrings...) {
+		if layoutFragment.Type == html.ElementNode && !htdocument.HasAttribute(layoutFragment, HyperApplyAttributeStrings...) {
 			implicitApply = true
 			htdocument.SetAttribute(layoutFragment, "data-ht-apply", "")
 		}

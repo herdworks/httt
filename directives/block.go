@@ -37,7 +37,7 @@ func RenderBlock(document *htdocument.Document, element *html.Node, userData *ht
 	}
 
 	var implicitApply bool
-	if fragment.Type == html.ElementNode && !htdocument.HasAttribute(fragment, HyperValueAttributeStrings...) {
+	if fragment.Type == html.ElementNode && !htdocument.HasAttribute(fragment, HyperApplyAttributeStrings...) {
 		implicitApply = true
 		htdocument.SetAttribute(fragment, "data-ht-apply", "")
 	}

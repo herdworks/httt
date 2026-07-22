@@ -130,7 +130,7 @@ export default function(input) {
 
 The plugin name is derived from the filename (sans extension), so
 `scripts/upper.js` registers an `upper` plugin usable as
-`${ page.title | upper }`. To compile a batch of plugin files for use with
+`${ upper(page.title) }`. To compile a batch of plugin files for use with
 the `variable` package, call `variable.LoadPlugins`:
 
 ```go
@@ -152,6 +152,8 @@ func main() {
 ```
 
 If multiple files resolve to the same plugin name, the last file wins.
+Use `variable.MergePlugins` to combine plugin groups; later groups take
+precedence.
 
 The runtime is `goja`. There is no Node, no npm, no `fs`, no `fetch`, and
 no module system: `import` declarations are rejected at load time and
@@ -172,7 +174,7 @@ export default function(input) {
 
 ```go
 rendered, err := htvariable.RenderString(
-	`${ page.title | upper }`,
+	`${ upper(page.title) }`,
 	data,
 	htvariable.SyntaxDefault,
 	plugins.FuncMap(),
@@ -199,10 +201,10 @@ export default (input) => {
 }
 ```
 
-Plugins receive ordered arguments. In a `text/template` pipeline, explicit
-arguments come first and the upstream pipeline value comes last, so
-`${ page.updated_at, page.created_at | fmtdate "YYYY-MM-DD" }` calls JavaScript
-as `plugin("YYYY-MM-DD", input)`.
+Plugins receive resolved keypaths and literal arguments in source order, so
+`${ fmtdate(page.updated_at, page.created_at, "YYYY-MM-DD") }` calls JavaScript
+as `plugin(updatedAt, createdAt, "YYYY-MM-DD")`. Missing keypaths are passed as
+nil values and the plugin owns any fallback policy.
 
 If you need to install the plugins on a full HyperTemplates template, assign the map directly:
 

@@ -10,21 +10,35 @@ import (
 	"github.com/herdworks/hypertemplates-go/scripting"
 )
 
-// Plugin is a compiled variable-pipeline plugin: a JavaScript file whose
+// Plugin is a compiled template-variable plugin: a JavaScript file whose
 // default-exported function is invoked with caller-provided arguments
-// during template rendering. The pipeline-binding contract — explicit
-// arguments first, upstream pipeline value last — is documented in
-// variable/PLUGIN.md.
+// during template rendering. Arguments are passed in source order.
 type Plugin struct {
 	Name string
 	Path string
 	Func func(...any) (any, error)
 }
 
+// Plugins maps plugin names to compiled plugins. When plugins are merged
+// or loaded in order, later entries replace earlier entries with the same
+// name.
+type Plugins map[string]Plugin
+
 // pluginCallTimeout caps each variable-plugin invocation. The text/template
 // rendering path has no native context plumbing, so each call gets its own
 // background-derived timeout.
 const pluginCallTimeout = 250 * time.Millisecond
+
+// pluginNameRegexp matches valid Go-identifier-shaped names. text/template
+// requires Go-identifier-shaped function names in a FuncMap.
+var pluginNameRegexp = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// reservedPluginNames are identifiers that the variable DSL reserves.
+var reservedPluginNames = map[string]struct{}{
+	getFuncName:      {},
+	textFuncName:     {},
+	markdownFuncName: {},
+}
 
 // FuncMap returns the plugin as a single-entry text/template-compatible
 // function map.
@@ -34,11 +48,6 @@ func (p Plugin) FuncMap() FuncMap {
 	}
 	return FuncMap{p.Name: p.Func}
 }
-
-// Plugins maps plugin names to compiled plugins. When plugins are merged
-// or loaded in order, later entries replace earlier entries with the same
-// name.
-type Plugins map[string]Plugin
 
 // FuncMap returns the plugins as a text/template-compatible function map.
 func (plugins Plugins) FuncMap() FuncMap {
@@ -55,18 +64,8 @@ func (plugins Plugins) FuncMap() FuncMap {
 	return funcs
 }
 
-// pluginNameRegexp matches valid Go-identifier-shaped names. text/template
-// requires Go-identifier-shaped function names in a FuncMap.
-var pluginNameRegexp = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-// reservedPluginNames are identifiers that the variable DSL reserves:
-//   - "get": the variable-DSL primitive (rewritten into pipelines).
-var reservedPluginNames = map[string]struct{}{
-	getFuncName: {},
-}
-
 // LoadPlugin reads a JavaScript file from path, validates its name against
-// the variable-pipeline naming rules, and compiles its default-exported
+// the variable-function naming rules, and compiles its default-exported
 // function into a callable Plugin.
 func LoadPlugin(path string) (Plugin, error) {
 	raw, err := scripting.LoadPlugin(path)
@@ -88,7 +87,7 @@ func LoadPlugin(path string) (Plugin, error) {
 	return Plugin{Name: raw.Name, Path: raw.Path, Func: fn}, nil
 }
 
-// LoadPlugins compiles a batch of variable-pipeline plugin files. Later
+// LoadPlugins compiles a batch of template-variable plugin files. Later
 // entries with the same derived name replace earlier ones.
 func LoadPlugins(paths []string) (Plugins, error) {
 	plugins := Plugins{}
@@ -102,8 +101,8 @@ func LoadPlugins(paths []string) (Plugins, error) {
 	return plugins, nil
 }
 
-// Merge returns a new Plugins map with later groups taking precedence.
-func Merge(groups ...Plugins) Plugins {
+// MergePlugins returns a new Plugins map with later groups taking precedence.
+func MergePlugins(groups ...Plugins) Plugins {
 	merged := Plugins{}
 	for _, group := range groups {
 		maps.Copy(merged, group)

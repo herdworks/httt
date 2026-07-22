@@ -1,155 +1,93 @@
 # variable
 
-The `variable` package powers HyperTemplates template variables. A template
-variable is a `${ ... }` expression that can appear in an attribute value or
-element text node.
-
-Template variables come in two forms:
-
-* Simple variables resolve directly from TemplateData through `get`.
-* Computed variables transform bare data identifiers through plugins.
-
-Examples:
+The `variable` package implements HyperTemplates' template-variable DSL. The
+DSL resembles simple JavaScript template-literal expressions, but it is not a
+`text/template` language.
 
 ```html
 <a href="${ page.path }" ht-apply>${ page.title }</a>
 ```
 
-`href="${ page.path }"` contains a template variable in an attribute value.
-`${ page.title }` is a template variable in an element text node.
+## Expressions
 
-## Syntax
+An expression is either an implicit lookup list or one top-level function
+call:
 
-The default syntax uses `${ ... }` delimiters instead of `{{ ... }}`.
-
-```gotemplate
-${ page.title }
+```text
+${ page.foo, page.bar, "Placeholder" }
+${ get(page.foo, page.bar, "Placeholder") }
+${ text(page.foo, "Placeholder") }
+${ markdown(page.foo, "# Placeholder") }
+${ example(page.foo, page.bar, "Placeholder") }
 ```
 
-normalizes to:
+An expression that does not begin with `name(` is an implicit `get`. Every
+unquoted argument is a keypath and is resolved through `Getter.Get`. Literal
+arguments may be quoted strings, booleans, finite numbers, or `null`.
 
-```gotemplate
-${ get "page.title" }
-```
+Nested calls, grouping parentheses, arrays, objects, `undefined`, trailing
+commas, and pipe operators are not supported. Complex logic belongs in a
+template-data plugin that prepares a directly readable value or in one
+template-variable plugin that performs the complete inline transformation.
 
-Comma-separated keypaths are fallbacks:
+## Lookup And Fallbacks
 
-```gotemplate
-${ site.title, page.title, "Untitled" }
-```
+Implicit `get`, explicit `get`, `text`, and `markdown` treat their arguments as
+an ordered fallback list. They require at least one keypath and permit at most
+one final scalar literal fallback.
 
-normalizes to:
+The first non-nil value wins. False, zero, empty strings, and empty containers
+are selected values and do not fall through. If every keypath is missing or
+nil and there is no literal fallback, the expression evaluates to nil.
 
-```gotemplate
-${ get "site.title, page.title" "Untitled" }
-```
-
-`get` resolves keypaths through any type that implements `Get(string) any` and
-returns the first non-nil value. If the last comma-separated argument is a
-string literal, `get` uses it as the fallback when all keypaths miss or the
-resolved value is an empty string.
-
-## Computed Variables
-
-Computed variables use plugins as transformers. If the first token in a
-pipeline is not `get` and not registered in the caller's function map, the
-variable package rewrites that first pipeline command as an implicit `get`.
-
-```gotemplate
-${ page.title | upper }
-```
-
-normalizes to:
-
-```gotemplate
-${ get "page.title" | upper }
-```
-
-Pipelines may also start with a registered function. In that shape, top-level
-bare identifier arguments are data references:
-
-```gotemplate
-${ concat page.title site.title "Untitled" }
-```
-
-Registered functions and parenthetical expressions are escape hatches into raw
-`text/template` syntax. Explicit `get` calls are left alone, so their arguments
-must already use the correct `get` syntax:
-
-```gotemplate
-${ upper (get "page.title") }
-```
-
-Parenthetical expressions do not perform implicit gets. The only built-in
-public DSL function is `get`. Built-in `text/template` and `html/template`
-functions (`printf`, `len`, `index`, `call`, `print`, `println`, `and`, `or`,
-`not`, `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `html`, `js`, `urlquery`) are
-outside the DSL unless registered as plugins by the caller. The rewriter
-rejects them at parse/validate time at both pipeline head and tail with a
-`function "X" not registered` error.
+Generic plugins do not apply fallback semantics. They receive every resolved
+keypath value or literal argument in source order, including nil values.
 
 ## Entry Points
 
-- `RenderString(source, data, syntax, funcs...) (string, error)` — for
-  attribute values and other contexts that need an inline string. Backed by
-  `text/template`. Returns the rendered string.
-- `RenderNodes(source, data, parent, funcs...) ([]*html.Node, error)` — for
-  text-node content. Renders the source as a string via `text/template`, then
-  parses the result with `html.ParseFragment` using `parent` as the context.
-  There is no auto-escaping: author data containing `<`/`>` is interpreted as
-  HTML markup, and funcmap entries that return HTML strings inject real
-  elements. The top-level `directives.RenderValues` caller registers two
-  built-in text-node funcs in the funcmap: `text` (HTML-escapes its input —
-  a thin alias for `text/template.HTMLEscaper`) and `markdown` (renders
-  markdown to HTML).
+- `ResolveValue(source, data) (any, error)` accepts exactly one `${ ... }`
+  implicit or explicit `get` expression containing keypaths only. It returns
+  the first non-nil Go value without converting its type. Surrounding text,
+  literals, other functions, and pipes are rejected.
+- `RenderString(source, data, syntax, funcs...) (string, error)` evaluates each
+  expression to a typed value and then interpolates it. Strings remain
+  unquoted; every other non-nil value is encoded with `encoding/json`. A nil
+  value returns `*MissingValueError`, and JSON encoding failures are returned
+  as rendering errors.
+- `RenderNodes(source, data, parent, funcs...) ([]*html.Node, error)` calls
+  `RenderString` and parses the result with `html.ParseFragment` using `parent`
+  as the parsing context.
 
-## Missing Variables
+`text/template` remains an internal Go-function execution mechanism. Its
+commands, functions, pipelines, variables, and grouping syntax are not part of
+the public DSL.
 
-If any action in a rendered template variable source resolves to `nil` (and no
-fallback is supplied), rendering aborts and returns a `*MissingValueError`.
-The error's `Source` field reports the template source that produced the nil;
-callers using `errors.As` can detect and inspect it. The
-`directives.RenderValues` call site additionally wraps the error with the
-surrounding HTML element (tag name, id, class, attribute name) for context.
+## Text-Node Functions
 
-Empty strings are valid values and render as empty.
+The directive renderer registers two functions only while rendering element
+text nodes:
 
-Use a final string literal for per-variable fallbacks:
+- `text(...)` selects its first non-nil argument and HTML-escapes it.
+- `markdown(...)` selects its first non-nil argument and renders it as Markdown.
 
-```gotemplate
-${ page.title, "Untitled" }
-```
+Both use the same fallback rules as `get`. Attribute and CSS contexts do not
+register these functions.
 
-The fallback is returned when the value is nil or an empty string.
-
-Pipelines see nil values directly: `${ myfunc page.missing }` calls
-`myfunc(nil)`. If `myfunc` returns a non-nil value (including `""`), the
-action succeeds. Only a nil final value triggers `MissingValueError`.
+`RenderNodes` interprets ordinary string results as HTML fragments. Authors
+must use `text(...)` when angle brackets should remain text.
 
 ## CSS Values
 
-`SyntaxCSS` keeps CSS contexts readable by translating `--ht-value(...)` calls to
-`${ ... }` actions before the normal value rewrite runs.
+`SyntaxCSS` recognizes `--ht-var(...)` while preserving the same expression
+grammar:
 
 ```css
 .hero {
-    color: --ht-value("theme.color", red);
-    padding: --ht-value("theme.pad", 10px);
+    color: --ht-var("theme.color", red);
+    content: --ht-var("label(page.title)", "Placeholder");
 }
 ```
 
-The quoted first argument follows the same grammar as `${ ... }`. The optional
-second argument is a CSS fallback applied after the expression is evaluated. It
-is used when the expression renders no value, and is not used for present
-falsey values such as `""`, `0`, or `false`.
-
-## HTML Directive
-
-The `ht-apply` directive marks an element whose attribute values and direct text
-nodes should be scanned for template variables.
-
-```html
-<a href="${ page.path }" ht-apply>${ page.title }</a>
-```
-
-In tidy mode, the directive is removed after rendering.
+The quoted first argument is a variable expression. The optional second CSS
+argument is used only when that complete expression evaluates to nil; false,
+zero, empty strings, and empty containers do not use it.

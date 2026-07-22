@@ -53,8 +53,8 @@ func process(document *htdocument.Document, data *htdata.TemplateData, userData 
 			return nil, err
 		}
 	}
-	for _, element := range HyperValueElements(document) {
-		if err = RenderValues(document, element, data); err != nil {
+	for _, element := range HyperApplyElements(document) {
+		if err = RenderVariables(document, element, data); err != nil {
 			return nil, err
 		}
 	}

@@ -70,25 +70,34 @@ func (d TemplateData) Get(key string) any {
 	if key == "" {
 		return any(d)
 	}
-	var v any = d
-	for _, seg := range parseKey(key) {
-		if seg.fn {
-			v = applyFunction(v, seg.name)
-			continue
-		}
-		v = step(v, seg.name)
-		if v == nil {
-			return nil
-		}
+	if !strings.ContainsRune(key, '.') && !strings.HasSuffix(key, "()") {
+		return d[key]
 	}
-	return v
+
+	var v any = d
+	for {
+		segment, remaining, found := strings.Cut(key, ".")
+		if strings.HasSuffix(segment, "()") {
+			v = applyFunction(v, strings.TrimSuffix(segment, "()"))
+		} else {
+			v = step(v, segment)
+			if v == nil {
+				return nil
+			}
+		}
+		if !found {
+			return v
+		}
+		key = remaining
+	}
 }
 
 // Has reports whether the property at key has a non-empty value.
 //
-// Has returns true for present scalars (numbers, booleans), non-empty strings,
-// and non-empty slices, arrays, and maps. It returns false for missing keys,
-// nil values, empty strings, and empty containers.
+// Has returns true for all numbers (including zero), boolean true, non-empty
+// strings and containers, and other non-nil values. It returns false for
+// missing or nil values, boolean false, empty strings, and empty slices,
+// arrays, and maps.
 //
 // Has matches the semantics of the ht-if directive: "the property has a usable
 // value", not just "the key is present". To distinguish present-nil from
@@ -98,20 +107,17 @@ func (d TemplateData) Has(key string) bool {
 	if v == nil {
 		return false
 	}
-	switch x := v.(type) {
-	case bool, int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64,
-		float32, float64:
-		return true
-	case string:
-		return len(x) > 0
-	}
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
-	case reflect.Slice, reflect.Array, reflect.Map, reflect.String:
+	case reflect.Bool:
+		return rv.Bool()
+	case reflect.String, reflect.Slice, reflect.Array, reflect.Map:
 		return rv.Len() > 0
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Pointer, reflect.UnsafePointer:
+		return !rv.IsNil()
+	default:
+		return true
 	}
-	return false
 }
 
 // Set writes value at the property at key, creating intermediate maps as
@@ -379,30 +385,6 @@ func (kp TemplateDataKeyPath) existingBranches(root TemplateData) (TemplateData,
 // =============================================================================
 // Helper functions
 // =============================================================================
-
-// segment represents a single component of a parsed template data key. A
-// function segment ("length()") is applied to the current walk value rather
-// than used to descend into a nested property.
-type segment struct {
-	name string
-	fn   bool
-}
-
-func parseKey(key string) []segment {
-	if key == "" {
-		return nil
-	}
-	parts := strings.Split(key, ".")
-	segs := make([]segment, len(parts))
-	for i, p := range parts {
-		if strings.HasSuffix(p, "()") {
-			segs[i] = segment{name: strings.TrimSuffix(p, "()"), fn: true}
-		} else {
-			segs[i] = segment{name: p}
-		}
-	}
-	return segs
-}
 
 // step descends into v by one path segment.
 func step(v any, seg string) any {

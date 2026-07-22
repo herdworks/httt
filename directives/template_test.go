@@ -280,7 +280,7 @@ func TestRenderBlockPageFallback(t *testing.T) {
 	}
 }
 
-func TestRenderValues(t *testing.T) {
+func TestRenderVariables(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
@@ -357,12 +357,72 @@ func TestRenderValues(t *testing.T) {
 	}
 }
 
-func TestRenderValuesJavascriptPlugin(t *testing.T) {
+func TestRenderVariablesNakedKeypathsRemainLiteral(t *testing.T) {
+	tests := []struct {
+		name       string
+		apply      string
+		strictMode bool
+	}{
+		{name: "non-strict alias", apply: "ht-apply"},
+		{name: "strict alias", apply: "data-ht-apply", strictMode: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			layout, err := html.Parse(strings.NewReader(
+				`<html><body><div ` + tc.apply + ` data-source="page.sentinel" style="color: page.sentinel">page.sentinel</div></body></html>`,
+			))
+			if err != nil {
+				t.Fatalf("error parsing layout html: %v", err)
+			}
+
+			data := TemplateData{
+				"page": TemplateData{"sentinel": "resolved-sentinel"},
+			}
+			template := &document.Document{
+				Layout:     layout,
+				StrictMode: tc.strictMode,
+				TidyMode:   true,
+			}
+			htmlBytes, err := Process(template, &data, nil, nil)
+			if err != nil {
+				t.Fatalf("Process() error = %v", err)
+			}
+
+			rendered, err := html.Parse(bytes.NewReader(htmlBytes))
+			if err != nil {
+				t.Fatalf("error parsing rendered html: %v", err)
+			}
+			div := document.Query(rendered, "div")
+			if div == nil {
+				t.Fatalf("expected rendered output to include div; got:\n%s", htmlBytes)
+			}
+			if document.HasAttribute(div, HyperApplyAttributeStrings...) {
+				t.Fatalf("expected %s to be processed and removed; got:\n%s", tc.apply, htmlBytes)
+			}
+			if got := document.GetAttributeString(div, "data-source"); got != "page.sentinel" {
+				t.Fatalf("data-source = %q, want unchanged naked keypath", got)
+			}
+			if got := document.GetAttributeString(div, "style"); got != "color: page.sentinel" {
+				t.Fatalf("style = %q, want unchanged naked keypath", got)
+			}
+			if div.FirstChild == nil || div.FirstChild.Data != "page.sentinel" {
+				got := ""
+				if div.FirstChild != nil {
+					got = div.FirstChild.Data
+				}
+				t.Fatalf("text content = %q, want unchanged naked keypath", got)
+			}
+		})
+	}
+}
+
+func TestRenderVariablesJavascriptPlugin(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
 				<section ht-apply>
-					${ page.title | upper }
+					${ upper(page.title) }
 				</section>
 			</body>
 		</html>
@@ -409,7 +469,7 @@ func TestRenderValuesJavascriptPlugin(t *testing.T) {
 	}
 }
 
-func TestRenderValuesNested(t *testing.T) {
+func TestRenderVariablesNested(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
@@ -488,12 +548,12 @@ func TestRenderValuesNested(t *testing.T) {
 	}
 }
 
-func TestRenderValuesStyleElement(t *testing.T) {
+func TestRenderVariablesStyleElement(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<head>
 				<style ht-apply>
-					.hero { color: --ht-value("theme.color"); background: --ht-value('theme.bg'); }
+					.hero { color: --ht-var("theme.color"); background: --ht-var('theme.bg'); }
 				</style>
 			</head>
 			<body></body>
@@ -521,22 +581,22 @@ func TestRenderValuesStyleElement(t *testing.T) {
 	}
 
 	if !bytes.Contains(htmlBytes, []byte("color: red")) {
-		t.Fatalf("expected <style> --ht-value(\"theme.color\") to render as red; got:\n%s", htmlBytes)
+		t.Fatalf("expected <style> --ht-var(\"theme.color\") to render as red; got:\n%s", htmlBytes)
 	}
 	if !bytes.Contains(htmlBytes, []byte("background: black")) {
-		t.Fatalf("expected <style> --ht-value('theme.bg') to render as black; got:\n%s", htmlBytes)
+		t.Fatalf("expected <style> --ht-var('theme.bg') to render as black; got:\n%s", htmlBytes)
 	}
-	if bytes.Contains(htmlBytes, []byte("--ht-value(")) {
-		t.Fatalf("expected --ht-value(...) calls to be fully substituted; got:\n%s", htmlBytes)
+	if bytes.Contains(htmlBytes, []byte("--ht-var(")) {
+		t.Fatalf("expected --ht-var(...) calls to be fully substituted; got:\n%s", htmlBytes)
 	}
 }
 
-func TestRenderValuesStyleElementFallback(t *testing.T) {
+func TestRenderVariablesStyleElementFallback(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<head>
 				<style ht-apply>
-						.hero { color: --ht-value("theme.color", red); padding: --ht-value("theme.pad", 10px); }
+						.hero { color: --ht-var("theme.color", red); padding: --ht-var("theme.pad", 10px); }
 				</style>
 			</head>
 			<body></body>
@@ -566,11 +626,11 @@ func TestRenderValuesStyleElementFallback(t *testing.T) {
 	}
 }
 
-func TestRenderValuesStyleAttribute(t *testing.T) {
+func TestRenderVariablesStyleAttribute(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<div ht-apply style='color: --ht-value("theme.color");'></div>
+				<div ht-apply style='color: --ht-var("theme.color");'></div>
 			</body>
 		</html>
 	`))
@@ -605,7 +665,7 @@ func TestRenderValuesStyleAttribute(t *testing.T) {
 	}
 }
 
-func TestRenderValuesTextNodeIsParsedAsHTML(t *testing.T) {
+func TestRenderVariablesTextNodeIsParsedAsHTML(t *testing.T) {
 	// Text-node output is always parsed as HTML — no auto-escaping. A bare
 	// keypath whose value is HTML markup gets inserted as real elements.
 	layout, err := html.Parse(strings.NewReader(`
@@ -639,11 +699,11 @@ func TestRenderValuesTextNodeIsParsedAsHTML(t *testing.T) {
 	}
 }
 
-func TestRenderValuesMarkdownFunc(t *testing.T) {
+func TestRenderVariablesMarkdownFunc(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<article ht-apply>${ page.body | markdown }</article>
+				<article ht-apply>${ markdown(page.body) }</article>
 			</body>
 		</html>
 	`))
@@ -671,15 +731,15 @@ func TestRenderValuesMarkdownFunc(t *testing.T) {
 	}
 }
 
-func TestRenderValuesTextFuncEscapesHTML(t *testing.T) {
-	// `${ x | text }` HTML-escapes the value so author data containing `<`,
+func TestRenderVariablesTextFuncEscapesHTML(t *testing.T) {
+	// `${ text(x) }` HTML-escapes the value so author data containing `<`,
 	// `>`, etc. renders as literal text rather than markup. Round-trips
 	// through text/template (escape) → html.ParseFragment (decode entities
 	// into text-node chars) → html.Render (re-escape on serialize).
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<h1 ht-apply>${ page.title | text }</h1>
+				<h1 ht-apply>${ text(page.title) }</h1>
 			</body>
 		</html>
 	`))
@@ -707,11 +767,11 @@ func TestRenderValuesTextFuncEscapesHTML(t *testing.T) {
 	}
 }
 
-func TestRenderValuesTextFuncWithPlainText(t *testing.T) {
+func TestRenderVariablesTextFuncWithPlainText(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<h1 ht-apply>${ page.title | text }</h1>
+				<h1 ht-apply>${ text(page.title) }</h1>
 			</body>
 		</html>
 	`))
@@ -736,17 +796,13 @@ func TestRenderValuesTextFuncWithPlainText(t *testing.T) {
 	}
 }
 
-func TestRenderValuesTextFuncNilRendersLiteral(t *testing.T) {
-	// `text` is a direct alias for text/template.HTMLEscaper. Nil values
-	// flow through HTMLEscaper's printableValue path which renders an
-	// invalid reflect.Value as the literal string `<no value>`, which is then
-	// escaped to `&lt;no value&gt;`. This documents the literal-alias
-	// semantics — authors who want missing-keypath errors should use bare
-	// `${ page.foo }` instead of `${ page.foo | text }`.
+func TestRenderVariablesTextFuncNilReturnsMissingValueError(t *testing.T) {
+	// Built-in fallback selection happens before text is invoked. An all-nil
+	// fallback chain therefore has the same missing-value behavior as get.
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<h1 ht-apply>${ page.missing | text }</h1>
+				<h1 ht-apply>${ text(page.missing) }</h1>
 			</body>
 		</html>
 	`))
@@ -755,17 +811,14 @@ func TestRenderValuesTextFuncNilRendersLiteral(t *testing.T) {
 	}
 
 	template := &document.Document{Layout: layout, TidyMode: true}
-	htmlBytes, err := Process(template, &TemplateData{}, nil, nil)
-	if err != nil {
-		t.Fatalf("Process() error = %v, want no error", err)
-	}
-
-	if !bytes.Contains(htmlBytes, []byte("&lt;no value&gt;")) {
-		t.Fatalf("expected &lt;no value&gt; in output, got:\n%s", htmlBytes)
+	_, err = Process(template, &TemplateData{}, nil, nil)
+	var missing *htvariable.MissingValueError
+	if !errors.As(err, &missing) {
+		t.Fatalf("Process() error = %v, want MissingValueError", err)
 	}
 }
 
-func TestRenderValuesUserDataInterpretedAsHTML(t *testing.T) {
+func TestRenderVariablesUserDataInterpretedAsHTML(t *testing.T) {
 	// Authors own their data; we no longer auto-escape. Markup in data is
 	// interpreted as live HTML elements when injected into a text node.
 	layout, err := html.Parse(strings.NewReader(`
@@ -796,7 +849,7 @@ func TestRenderValuesUserDataInterpretedAsHTML(t *testing.T) {
 	}
 }
 
-func TestRenderValuesMissingErrorIncludesElementContext(t *testing.T) {
+func TestRenderVariablesMissingErrorIncludesElementContext(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(
 		`<html><body><a ht-apply id="home" class="nav" href="${ page.missing }" target="_blank">link</a></body></html>`,
 	))
@@ -823,6 +876,7 @@ func TestRenderValuesMissingErrorIncludesElementContext(t *testing.T) {
 	// failing variable can be traced back to its source location, regardless
 	// of whether it failed in an attribute or a text node.
 	for _, want := range []string{
+		`failed rendering variables in attribute "href"`,
 		`a template variable in ${ page.missing } didn't return a value`,
 		`<a`,
 		`ht-apply`,
@@ -838,7 +892,7 @@ func TestRenderValuesMissingErrorIncludesElementContext(t *testing.T) {
 	}
 }
 
-func TestRenderValuesMissingErrorIncludesElementForTextNode(t *testing.T) {
+func TestRenderVariablesMissingErrorIncludesElementForTextNode(t *testing.T) {
 	// When the failing variable is in a text node (not an attribute), the
 	// full element render is what reveals the failing variable.
 	layout, err := html.Parse(strings.NewReader(
@@ -856,6 +910,7 @@ func TestRenderValuesMissingErrorIncludesElementForTextNode(t *testing.T) {
 
 	msg := err.Error()
 	for _, want := range []string{
+		`failed rendering variables in element text content`,
 		`a template variable in Welcome, ${ page.username }! didn't return a value`,
 		`<h1`,
 		`id="title"`,
@@ -865,6 +920,54 @@ func TestRenderValuesMissingErrorIncludesElementForTextNode(t *testing.T) {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("error message missing %q:\n%s", want, msg)
 		}
+	}
+}
+
+func TestRenderVariablesErrorsIncludeLocationAndElement(t *testing.T) {
+	tests := []struct {
+		name     string
+		layout   string
+		location string
+	}{
+		{
+			name:     "attribute",
+			layout:   `<html><body><a ht-apply id="target" href="${ unknown(page.title) }">link</a></body></html>`,
+			location: `attribute "href"`,
+		},
+		{
+			name:     "style text",
+			layout:   `<html><head><style ht-apply id="target">a { color: --ht-var("unknown(page.color)"); }</style></head></html>`,
+			location: `<style> text content`,
+		},
+		{
+			name:     "element text",
+			layout:   `<html><body><h1 ht-apply id="target">${ unknown(page.title) }</h1></body></html>`,
+			location: `element text content`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			layout, err := html.Parse(strings.NewReader(tc.layout))
+			if err != nil {
+				t.Fatalf("error parsing layout html: %v", err)
+			}
+
+			template := &document.Document{Layout: layout, TidyMode: true}
+			_, err = Process(template, &TemplateData{}, nil, nil)
+			if err == nil {
+				t.Fatal("Process() error = nil")
+			}
+			for _, want := range []string{
+				"failed rendering variables in " + tc.location,
+				`function "unknown" not registered`,
+				`id="target"`,
+			} {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error message missing %q:\n%s", want, err)
+				}
+			}
+		})
 	}
 }
 
@@ -1050,7 +1153,7 @@ func TestImplicitApplyDoesNotClobberExplicit(t *testing.T) {
 
 // TestImplicitApplyStrictMode exercises the data- attribute form under
 // StrictMode so the synthetic data-ht-apply is picked up by the strict
-// HyperValueElements selector.
+// HyperApplyElements selector.
 func TestImplicitApplyStrictMode(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
@@ -1151,7 +1254,7 @@ func TestImplicitApplyCleanupNonTidy(t *testing.T) {
 }
 
 // TestImplicitApplyNoMarker confirms that an ht-template element without any
-// ${ ... } expressions iterates without panic; the synthetic RenderValues
+// ${ ... } expressions iterates without panic; the synthetic RenderVariables
 // pass is a no-op and no stray attribute is emitted.
 func TestImplicitApplyNoMarker(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
@@ -1328,7 +1431,7 @@ func TestImplicitApplyOnBlockDoesNotClobberExplicit(t *testing.T) {
 }
 
 // TestImplicitApplyOnBlockNoMarker confirms that a block fragment without any
-// ${ ... } expressions renders cleanly; the synthetic RenderValues pass is a
+// ${ ... } expressions renders cleanly; the synthetic RenderVariables pass is a
 // no-op and no stray ht-apply attribute is emitted.
 func TestImplicitApplyOnBlockNoMarker(t *testing.T) {
 	theme := &httheme.Theme{URI: &url.URL{Path: "testdata/ht-block/theme.json"}}

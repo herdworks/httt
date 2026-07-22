@@ -94,6 +94,11 @@ func TestGetEmptyKeyReturnsReceiver(t *testing.T) {
 
 func TestHas(t *testing.T) {
 	d := mustYAML(t, existsYAML)
+	d["truthiness"] = TemplateData{
+		"false": false,
+		"true":  true,
+		"zero":  0,
+	}
 	tests := []struct {
 		name string
 		key  string
@@ -103,6 +108,9 @@ func TestHas(t *testing.T) {
 		{"present number", "some.value", true},
 		{"present nested string", "some.nested.key", true},
 		{"present nested map", "some.map.containing.keys_with_null_values", true},
+		{"boolean false", "truthiness.false", false},
+		{"boolean true", "truthiness.true", true},
+		{"numeric zero", "truthiness.zero", true},
 		{"empty map", "path.to.empty.map", false},
 		{"empty array", "path.to.empty.array", false},
 		{"missing key", "nope", false},
@@ -112,6 +120,44 @@ func TestHas(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := d.Has(tc.key); got != tc.want {
 				t.Fatalf("Has(%q) = %v, want %v", tc.key, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestHasTruthiness(t *testing.T) {
+	var nilSlice []string
+	var nilMap map[string]any
+	var nilPointer *int
+	tests := []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{name: "nil", value: nil, want: false},
+		{name: "typed nil slice", value: nilSlice, want: false},
+		{name: "typed nil map", value: nilMap, want: false},
+		{name: "typed nil pointer", value: nilPointer, want: false},
+		{name: "false", value: false, want: false},
+		{name: "true", value: true, want: true},
+		{name: "integer zero", value: 0, want: true},
+		{name: "floating point zero", value: 0.0, want: true},
+		{name: "empty string", value: "", want: false},
+		{name: "non-empty string", value: "value", want: true},
+		{name: "empty slice", value: []string{}, want: false},
+		{name: "non-empty slice", value: []string{"value"}, want: true},
+		{name: "empty array", value: [0]string{}, want: false},
+		{name: "non-empty array", value: [1]string{"value"}, want: true},
+		{name: "empty map", value: map[string]any{}, want: false},
+		{name: "non-empty map", value: map[string]any{"key": nil}, want: true},
+		{name: "other non-nil value", value: struct{}{}, want: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			data := TemplateData{"value": tc.value}
+			if got := data.Has("value"); got != tc.want {
+				t.Fatalf("Has(value) = %v, want %v for %#v", got, tc.want, tc.value)
 			}
 		})
 	}

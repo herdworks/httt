@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **BREAKING:** Replaced template-variable pipelines and raw `text/template` commands with implicit lookup lists or one JavaScript-style top-level call to `get`, `text`, `markdown`, or a registered plugin. Nested calls, grouping, pipes, and raw template commands are no longer supported.
+* **BREAKING:** Changed variable plugins to receive resolved keypath and literal arguments in source order, including nil values, and reserved `text` and `markdown` as built-in function names.
+* **BREAKING:** Renamed `variable.Merge` to `variable.MergePlugins`; renamed the directive rendering API to `directives.RenderVariables`, `directives.HyperApplyElements`, and `directives.HyperApplyAttributeStrings`; and renamed `document.MarkdownValueFunc` to `document.MarkdownVariableFunc`. The old exports have been removed.
+* **BREAKING:** Renamed CSS variable interpolation from `--ht-value(...)` to `--ht-var(...)`; the old spelling is no longer recognized.
+* Added `variable.ResolveValue` for typed `${ ... }` lookup resolution. Typed and rendered lookups now share nil-only fallback semantics, preserving false, zero, empty strings, and empty containers; `RenderString` leaves strings unquoted and JSON-encodes other non-nil values.
+* Changed directive variable errors to identify the rendered attribute or text location and surrounding element for syntax, lookup, plugin, and rendering failures.
+* Changed `TemplateData.Has` so false, nil, and empty strings or containers are false while all numbers, including zero, are true; optimized `TemplateData.Get` with a direct top-level lookup and allocation-free keypath traversal.
+* Updated legacy `ht-param` migration to emit function-call syntax for Markdown and leave source-less parameters unresolved, and moved optional `ht-debug` cleanup to the end of the default migration rule order.
+
 ## v0.33.1 (2026-07-22)
 
 * Added `migrate.Migration` and its per-rule/per-file `Job` pipeline for incremental theme migrations, including interactive review, durable completed passes, and optional complete-theme output copies.
