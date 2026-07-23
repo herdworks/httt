@@ -2,6 +2,7 @@ package directives
 
 import (
 	"fmt"
+	"io"
 
 	htdata "github.com/herdworks/hypertemplates-go/data"
 	htdocument "github.com/herdworks/hypertemplates-go/document"
@@ -10,8 +11,39 @@ import (
 
 var HyperContentAttributeStrings = []string{"data-ht-content", "ht-content"}
 
-func RenderContent(document *htdocument.Document, element *html.Node, data *htdata.TemplateData) (err error) {
-	paramString := htdocument.GetAttributeString(element, HyperContentAttributeStrings...)
+type ContentDirective struct{}
+
+var _ Directive = ContentDirective{} // make the compiler check Directive interface conformance
+
+func (d ContentDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-content"}
+	if !strict {
+		attributes = append(attributes, "ht-content")
+	}
+	return attributes
+}
+
+func (d ContentDirective) Selectors(strict bool) []string {
+	selectors := []string{"[data-ht-content]:not([data-ht-template] [data-ht-content])"}
+	if strict {
+		return selectors
+	}
+	selectors[0] += ":not([ht-template] [data-ht-content])"
+	return append(selectors, "[ht-content]:not([ht-template] [ht-content]):not([data-ht-template] [ht-content])")
+}
+
+func (d ContentDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil {
+		return nil
+	}
+	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
+}
+
+func (d ContentDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
+	if document == nil {
+		return nil
+	}
+	paramString := htdocument.GetAttribute(element, HyperContentAttributeStrings...).Val
 	for _, param := range ParseParameters(paramString, data) {
 		if len(param.Values) == 0 {
 			continue
@@ -37,14 +69,4 @@ func RenderContent(document *htdocument.Document, element *html.Node, data *htda
 		htdocument.RemoveAttributes(element, HyperContentAttributeStrings...)
 	}
 	return nil
-}
-
-func HyperContentElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-content]:not([data-ht-template] [data-ht-content])"}
-	if document.StrictMode {
-		return htdocument.QueryRoot(document.Layout, selectors...)
-	}
-	selectors[0] += ":not([ht-template] [data-ht-content])"
-	selectors = append(selectors, "[ht-content]:not([ht-template] [ht-content]):not([data-ht-template] [ht-content])")
-	return htdocument.QueryRoot(document.Layout, selectors...)
 }

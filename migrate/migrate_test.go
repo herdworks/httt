@@ -492,7 +492,7 @@ func TestInteractiveDeclineRollsBackAndAcceptKeepsLiveMutation(t *testing.T) {
 	if got, want := readFile(t, path), `<div data-ht-debug="one"></div><p></p>`; got != want {
 		t.Fatalf("source = %q, want %q", got, want)
 	}
-	if got, want := output.String(), "Migration candidate for [ht-debug], [data-ht-debug] in fragments/debug.html:\nremove optional data-ht-debug directive?"; !strings.Contains(got, want) {
+	if got, want := output.String(), "Migration candidate for [ht-debug], [data-ht-debug] in fragments/debug.html:\nmigrate optional data-ht-debug directive?"; !strings.Contains(got, want) {
 		t.Fatalf("prompt = %q, want it to contain %q", got, want)
 	}
 }

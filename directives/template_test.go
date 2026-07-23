@@ -152,15 +152,8 @@ func TestAttributeForwarding(t *testing.T) {
 	}
 }
 
-// TestConditionalParser
-// TODO: Ensure that ht-if attributes are properly parsed.
-
-// TestConditionalExists
-// TODO: Ensure that ht-if attribute's with no conditions check for existence.
-// <element ht-if="some.key.path"></element> should resolve true if { some: { key: { path: { x: null } } } } (i.e. even if path is a map with at least one key).
-
-// TestConditionalEvaluation
-// TODO: Ensure that ht-if attributes are properly compared against TemplateData values.
+// Conditional parser, truthiness, and evaluation coverage lives in
+// condition_test.go alongside the active ht-if implementation.
 
 // Template.RenderBlocks
 // Ensure that ht-block elements are properly rendered.
@@ -1153,7 +1146,7 @@ func TestImplicitApplyDoesNotClobberExplicit(t *testing.T) {
 
 // TestImplicitApplyStrictMode exercises the data- attribute form under
 // StrictMode so the synthetic data-ht-apply is picked up by the strict
-// HyperApplyElements selector.
+// ApplyDirective selector.
 func TestImplicitApplyStrictMode(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>

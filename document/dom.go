@@ -64,50 +64,36 @@ func Query(node *html.Node, query ...string) (element *html.Node) {
 	if node == nil {
 		return nil
 	}
-	for _, q := range query {
-		sel, err := cascadia.Parse(q)
-		if err != nil {
-			return nil
-		}
-		element = cascadia.Query(node, sel)
-		if element != nil {
-			break
-		}
+	sel, err := cascadia.ParseGroup(strings.Join(query, ", "))
+	if err != nil {
+		return nil
 	}
-	return element
+	return cascadia.Query(node, sel)
 }
 
 func QueryAll(node *html.Node, query ...string) (elements []*html.Node) {
 	if node == nil {
 		return []*html.Node{}
 	}
-	elements = []*html.Node{}
-	for _, q := range query {
-		sel, err := cascadia.Parse(q)
-		if err != nil {
-			return []*html.Node{}
-		}
-		elements = append(elements, cascadia.QueryAll(node, sel)...)
+	sel, err := cascadia.ParseGroup(strings.Join(query, ", "))
+	if err != nil {
+		return []*html.Node{}
 	}
-	return elements
+	return cascadia.QueryAll(node, sel)
 }
 
 func QueryRoot(node *html.Node, query ...string) (elements []*html.Node) {
 	if node == nil {
 		return []*html.Node{}
 	}
-	elements = []*html.Node{}
-	for _, q := range query {
-		sel, err := cascadia.Parse(q)
-		if err != nil {
-			return []*html.Node{}
-		}
-		if sel.Match(node) {
-			elements = append(elements, node)
-		}
-		elements = append(elements, cascadia.QueryAll(node, sel)...)
+	sel, err := cascadia.ParseGroup(strings.Join(query, ", "))
+	if err != nil {
+		return []*html.Node{}
 	}
-	return elements
+	if sel.Match(node) {
+		elements = append(elements, node)
+	}
+	return append(elements, cascadia.QueryAll(node, sel)...)
 }
 
 func ForwardAttributes(placeholder *html.Node, fragments []*html.Node, skipKeys ...string) {
@@ -193,17 +179,38 @@ func GetAttributeInt(element *html.Node, keys ...string) (value int) {
 	return value
 }
 
-func GetAttributes(element *html.Node, keys ...string) (values []string) {
-	if element.Type != html.ElementNode {
+func GetAttribute(element *html.Node, keys ...string) (value html.Attribute) {
+	if element == nil || element.Type != html.ElementNode {
+		return value
+	}
+	for _, attribute := range element.Attr {
+		if matchesAttributeKey(attribute.Key, keys...) {
+			return attribute
+		}
+	}
+	return value
+}
+
+func GetAttributes(element *html.Node, keys ...string) (values []html.Attribute) {
+	if element == nil || element.Type != html.ElementNode {
 		return values
 	}
-	for _, attr := range element.Attr {
-		if !slices.Contains(keys, attr.Key) {
+	for _, attribute := range element.Attr {
+		if !matchesAttributeKey(attribute.Key, keys...) {
 			continue
 		}
-		values = append(values, attr.Val)
+		values = append(values, attribute)
 	}
 	return values
+}
+
+func matchesAttributeKey(key string, keys ...string) bool {
+	for _, candidate := range keys {
+		if strings.EqualFold(key, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func SetAttribute(element *html.Node, key string, value string) {

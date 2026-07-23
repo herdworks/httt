@@ -33,7 +33,7 @@ func ResolveIncludes(document *htdocument.Document) (err error) {
 
 func Include(document *htdocument.Document, element *html.Node) (err error) {
 	var fragments []*html.Node
-	path := htdocument.GetAttributeString(element, HyperIncludeAttributeStrings...)
+	path := htdocument.GetAttribute(element, HyperIncludeAttributeStrings...).Val
 	if fragments, err = IncludeFragments(document, element, path); err != nil {
 		return errors.Join(ErrInclude, err)
 	}

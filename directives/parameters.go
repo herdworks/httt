@@ -26,7 +26,7 @@ type Parameter struct {
 	Number     int
 }
 
-type Parameters []*Parameter
+type Parameters []*Parameter // make the compiler check Directive interface conformance
 
 type Operator string
 

@@ -103,7 +103,14 @@ func (d TemplateData) Get(key string) any {
 // value", not just "the key is present". To distinguish present-nil from
 // absent, use Get and inspect the result directly.
 func (d TemplateData) Has(key string) bool {
-	v := d.Get(key)
+	return IsTruthy(d.Get(key))
+}
+
+// IsTruthy reports whether value has the same truthiness used by TemplateData.Has.
+// Missing and nil values, false, empty strings, and empty containers are false;
+// all numbers, including zero, and non-empty values are true.
+func IsTruthy(value any) bool {
+	v := value
 	if v == nil {
 		return false
 	}

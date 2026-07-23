@@ -6,14 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
-* **BREAKING:** Replaced template-variable pipelines and raw `text/template` commands with implicit lookup lists or one JavaScript-style top-level call to `get`, `text`, `markdown`, or a registered plugin. Nested calls, grouping, pipes, and raw template commands are no longer supported.
+* Added `variable.ResolveValue` for typed `${ ... }` lookup resolution. Typed and rendered lookups share nil-only fallback semantics, preserving false, zero, empty strings, and empty containers; `RenderString` leaves strings unquoted and JSON-encodes other non-nil values.
+* Added `data.IsTruthy` and changed `TemplateData.Has` so false, nil, and empty strings or containers are false while all numbers, including zero, are true.
+* Added the `directives.Directive` interface and standardized core directive discovery and processing, including strict-mode aliases, document-order selector handling, and legacy `ht-template` deferral.
+* Changed directive variable errors to identify the rendered attribute or text location and surrounding element for syntax, lookup, plugin, and rendering failures.
+* Changed `document.Query`, `QueryAll`, and `QueryRoot` to treat variadic selectors as one CSS selector group, preserving document order and returning each matching element once.
+* Changed `ht-param` migration to emit function-call syntax for Markdown and leave source-less parameters unresolved, and moved optional `ht-debug` cleanup to the end of the default migration rule order.
+* **BREAKING:** Replaced template-variable pipelines and raw `text/template` commands with implicit lookup lists or one JavaScript-style top-level call to built-in functions (`get`, `text`, and `markdown`), or a registered plugin. Template variable function nesting, grouping, and pipes are no longer supported.
 * **BREAKING:** Changed variable plugins to receive resolved keypath and literal arguments in source order, including nil values, and reserved `text` and `markdown` as built-in function names.
 * **BREAKING:** Renamed `variable.Merge` to `variable.MergePlugins`; renamed the directive rendering API to `directives.RenderVariables`, `directives.HyperApplyElements`, and `directives.HyperApplyAttributeStrings`; and renamed `document.MarkdownValueFunc` to `document.MarkdownVariableFunc`. The old exports have been removed.
 * **BREAKING:** Renamed CSS variable interpolation from `--ht-value(...)` to `--ht-var(...)`; the old spelling is no longer recognized.
-* Added `variable.ResolveValue` for typed `${ ... }` lookup resolution. Typed and rendered lookups now share nil-only fallback semantics, preserving false, zero, empty strings, and empty containers; `RenderString` leaves strings unquoted and JSON-encodes other non-nil values.
-* Changed directive variable errors to identify the rendered attribute or text location and surrounding element for syntax, lookup, plugin, and rendering failures.
-* Changed `TemplateData.Has` so false, nil, and empty strings or containers are false while all numbers, including zero, are true; optimized `TemplateData.Get` with a direct top-level lookup and allocation-free keypath traversal.
-* Updated legacy `ht-param` migration to emit function-call syntax for Markdown and leave source-less parameters unresolved, and moved optional `ht-debug` cleanup to the end of the default migration rule order.
+* **BREAKING:** Replaced active `ht-if` evaluation with explicit typed `${ ... }` expressions, comparisons, lazy uppercase `OR`, repeated-attribute `AND`, and slice membership through `in` / `not in`. Naked presence values and empty conditions are now syntax errors; naked comparison operands remain literals.
+* **BREAKING:** Removed runtime support for `ht-not` and `data-ht-not`; stale templates now fail with a migration hint. `hyperctl theme migrate` converts deprecated presence, equality, regex, comma/semicolon alternatives, aliases, and mixed conditional gates to `ht-if`; active `ht-if` values are not rewritten and migration reruns are idempotent.
 
 ## v0.33.1 (2026-07-22)
 

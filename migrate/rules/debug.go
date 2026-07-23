@@ -2,6 +2,7 @@ package rules
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/herdworks/hypertemplates-go/document"
@@ -22,7 +23,7 @@ func (Debug) Proposal(candidate *migrationtypes.Candidate) (*migrationtypes.Prop
 	}
 	return &migrationtypes.Proposal{
 		After:     candidate.Element,
-		Message:   "remove optional " + name + " directive?",
+		Message:   fmt.Sprintf("migrate optional %s directive?", name),
 		AutoApply: false,
 		Optional:  true,
 	}, nil

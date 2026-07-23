@@ -2,6 +2,7 @@ package directives
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	htdata "github.com/herdworks/hypertemplates-go/data"
@@ -12,10 +13,36 @@ import (
 var HyperAttrAttributeStrings = []string{"data-ht-attr", "ht-attr"}
 var HyperAttrsAttributeStrings = []string{"data-ht-attrs", "ht-attrs"}
 
-func RenderAttributes(document *htdocument.Document, element *html.Node, data *htdata.TemplateData) (err error) {
-	paramString := htdocument.GetAttributeString(element, HyperAttrsAttributeStrings...)
-	for _, param := range htdocument.GetAttributeStrings(element, HyperAttrAttributeStrings...) {
-		paramString = strings.TrimSpace(paramString) + fmt.Sprintf("; %s", param)
+type AttrsDirective struct{}
+
+var _ Directive = AttrsDirective{} // make the compiler check Directive interface conformance
+
+func (d AttrsDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-attrs", "data-ht-attr"}
+	if !strict {
+		attributes = append(attributes, "ht-attrs", "ht-attr")
+	}
+	return attributes
+}
+
+func (d AttrsDirective) Selectors(strict bool) []string {
+	return defaultDirectiveSelectors(d, strict)
+}
+
+func (d AttrsDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil {
+		return nil
+	}
+	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
+}
+
+func (d AttrsDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
+	if document == nil {
+		return nil
+	}
+	paramString := htdocument.GetAttribute(element, HyperAttrsAttributeStrings...).Val
+	for _, attribute := range htdocument.GetAttributes(element, HyperAttrAttributeStrings...) {
+		paramString = strings.TrimSpace(paramString) + fmt.Sprintf("; %s", attribute.Val)
 	}
 	for _, param := range ParseParameters(paramString, data) {
 		rawValue := param.Value()
@@ -40,17 +67,4 @@ func RenderAttributes(document *htdocument.Document, element *html.Node, data *h
 		}
 	}
 	return nil
-}
-
-func HyperAttrsElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-attrs]:not([data-ht-template] [data-ht-attrs], [data-ht-template][data-ht-attrs])"}
-	selectors = append(selectors, "[data-ht-attr]:not([data-ht-template] [data-ht-attr], [data-ht-template][data-ht-attr])")
-	if document.StrictMode {
-		return htdocument.QueryRoot(document.Layout, selectors...)
-	}
-	selectors[0] += ":not([ht-template] [data-ht-attrs], [ht-template][data-ht-attrs])"
-	selectors[1] += ":not([ht-template] [data-ht-attr], [ht-template][data-ht-attr])"
-	selectors = append(selectors, "[ht-attrs]:not([ht-template] [ht-attrs], [ht-template][ht-attrs]):not([data-ht-template] [ht-attrs], [data-ht-template][ht-attrs])")
-	selectors = append(selectors, "[ht-attr]:not([ht-template] [ht-attr], [ht-template][ht-attr]):not([data-ht-template] [ht-attr], [data-ht-template][ht-attr])")
-	return htdocument.QueryRoot(document.Layout, selectors...)
 }

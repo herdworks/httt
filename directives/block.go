@@ -12,7 +12,37 @@ import (
 
 var HyperBlockAttributeStrings = []string{"data-ht-block", "ht-block"}
 
-func RenderBlock(document *htdocument.Document, element *html.Node, userData *htdata.TemplateData, w io.Writer) (err error) {
+type BlockDirective struct{}
+
+var _ Directive = BlockDirective{} // make the compiler check Directive interface conformance
+
+func (d BlockDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-block"}
+	if !strict {
+		attributes = append(attributes, "ht-block")
+	}
+	return attributes
+}
+
+func (d BlockDirective) Selectors(strict bool) []string {
+	selectors := []string{"[data-ht-block]"}
+	if !strict {
+		selectors = append(selectors, "[ht-block]")
+	}
+	return selectors
+}
+
+func (d BlockDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil {
+		return nil
+	}
+	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
+}
+
+func (d BlockDirective) Process(document *htdocument.Document, element *html.Node, _ *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) (err error) {
+	if document == nil {
+		return nil
+	}
 	if w == nil {
 		w = os.Stdout
 	}
@@ -50,7 +80,9 @@ func RenderBlock(document *htdocument.Document, element *html.Node, userData *ht
 		Plugins:        document.Plugins,
 		BlockMode:      true,
 	}
-	process(&shortcode, &fragmentData, userData, w)
+	if _, err = Process(&shortcode, &fragmentData, userData, w); err != nil {
+		return err
+	}
 	if implicitApply {
 		htdocument.RemoveAttributes(fragment, "data-ht-apply")
 	}
@@ -59,13 +91,4 @@ func RenderBlock(document *htdocument.Document, element *html.Node, userData *ht
 		htdocument.RemoveElement(element)
 	}
 	return nil
-}
-
-func HyperBlockElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-block]"}
-	if document.StrictMode {
-		return htdocument.QueryRoot(document.Layout, selectors...)
-	}
-	selectors = append(selectors, "[ht-block]")
-	return htdocument.QueryRoot(document.Layout, selectors...)
 }

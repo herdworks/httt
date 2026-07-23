@@ -15,13 +15,39 @@ import (
 
 var HyperDebugAttributeStrings = []string{"data-ht-debug", "ht-debug"}
 
-func Debug(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, w io.Writer) (err error) {
+type DebugDirective struct{}
+
+var _ Directive = DebugDirective{} // make the compiler check Directive interface conformance
+
+func (d DebugDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-debug"}
+	if !strict {
+		attributes = append(attributes, "ht-debug")
+	}
+	return attributes
+}
+
+func (d DebugDirective) Selectors(strict bool) []string {
+	return defaultDirectiveSelectors(d, strict)
+}
+
+func (d DebugDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil {
+		return nil
+	}
+	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
+}
+
+func (d DebugDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, w io.Writer) (err error) {
+	if document == nil {
+		return nil
+	}
 	if w == nil {
 		w = os.Stdout
 	}
 
 	var modes []string
-	modesString := strings.ReplaceAll(htdocument.GetAttributeString(element, HyperDebugAttributeStrings...), " ", "")
+	modesString := strings.ReplaceAll(htdocument.GetAttribute(element, HyperDebugAttributeStrings...).Val, " ", "")
 	if len(modesString) > 0 {
 		modes = strings.Split(modesString, ",")
 	}
@@ -40,14 +66,4 @@ func Debug(document *htdocument.Document, element *html.Node, data *htdata.Templ
 	fmt.Fprintln(w, string(statement))
 	htdocument.RemoveAttributes(element, HyperDebugAttributeStrings...)
 	return nil
-}
-
-func HyperDebugElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-debug]:not([data-ht-template] [data-ht-debug], [data-ht-template][data-ht-debug])"}
-	if document.StrictMode {
-		return htdocument.QueryRoot(document.Layout, selectors...)
-	}
-	selectors[0] += ":not([ht-template] [data-ht-debug], [ht-template][data-ht-debug])"
-	selectors = append(selectors, "[ht-debug]:not([ht-template] [ht-debug], [ht-template][ht-debug]):not([data-ht-template] [ht-debug], [data-ht-template][ht-debug])")
-	return htdocument.QueryRoot(document.Layout, selectors...)
 }

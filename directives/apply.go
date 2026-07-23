@@ -2,6 +2,7 @@ package directives
 
 import (
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	texttemplate "text/template"
@@ -14,7 +15,33 @@ import (
 
 var HyperApplyAttributeStrings = []string{"data-hyper-template", "hyper-template", "data-ht-apply", "ht-apply"}
 
-func RenderVariables(document *htdocument.Document, element *html.Node, data *htdata.TemplateData) (err error) {
+type ApplyDirective struct{}
+
+var _ Directive = ApplyDirective{} // make the compiler check Directive interface conformance
+
+func (d ApplyDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-apply", "data-hyper-template"}
+	if !strict {
+		attributes = append(attributes, "ht-apply", "hyper-template")
+	}
+	return attributes
+}
+
+func (d ApplyDirective) Selectors(strict bool) []string {
+	return defaultDirectiveSelectors(d, strict)
+}
+
+func (d ApplyDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil {
+		return nil
+	}
+	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
+}
+
+func (d ApplyDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
+	if document == nil {
+		return nil
+	}
 	if element == nil {
 		return nil
 	}
@@ -87,19 +114,6 @@ func RenderVariables(document *htdocument.Document, element *html.Node, data *ht
 	}
 
 	return nil
-}
-
-func HyperApplyElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-apply]:not([data-ht-template] [data-ht-apply], [data-ht-template][data-ht-apply])"}
-	selectors = append(selectors, "[data-hyper-template]:not([data-ht-template] [data-hyper-template], [data-ht-template][data-hyper-template])")
-	if document.StrictMode {
-		return htdocument.QueryRoot(document.Layout, selectors...)
-	}
-	selectors[0] += ":not([ht-template] [data-ht-apply], [ht-template][data-ht-apply])"
-	selectors[1] += ":not([ht-template] [data-hyper-template], [ht-template][data-hyper-template])"
-	selectors = append(selectors, "[ht-apply]:not([ht-template] [ht-apply], [ht-template][ht-apply]):not([data-ht-template] [ht-apply], [data-ht-template][ht-apply])")
-	selectors = append(selectors, "[hyper-template]:not([ht-template] [hyper-template], [ht-template][hyper-template]):not([data-ht-template] [hyper-template], [data-ht-template][hyper-template])")
-	return htdocument.QueryRoot(document.Layout, selectors...)
 }
 
 func containsSyntaxMarker(source string, syntax variable.Syntax) bool {

@@ -3,6 +3,7 @@ package directives
 import (
 	"io"
 	"os"
+	"strconv"
 
 	htdata "github.com/herdworks/hypertemplates-go/data"
 	htdocument "github.com/herdworks/hypertemplates-go/document"
@@ -14,15 +15,43 @@ var HyperTemplateAttributeStrings = []string{"data-ht-template", "ht-template"}
 var HyperTemplateOffsetAttributeStrings = []string{"data-ht-offset", "ht-offset"}
 var HyperTemplateLimitAttributeStrings = []string{"data-ht-limit", "ht-limit"}
 
-func RenderTemplate(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) (err error) {
+type TemplateDirective struct{}
+
+var _ Directive = TemplateDirective{} // make the compiler check Directive interface conformance
+
+func (d TemplateDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-template"}
+	if !strict {
+		attributes = append(attributes, "ht-template")
+	}
+	return attributes
+}
+
+func (d TemplateDirective) Selectors(strict bool) []string {
+	selectors := []string{"[data-ht-template]:not([data-ht-template] [data-ht-template])"}
+	if strict {
+		return selectors
+	}
+	selectors[0] += ":not([ht-template] [data-ht-template])"
+	return append(selectors, "[ht-template]:not([ht-template] [ht-template]):not([data-ht-template] [ht-template])")
+}
+
+func (d TemplateDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil {
+		return nil
+	}
+	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
+}
+
+func (d TemplateDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) (err error) {
 	if w == nil {
 		w = os.Stdout
 	}
 
 	var params Parameters
-	var offset int = htdocument.GetAttributeInt(element, HyperTemplateOffsetAttributeStrings...)
-	var limit int = htdocument.GetAttributeInt(element, HyperTemplateLimitAttributeStrings...)
-	paramString := htdocument.GetAttributeString(element, HyperTemplateAttributeStrings...)
+	offset, _ := strconv.Atoi(htdocument.GetAttribute(element, HyperTemplateOffsetAttributeStrings...).Val)
+	limit, _ := strconv.Atoi(htdocument.GetAttribute(element, HyperTemplateLimitAttributeStrings...).Val)
+	paramString := htdocument.GetAttribute(element, HyperTemplateAttributeStrings...).Val
 	if params = ParseParameters(paramString, data); len(params) == 0 {
 		return nil
 	}
@@ -55,7 +84,7 @@ func RenderTemplate(document *htdocument.Document, element *html.Node, data *htd
 			Plugins:        document.Plugins,
 		}
 
-		if _, err = process(&nestedDoc, nestedData, userData, w); err != nil {
+		if _, err = Process(&nestedDoc, nestedData, userData, w); err != nil {
 			return err
 		}
 		if implicitApply {
@@ -75,16 +104,6 @@ func RenderTemplate(document *htdocument.Document, element *html.Node, data *htd
 		htdocument.RemoveElement(element)
 	}
 	return nil
-}
-
-func HyperTemplateElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-template]:not([data-ht-template] [data-ht-template])"}
-	if document.StrictMode {
-		return htdocument.QueryRoot(document.Layout, selectors...)
-	}
-	selectors[0] += ":not([ht-template] [data-ht-template])"
-	selectors = append(selectors, "[ht-template]:not([ht-template] [ht-template]):not([data-ht-template] [ht-template])")
-	return htdocument.QueryRoot(document.Layout, selectors...)
 }
 
 func HyperLoopElements(document *htdocument.Document) []*html.Node {

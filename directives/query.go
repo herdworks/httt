@@ -14,13 +14,44 @@ import (
 
 var HyperQueryAttributeStrings = []string{"data-ht-query", "ht-query"}
 
-func RenderQueryParams(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, w io.Writer) (err error) {
+type QueryDirective struct{}
+
+var _ Directive = QueryDirective{} // make the compiler check Directive interface conformance
+
+func (d QueryDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-query"}
+	if !strict {
+		attributes = append(attributes, "ht-query")
+	}
+	return attributes
+}
+
+func (d QueryDirective) Selectors(strict bool) []string {
+	selectors := []string{"[data-ht-query]:not([data-ht-template] [data-ht-query], [data-ht-template][data-ht-query])"}
+	if strict {
+		return selectors
+	}
+	selectors[0] += ":not([ht-template] [data-ht-query], [ht-template][data-ht-query])"
+	return append(selectors, "[ht-query]:not([ht-template] [ht-query], [ht-template][ht-query]):not([data-ht-template] [ht-query], [data-ht-template][ht-attrs])")
+}
+
+func (d QueryDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil {
+		return nil
+	}
+	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
+}
+
+func (d QueryDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, w io.Writer) (err error) {
+	if document == nil {
+		return nil
+	}
 	if w == nil {
 		w = os.Stdout
 	}
 
 	debug := htdocument.HasAttribute(element, HyperDebugAttributeStrings...)
-	paramString := htdocument.GetAttributeString(element, HyperQueryAttributeStrings...)
+	paramString := htdocument.GetAttribute(element, HyperQueryAttributeStrings...).Val
 	for _, param := range ParseParameters(paramString, data) {
 		var attributeName string
 		var attributeQuery string
@@ -39,19 +70,9 @@ func RenderQueryParams(document *htdocument.Document, element *html.Node, data *
 	return nil
 }
 
-func HyperQueryElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-query]:not([data-ht-template] [data-ht-query], [data-ht-template][data-ht-query])"}
-	if document.StrictMode {
-		return htdocument.QueryRoot(document.Layout, selectors...)
-	}
-	selectors[0] += ":not([ht-template] [data-ht-query], [ht-template][data-ht-query])"
-	selectors = append(selectors, "[ht-query]:not([ht-template] [ht-query], [ht-template][ht-query]):not([data-ht-template] [ht-query], [data-ht-template][ht-attrs])")
-	return htdocument.QueryRoot(document.Layout, selectors...)
-}
-
 func setAttributeQueryParam(element *html.Node, attribute string, queryParam string, value string, debug bool, w io.Writer) (err error) {
 	var attributeURL *url.URL
-	attributeHref := htdocument.GetAttributeString(element, attribute)
+	attributeHref := htdocument.GetAttribute(element, attribute).Val
 	if attributeURL, err = url.Parse(attributeHref); err != nil {
 		return err
 	}

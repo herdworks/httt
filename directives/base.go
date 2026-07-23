@@ -14,12 +14,38 @@ import (
 
 var HyperBaseAttributeStrings = []string{"data-ht-base", "ht-base"}
 
-func RenderBasedElement(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, w io.Writer) (err error) {
+type BaseDirective struct{}
+
+var _ Directive = BaseDirective{} // make the compiler check Directive interface conformance
+
+func (d BaseDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-base"}
+	if !strict {
+		attributes = append(attributes, "ht-base")
+	}
+	return attributes
+}
+
+func (d BaseDirective) Selectors(strict bool) []string {
+	return defaultDirectiveSelectors(d, strict)
+}
+
+func (d BaseDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil {
+		return nil
+	}
+	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
+}
+
+func (d BaseDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, w io.Writer) (err error) {
+	if document == nil {
+		return nil
+	}
 	if w == nil {
 		w = os.Stdout
 	}
 
-	paramString := htdocument.GetAttributeString(element, HyperBaseAttributeStrings...)
+	paramString := htdocument.GetAttribute(element, HyperBaseAttributeStrings...).Val
 	for _, param := range ParseParameters(paramString, data) {
 		if len(param.Values) == 0 {
 			continue
@@ -33,7 +59,7 @@ func RenderBasedElement(document *htdocument.Document, element *html.Node, data 
 		if baseURL, err = url.Parse(baseHref); err != nil {
 			return nil
 		}
-		if ResolveBasedAttributes(document, element, param.Target, baseURL, w) != nil {
+		if err = ResolveBasedAttributes(document, element, param.Target, baseURL, w); err != nil {
 			return err
 		}
 	}
@@ -52,7 +78,7 @@ func ResolveBasedAttributes(document *htdocument.Document, element *html.Node, a
 	}
 	for _, el := range htdocument.QueryRoot(element, selectors) {
 		var resolvedHref string
-		targetHref := htdocument.GetAttributeString(el, attribute)
+		targetHref := htdocument.GetAttribute(el, attribute).Val
 		if debug {
 			fmt.Fprintf(w, "base %s='%s' resolving\n", attribute, targetHref)
 		}
@@ -72,14 +98,4 @@ func ResolveBasedAttributes(document *htdocument.Document, element *html.Node, a
 		htdocument.SetAttribute(el, attribute, resolvedHref)
 	}
 	return nil
-}
-
-func HyperBaseElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-base]:not([data-ht-template] [data-ht-base], [data-ht-template][data-ht-base])"}
-	if document.StrictMode {
-		return htdocument.QueryRoot(document.Layout, selectors...)
-	}
-	selectors[0] += ":not([ht-template] [data-ht-base], [ht-template][data-ht-base])"
-	selectors = append(selectors, "[ht-base]:not([ht-template] [ht-base], [ht-template][ht-base]):not([data-ht-template] [ht-base], [data-ht-template][ht-base])")
-	return htdocument.QueryRoot(document.Layout, selectors...)
 }

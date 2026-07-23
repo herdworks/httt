@@ -1,3 +1,7 @@
+// Package migrate applies stateless template transformations to configured
+// theme resources. Idempotency is a critical migration contract: applying a
+// completed migration job again must make no further changes. A rule that
+// cannot meet that contract must be redesigned or omitted.
 package migrate
 
 import (
@@ -32,6 +36,7 @@ type Migration struct {
 
 // DefaultRules is the ordered migration rule set used when a job supplies no rules.
 var DefaultRules = []migrationrules.Rule{
+	migrationrules.Not{},
 	migrationrules.Param{},
 	migrationrules.Debug{},
 }
