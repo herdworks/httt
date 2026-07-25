@@ -20,6 +20,13 @@ type Directive interface {
 	Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) error
 }
 
+// DirectiveExpression is a directive with a grammar for its attribute
+// expression syntax.
+type DirectiveExpression interface {
+	Directive
+	Grammar() ExpressionGrammar
+}
+
 // Process resolves includes and renders the document's directive pipeline.
 func Process(document *htdocument.Document, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) (htmlBytes []byte, err error) {
 	if w == nil {
@@ -41,22 +48,21 @@ func Process(document *htdocument.Document, data *htdata.TemplateData, userData 
 		return nil, err
 	}
 
-	// read layout template data
-	data.Set("layout", document.LayoutData())
+	// Block fragments receive only caller-approved user data and block data.
+	if !document.BlockMode {
+		data.Set("layout", document.LayoutData())
+	}
 
 	// process directives
 	directives := []Directive{
 		DeprecatedDirective{},
 		ConditionalDirective{},
 		DebugDirective{},
-		TemplateDirective{},
+		PipeDirective{},
+		EachDirective{},
 		ApplyDirective{},
 		AttrsDirective{},
-		QueryDirective{},
-		ParamDirective{},
-		ContentDirective{},
 		BlockDirective{},
-		PipeDirective{},
 		BaseDirective{},
 	}
 	for _, directive := range directives {
@@ -74,9 +80,9 @@ func defaultDirectiveSelectors(d Directive, strict bool) []string {
 	strictAttributes := d.Attributes(true)
 	var selectors []string
 	for _, attribute := range strictAttributes {
-		selector := fmt.Sprintf("[%[1]s]:not([data-ht-template] [%[1]s], [data-ht-template][%[1]s])", attribute)
+		selector := fmt.Sprintf("[%[1]s]:not([data-ht-each] [%[1]s], [data-ht-each][%[1]s])", attribute)
 		if !strict {
-			selector += fmt.Sprintf(":not([ht-template] [%[1]s], [ht-template][%[1]s])", attribute)
+			selector += fmt.Sprintf(":not([ht-each] [%[1]s], [ht-each][%[1]s])", attribute)
 		}
 		selectors = append(selectors, selector)
 	}
@@ -84,7 +90,7 @@ func defaultDirectiveSelectors(d Directive, strict bool) []string {
 		attributes := slices.Clone(d.Attributes(false))
 		attributes = slices.DeleteFunc(attributes, func(s string) bool { return slices.Contains(strictAttributes, s) })
 		for _, attribute := range attributes {
-			selector := fmt.Sprintf("[%[1]s]:not([ht-template] [%[1]s], [ht-template][%[1]s]):not([data-ht-template] [%[1]s], [data-ht-template][%[1]s])", attribute)
+			selector := fmt.Sprintf("[%[1]s]:not([ht-each] [%[1]s], [ht-each][%[1]s]):not([data-ht-each] [%[1]s], [data-ht-each][%[1]s])", attribute)
 			selectors = append(selectors, selector)
 		}
 	}

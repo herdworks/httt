@@ -23,12 +23,11 @@ func (d PipeDirective) Attributes(strict bool) []string {
 }
 
 func (d PipeDirective) Selectors(strict bool) []string {
-	selectors := []string{"[data-ht-pipe]:not([data-ht-template] [data-ht-pipe])"}
-	if strict {
-		return selectors
+	selectors := []string{"[data-ht-pipe]"}
+	if !strict {
+		selectors = append(selectors, "[ht-pipe]")
 	}
-	selectors[0] += ":not([ht-template] [data-ht-pipe])"
-	return append(selectors, "[ht-pipe]:not([ht-template] [ht-pipe]):not([data-ht-template] [ht-pipe])")
+	return selectors
 }
 
 func (d PipeDirective) Elements(document *htdocument.Document) []*html.Node {

@@ -217,7 +217,7 @@ func TestRenderBlocks(t *testing.T) {
 
 // TestRenderBlockPageFallback reproduces the caller setup where the outer page
 // data is passed as userData under a "page" namespace, and a block template
-// references page.* paths via the ht-attrs / ht-content fallback chain.
+// references page.* paths through explicit template-variable fallbacks.
 func TestRenderBlockPageFallback(t *testing.T) {
 	theme := &httheme.Theme{URI: &url.URL{Path: "testdata/ht-block/theme.json"}}
 	theme.ResolveConfig()
@@ -964,9 +964,7 @@ func TestRenderVariablesErrorsIncludeLocationAndElement(t *testing.T) {
 	}
 }
 
-func TestRenderContentHtmlMarkdownRefactorRegression(t *testing.T) {
-	// Regression-lock: RenderContent's html: and markdown: directive
-	// branches still produce the same output after the helper extraction.
+func TestDeprecatedContentFailsWithMigrationHint(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
@@ -979,35 +977,21 @@ func TestRenderContentHtmlMarkdownRefactorRegression(t *testing.T) {
 		t.Fatalf("error parsing layout html: %v", err)
 	}
 
-	data := TemplateData{
-		"page": TemplateData{
-			"body":     "<em>raw</em>",
-			"markdown": "# Heading",
-		},
-	}
-
 	template := &document.Document{Layout: layout, TidyMode: true}
-	htmlBytes, err := Process(template, &data, nil, nil)
-	if err != nil {
-		t.Fatalf("error processing template: %v", err)
-	}
-
-	if !bytes.Contains(htmlBytes, []byte("<em>raw</em>")) {
-		t.Fatalf("html: branch missing expected <em>raw</em>; got:\n%s", htmlBytes)
-	}
-	if !bytes.Contains(htmlBytes, []byte("<h1")) {
-		t.Fatalf("markdown: branch missing expected <h1>; got:\n%s", htmlBytes)
+	_, err = Process(template, &TemplateData{}, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "hyperctl theme migrate") {
+		t.Fatalf("error = %v, want migration hint", err)
 	}
 }
 
 // TestImplicitApplyOnTemplateAttribute exercises the ergonomic shortcut where
-// ${ ... } expressions on an ht-template element's own attributes resolve
+// ${ ... } expressions on an ht-each element's own attributes resolve
 // against the per-iteration scope without an explicit ht-apply.
 func TestImplicitApplyOnTemplateAttribute(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<a ht-template="link:page.links" href="${ link.href }"></a>
+				<a ht-each="link in ${ page.links }" href="${ link.href }"></a>
 			</body>
 		</html>
 	`))
@@ -1055,12 +1039,12 @@ func TestImplicitApplyOnTemplateAttribute(t *testing.T) {
 }
 
 // TestImplicitApplyOnTemplateText verifies that ${ ... } in the direct text
-// children of an ht-template element resolve without an explicit ht-apply.
+// children of an ht-each element resolve without an explicit ht-apply.
 func TestImplicitApplyOnTemplateText(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<span ht-template="item:items">${ item }</span>
+				<span ht-each="item in ${ items }">${ item }</span>
 			</body>
 		</html>
 	`))
@@ -1104,7 +1088,7 @@ func TestImplicitApplyDoesNotClobberExplicit(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<a ht-template="link:page.links" ht-apply href="${ link.href }"></a>
+				<a ht-each="link in ${ page.links }" ht-apply href="${ link.href }"></a>
 			</body>
 		</html>
 	`))
@@ -1151,7 +1135,7 @@ func TestImplicitApplyStrictMode(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<a data-ht-template="link:page.links" href="${ link.href }"></a>
+				<a data-ht-each="link in ${ page.links }" href="${ link.href }"></a>
 			</body>
 		</html>
 	`))
@@ -1202,7 +1186,7 @@ func TestImplicitApplyCleanupNonTidy(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<a ht-template="link:page.links" href="${ link.href }"></a>
+				<a ht-each="link in ${ page.links }" href="${ link.href }"></a>
 			</body>
 		</html>
 	`))
@@ -1236,7 +1220,7 @@ func TestImplicitApplyCleanupNonTidy(t *testing.T) {
 	clones := document.QueryAll(rendered, "body > a[href]")
 	found := false
 	for _, a := range clones {
-		if document.GetAttributeString(a, "href") == "/a" && !document.HasAttribute(a, "ht-template", "data-ht-template") {
+		if document.GetAttributeString(a, "href") == "/a" && !document.HasAttribute(a, "ht-each", "data-ht-each") {
 			found = true
 			break
 		}
@@ -1253,7 +1237,7 @@ func TestImplicitApplyNoMarker(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`
 		<html>
 			<body>
-				<li ht-template="x:items">static</li>
+				<li ht-each="x in ${ items }">static</li>
 			</body>
 		</html>
 	`))

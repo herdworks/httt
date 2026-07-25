@@ -20,89 +20,74 @@ func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 		{
 			name:      "deprecated",
 			directive: DeprecatedDirective{},
-			strict:    []string{"[data-ht-not]"},
-			legacy:    []string{"[data-ht-not]", "[ht-not]"},
+			strict: []string{
+				"[data-ht-not]", "[ht-not]",
+				"[data-ht-template]", "[ht-template]",
+				"[data-ht-content]", "[ht-content]",
+				"[data-ht-param]", "[ht-param]",
+				"[data-ht-query]", "[ht-query]",
+			},
+			legacy: []string{
+				"[data-ht-not]", "[ht-not]",
+				"[data-ht-template]", "[ht-template]",
+				"[data-ht-content]", "[ht-content]",
+				"[data-ht-param]", "[ht-param]",
+				"[data-ht-query]", "[ht-query]",
+			},
 		},
 		{
 			name:      "conditional",
 			directive: ConditionalDirective{},
-			strict:    []string{"[data-ht-if]:not([data-ht-template] [data-ht-if], [data-ht-template][data-ht-if])"},
+			strict:    []string{"[data-ht-if]:not([data-ht-each] [data-ht-if], [data-ht-each][data-ht-if])"},
 			legacy: []string{
-				"[data-ht-if]:not([data-ht-template] [data-ht-if], [data-ht-template][data-ht-if]):not([ht-template] [data-ht-if], [ht-template][data-ht-if])",
-				"[ht-if]:not([ht-template] [ht-if], [ht-template][ht-if]):not([data-ht-template] [ht-if], [data-ht-template][ht-if])",
+				"[data-ht-if]:not([data-ht-each] [data-ht-if], [data-ht-each][data-ht-if]):not([ht-each] [data-ht-if], [ht-each][data-ht-if])",
+				"[ht-if]:not([ht-each] [ht-if], [ht-each][ht-if]):not([data-ht-each] [ht-if], [data-ht-each][ht-if])",
 			},
 		},
 		{
 			name:      "debug",
 			directive: DebugDirective{},
-			strict:    []string{"[data-ht-debug]:not([data-ht-template] [data-ht-debug], [data-ht-template][data-ht-debug])"},
+			strict:    []string{"[data-ht-debug]:not([data-ht-each] [data-ht-debug], [data-ht-each][data-ht-debug])"},
 			legacy: []string{
-				"[data-ht-debug]:not([data-ht-template] [data-ht-debug], [data-ht-template][data-ht-debug]):not([ht-template] [data-ht-debug], [ht-template][data-ht-debug])",
-				"[ht-debug]:not([ht-template] [ht-debug], [ht-template][ht-debug]):not([data-ht-template] [ht-debug], [data-ht-template][ht-debug])",
+				"[data-ht-debug]:not([data-ht-each] [data-ht-debug], [data-ht-each][data-ht-debug]):not([ht-each] [data-ht-debug], [ht-each][data-ht-debug])",
+				"[ht-debug]:not([ht-each] [ht-debug], [ht-each][ht-debug]):not([data-ht-each] [ht-debug], [data-ht-each][ht-debug])",
 			},
 		},
 		{
-			name:      "template",
-			directive: TemplateDirective{},
-			strict:    []string{"[data-ht-template]:not([data-ht-template] [data-ht-template])"},
+			name:      "each",
+			directive: EachDirective{},
+			strict:    []string{"[data-ht-each]:not([data-ht-each] [data-ht-each])"},
 			legacy: []string{
-				"[data-ht-template]:not([data-ht-template] [data-ht-template]):not([ht-template] [data-ht-template])",
-				"[ht-template]:not([ht-template] [ht-template]):not([data-ht-template] [ht-template])",
+				"[data-ht-each]:not([data-ht-each] [data-ht-each]):not([ht-each] [data-ht-each])",
+				"[ht-each]:not([ht-each] [ht-each]):not([data-ht-each] [ht-each])",
 			},
 		},
 		{
 			name:      "apply",
 			directive: ApplyDirective{},
 			strict: []string{
-				"[data-ht-apply]:not([data-ht-template] [data-ht-apply], [data-ht-template][data-ht-apply])",
-				"[data-hyper-template]:not([data-ht-template] [data-hyper-template], [data-ht-template][data-hyper-template])",
+				"[data-ht-apply]:not([data-ht-each] [data-ht-apply], [data-ht-each][data-ht-apply])",
+				"[data-hyper-template]:not([data-ht-each] [data-hyper-template], [data-ht-each][data-hyper-template])",
 			},
 			legacy: []string{
-				"[data-ht-apply]:not([data-ht-template] [data-ht-apply], [data-ht-template][data-ht-apply]):not([ht-template] [data-ht-apply], [ht-template][data-ht-apply])",
-				"[data-hyper-template]:not([data-ht-template] [data-hyper-template], [data-ht-template][data-hyper-template]):not([ht-template] [data-hyper-template], [ht-template][data-hyper-template])",
-				"[ht-apply]:not([ht-template] [ht-apply], [ht-template][ht-apply]):not([data-ht-template] [ht-apply], [data-ht-template][ht-apply])",
-				"[hyper-template]:not([ht-template] [hyper-template], [ht-template][hyper-template]):not([data-ht-template] [hyper-template], [data-ht-template][hyper-template])",
+				"[data-ht-apply]:not([data-ht-each] [data-ht-apply], [data-ht-each][data-ht-apply]):not([ht-each] [data-ht-apply], [ht-each][data-ht-apply])",
+				"[data-hyper-template]:not([data-ht-each] [data-hyper-template], [data-ht-each][data-hyper-template]):not([ht-each] [data-hyper-template], [ht-each][data-hyper-template])",
+				"[ht-apply]:not([ht-each] [ht-apply], [ht-each][ht-apply]):not([data-ht-each] [ht-apply], [data-ht-each][ht-apply])",
+				"[hyper-template]:not([ht-each] [hyper-template], [ht-each][hyper-template]):not([data-ht-each] [hyper-template], [data-ht-each][hyper-template])",
 			},
 		},
 		{
 			name:      "attrs",
 			directive: AttrsDirective{},
 			strict: []string{
-				"[data-ht-attrs]:not([data-ht-template] [data-ht-attrs], [data-ht-template][data-ht-attrs])",
-				"[data-ht-attr]:not([data-ht-template] [data-ht-attr], [data-ht-template][data-ht-attr])",
+				"[data-ht-attrs]:not([data-ht-each] [data-ht-attrs], [data-ht-each][data-ht-attrs])",
+				"[data-ht-attr]:not([data-ht-each] [data-ht-attr], [data-ht-each][data-ht-attr])",
 			},
 			legacy: []string{
-				"[data-ht-attrs]:not([data-ht-template] [data-ht-attrs], [data-ht-template][data-ht-attrs]):not([ht-template] [data-ht-attrs], [ht-template][data-ht-attrs])",
-				"[data-ht-attr]:not([data-ht-template] [data-ht-attr], [data-ht-template][data-ht-attr]):not([ht-template] [data-ht-attr], [ht-template][data-ht-attr])",
-				"[ht-attrs]:not([ht-template] [ht-attrs], [ht-template][ht-attrs]):not([data-ht-template] [ht-attrs], [data-ht-template][ht-attrs])",
-				"[ht-attr]:not([ht-template] [ht-attr], [ht-template][ht-attr]):not([data-ht-template] [ht-attr], [data-ht-template][ht-attr])",
-			},
-		},
-		{
-			name:      "query",
-			directive: QueryDirective{},
-			strict:    []string{"[data-ht-query]:not([data-ht-template] [data-ht-query], [data-ht-template][data-ht-query])"},
-			legacy: []string{
-				"[data-ht-query]:not([data-ht-template] [data-ht-query], [data-ht-template][data-ht-query]):not([ht-template] [data-ht-query], [ht-template][data-ht-query])",
-				"[ht-query]:not([ht-template] [ht-query], [ht-template][ht-query]):not([data-ht-template] [ht-query], [data-ht-template][ht-attrs])",
-			},
-		},
-		{
-			name:      "param",
-			directive: ParamDirective{},
-			strict:    []string{"[data-ht-param]:not([data-ht-template] [data-ht-param])"},
-			legacy: []string{
-				"[data-ht-param]:not([data-ht-template] [data-ht-param]):not([ht-template] [data-ht-param])",
-				"[ht-param]:not([ht-template] [ht-param]):not([data-ht-template] [ht-param])",
-			},
-		},
-		{
-			name:      "content",
-			directive: ContentDirective{},
-			strict:    []string{"[data-ht-content]:not([data-ht-template] [data-ht-content])"},
-			legacy: []string{
-				"[data-ht-content]:not([data-ht-template] [data-ht-content]):not([ht-template] [data-ht-content])",
-				"[ht-content]:not([ht-template] [ht-content]):not([data-ht-template] [ht-content])",
+				"[data-ht-attrs]:not([data-ht-each] [data-ht-attrs], [data-ht-each][data-ht-attrs]):not([ht-each] [data-ht-attrs], [ht-each][data-ht-attrs])",
+				"[data-ht-attr]:not([data-ht-each] [data-ht-attr], [data-ht-each][data-ht-attr]):not([ht-each] [data-ht-attr], [ht-each][data-ht-attr])",
+				"[ht-attrs]:not([ht-each] [ht-attrs], [ht-each][ht-attrs]):not([data-ht-each] [ht-attrs], [data-ht-each][ht-attrs])",
+				"[ht-attr]:not([ht-each] [ht-attr], [ht-each][ht-attr]):not([data-ht-each] [ht-attr], [data-ht-each][ht-attr])",
 			},
 		},
 		{
@@ -114,19 +99,16 @@ func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 		{
 			name:      "pipe",
 			directive: PipeDirective{},
-			strict:    []string{"[data-ht-pipe]:not([data-ht-template] [data-ht-pipe])"},
-			legacy: []string{
-				"[data-ht-pipe]:not([data-ht-template] [data-ht-pipe]):not([ht-template] [data-ht-pipe])",
-				"[ht-pipe]:not([ht-template] [ht-pipe]):not([data-ht-template] [ht-pipe])",
-			},
+			strict:    []string{"[data-ht-pipe]"},
+			legacy:    []string{"[data-ht-pipe]", "[ht-pipe]"},
 		},
 		{
 			name:      "base",
 			directive: BaseDirective{},
-			strict:    []string{"[data-ht-base]:not([data-ht-template] [data-ht-base], [data-ht-template][data-ht-base])"},
+			strict:    []string{"[data-ht-base]:not([data-ht-each] [data-ht-base], [data-ht-each][data-ht-base])"},
 			legacy: []string{
-				"[data-ht-base]:not([data-ht-template] [data-ht-base], [data-ht-template][data-ht-base]):not([ht-template] [data-ht-base], [ht-template][data-ht-base])",
-				"[ht-base]:not([ht-template] [ht-base], [ht-template][ht-base]):not([data-ht-template] [ht-base], [data-ht-template][ht-base])",
+				"[data-ht-base]:not([data-ht-each] [data-ht-base], [data-ht-each][data-ht-base]):not([ht-each] [data-ht-base], [ht-each][data-ht-base])",
+				"[ht-base]:not([ht-each] [ht-base], [ht-each][ht-base]):not([data-ht-each] [ht-base], [data-ht-each][ht-base])",
 			},
 		},
 	}
@@ -157,7 +139,7 @@ func TestConditionalElementsPreserveRootExclusionsAndDocumentOrder(t *testing.T)
 	templateRoot := &html.Node{
 		Type: html.ElementNode,
 		Data: "section",
-		Attr: []html.Attribute{{Key: "data-ht-template", Val: "item:items"}},
+		Attr: []html.Attribute{{Key: "data-ht-each", Val: "item in ${ items }"}},
 	}
 	templateChild := &html.Node{
 		Type: html.ElementNode,

@@ -72,9 +72,9 @@ func ResolveBasedAttributes(document *htdocument.Document, element *html.Node, a
 	}
 
 	debug := htdocument.HasAttribute(element, HyperDebugAttributeStrings...)
-	selectors := fmt.Sprintf("[%[1]s]:not([data-ht-template] [%[1]s], [data-ht-template][%[1]s], [data-ht-base] [%[1]s], [data-ht-base][%[1]s])", attribute)
+	selectors := fmt.Sprintf("[%[1]s]:not([data-ht-each] [%[1]s], [data-ht-each][%[1]s], [data-ht-base] [%[1]s], [data-ht-base][%[1]s])", attribute)
 	if !document.StrictMode {
-		selectors += fmt.Sprintf(":not([ht-template] [%[1]s], [ht-template][%[1]s], [ht-base] [%[1]s], [ht-base][%[1]s])", attribute)
+		selectors += fmt.Sprintf(":not([ht-each] [%[1]s], [ht-each][%[1]s], [ht-base] [%[1]s], [ht-base][%[1]s])", attribute)
 	}
 	for _, el := range htdocument.QueryRoot(element, selectors) {
 		var resolvedHref string

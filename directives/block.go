@@ -33,14 +33,15 @@ func (d BlockDirective) Selectors(strict bool) []string {
 }
 
 func (d BlockDirective) Elements(document *htdocument.Document) []*html.Node {
-	if document == nil {
+	if document == nil || document.IsFragment() {
+		// only process block directives once, in the root DocumentNode processing loop
 		return nil
 	}
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
 func (d BlockDirective) Process(document *htdocument.Document, element *html.Node, _ *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) (err error) {
-	if document == nil {
+	if document == nil || document.IsFragment() || element == nil {
 		return nil
 	}
 	if w == nil {

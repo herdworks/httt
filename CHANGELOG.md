@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 * Added `variable.ResolveValue` for typed `${ ... }` lookup resolution. Typed and rendered lookups share nil-only fallback semantics, preserving false, zero, empty strings, and empty containers; `RenderString` leaves strings unquoted and JSON-encodes other non-nil values.
 * Added `data.IsTruthy` and changed `TemplateData.Has` so false, nil, and empty strings or containers are false while all numbers, including zero, are true.
-* Added the `directives.Directive` interface and standardized core directive discovery and processing, including strict-mode aliases, document-order selector handling, and legacy `ht-template` deferral.
+* Added the `directives.Directive` interface and standardized core directive discovery and processing, including strict-mode aliases and document-order selector handling.
 * Changed directive variable errors to identify the rendered attribute or text location and surrounding element for syntax, lookup, plugin, and rendering failures.
 * Changed `document.Query`, `QueryAll`, and `QueryRoot` to treat variadic selectors as one CSS selector group, preserving document order and returning each matching element once.
 * Changed `ht-param` migration to emit function-call syntax for Markdown and leave source-less parameters unresolved, and moved optional `ht-debug` cleanup to the end of the default migration rule order.
@@ -18,6 +18,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 * **BREAKING:** Renamed CSS variable interpolation from `--ht-value(...)` to `--ht-var(...)`; the old spelling is no longer recognized.
 * **BREAKING:** Replaced active `ht-if` evaluation with explicit typed `${ ... }` expressions, comparisons, lazy uppercase `OR`, repeated-attribute `AND`, and slice membership through `in` / `not in`. Naked presence values and empty conditions are now syntax errors; naked comparison operands remain literals.
 * **BREAKING:** Removed runtime support for `ht-not` and `data-ht-not`; stale templates now fail with a migration hint. `hyperctl theme migrate` converts deprecated presence, equality, regex, comma/semicolon alternatives, aliases, and mixed conditional gates to `ht-if`; active `ht-if` values are not rewritten and migration reruns are idempotent.
+* **BREAKING:** Added `ht-each` / `data-ht-each` typed loops with literal offset/limit windows, shallow isolated per-item scopes, and `each.index` / `each.count` / `each.total` metadata. `each.count` describes the emitted window and `each.total` the complete source; `each` is reserved as loop-local state. Loops defer descendant directive processing until each clone is rendered.
+* **BREAKING:** Removed runtime `ht-template` / `data-ht-template`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts compatible legacy loops to `ht-each`, rewrites `ht.index` / `ht.count` / `ht.total` metadata references to `each.*`, and reports unresolved aliases or same-element active-loop conflicts.
+* **BREAKING:** Removed runtime `ht-content` / `data-ht-content`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts supported content directives to `ht-apply` and reports unsafe legacy shapes for manual conversion.
+* **BREAKING:** Removed runtime `ht-param` / `data-ht-param`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts supported parameter elements to `ht-apply` output and reports unsafe legacy shapes for manual conversion.
+* **BREAKING:** Removed runtime `ht-query` / `data-ht-query`. Stale attributes now fail with a `hyperctl theme migrate` hint; query migration is planned for the next Phase 2 increment.
+* Changed `ht-block` to run only in the final top-level document pass. Block templates receive `block.*` data plus only the caller-provided `userData` context, keeping outer render data unavailable unless the caller explicitly permits it.
 
 ## v0.33.1 (2026-07-22)
 

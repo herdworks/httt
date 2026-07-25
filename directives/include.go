@@ -81,12 +81,12 @@ func IncludeFragment(document *htdocument.Document, element *html.Node, path str
 }
 
 func HyperIncludeElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-include]:not([data-ht-template] [data-ht-include])"}
+	selectors := []string{"[data-ht-include]:not([data-ht-each] [data-ht-include], [data-ht-each][data-ht-include])"}
 	if document.StrictMode {
 		return htdocument.QueryAll(document.Layout, selectors...)
 	}
-	selectors[0] += ":not([ht-template] [data-ht-include])"
-	selectors = append(selectors, "[ht-include]:not([ht-template] [ht-include]):not([data-ht-template] [ht-include])")
+	selectors[0] += ":not([ht-each] [data-ht-include], [ht-each][data-ht-include])"
+	selectors = append(selectors, "[ht-include]:not([ht-each] [ht-include], [ht-each][ht-include]):not([data-ht-each] [ht-include], [data-ht-each][ht-include])")
 	return htdocument.QueryAll(document.Layout, selectors...)
 }
 

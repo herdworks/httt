@@ -99,16 +99,18 @@ func TestParamRequiresManualMigrationForAmbiguousReplacement(t *testing.T) {
 	}
 }
 
-func TestDefaultRulesContainConditionalParamAndDebugInPrecedenceOrder(t *testing.T) {
-	if len(migrate.DefaultRules) != 3 {
-		t.Fatalf("DefaultRules length = %d, want 3", len(migrate.DefaultRules))
+func TestDefaultRulesContainConditionalTemplateParamContentAndDebugInPrecedenceOrder(t *testing.T) {
+	if len(migrate.DefaultRules) != 5 {
+		t.Fatalf("DefaultRules length = %d, want 5", len(migrate.DefaultRules))
 	}
 	selectors := []string{
 		strings.Join(selectorStrings(migrate.DefaultRules[0]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[1]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[2]), ","),
+		strings.Join(selectorStrings(migrate.DefaultRules[3]), ","),
+		strings.Join(selectorStrings(migrate.DefaultRules[4]), ","),
 	}
-	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-param],[data-ht-param];[ht-debug],[data-ht-debug]"; got != want {
+	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-template],[data-ht-template];[ht-param],[data-ht-param];[ht-content],[data-ht-content];[ht-debug],[data-ht-debug]"; got != want {
 		t.Fatalf("DefaultRules selectors = %q, want %q", got, want)
 	}
 }

@@ -5,7 +5,7 @@
         <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://plausible.io; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*; img-src 'self' https://*; media-src 'self' https://*;">
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title ht-content='page.title,site.title'>Placeholder</title>
+        <title ht-apply>${ page.title, site.title, "Placeholder" }</title>
 
         <!-- Layout Styles -->
         <style id='components'></style>
@@ -16,7 +16,7 @@
         <main>
             <section>
                 <article>
-                    <p ht-param='markdown:content'>Placeholder content.</p>
+                    <div ht-apply>${ markdown(content, "") }</div>
                 </article>
             </section>
         </main>

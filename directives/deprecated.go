@@ -13,18 +13,20 @@ type DeprecatedDirective struct{}
 
 var _ Directive = DeprecatedDirective{} // make the compiler check Directive interface conformance
 
-func (d DeprecatedDirective) Attributes(strict bool) []string {
-	directives := []string{"data-ht-not"}
-	if !strict {
-		directives = append(directives, "ht-not")
+func (DeprecatedDirective) Attributes(_ bool) []string {
+	return []string{
+		"data-ht-not", "ht-not",
+		"data-ht-template", "ht-template",
+		"data-ht-content", "ht-content",
+		"data-ht-param", "ht-param",
+		"data-ht-query", "ht-query",
 	}
-	return directives
 }
 
-func (d DeprecatedDirective) Selectors(strict bool) []string {
-	selectors := []string{}
-	for _, directive := range d.Attributes(strict) {
-		selectors = append(selectors, fmt.Sprintf("[%s]", directive))
+func (d DeprecatedDirective) Selectors(_ bool) []string {
+	selectors := make([]string, 0, len(d.Attributes(false)))
+	for _, attribute := range d.Attributes(false) {
+		selectors = append(selectors, fmt.Sprintf("[%s]", attribute))
 	}
 	return selectors
 }

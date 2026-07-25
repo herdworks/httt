@@ -37,7 +37,9 @@ type Migration struct {
 // DefaultRules is the ordered migration rule set used when a job supplies no rules.
 var DefaultRules = []migrationrules.Rule{
 	migrationrules.Not{},
+	migrationrules.Template{},
 	migrationrules.Param{},
+	migrationrules.Content{},
 	migrationrules.Debug{},
 }
 
