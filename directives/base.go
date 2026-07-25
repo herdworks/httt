@@ -12,8 +12,6 @@ import (
 	"golang.org/x/net/html"
 )
 
-var HyperBaseAttributeStrings = []string{"data-ht-base", "ht-base"}
-
 type BaseDirective struct{}
 
 var _ Directive = BaseDirective{} // make the compiler check Directive interface conformance
@@ -45,12 +43,12 @@ func (d BaseDirective) Process(document *htdocument.Document, element *html.Node
 		w = os.Stdout
 	}
 
-	paramString := htdocument.GetAttribute(element, HyperBaseAttributeStrings...).Val
+	paramString := htdocument.GetAttribute(element, d.Attributes(document.StrictMode)...).Val
 	for _, param := range ParseParameters(paramString, data) {
 		if len(param.Values) == 0 {
 			continue
 		}
-		htdocument.RemoveAttributes(element, HyperBaseAttributeStrings...)
+		htdocument.RemoveAttributes(element, d.Attributes(false)...)
 		var baseURL *url.URL
 		var baseHref string = fmt.Sprintf("%s", param.Value())
 		if !(strings.HasSuffix(baseHref, "/") || strings.HasSuffix(baseHref, "index.html")) {
@@ -71,7 +69,7 @@ func ResolveBasedAttributes(document *htdocument.Document, element *html.Node, a
 		w = os.Stdout
 	}
 
-	debug := htdocument.HasAttribute(element, HyperDebugAttributeStrings...)
+	debug := htdocument.HasAttribute(element, DebugDirective{}.Attributes(document.StrictMode)...)
 	selectors := fmt.Sprintf("[%[1]s]:not([data-ht-each] [%[1]s], [data-ht-each][%[1]s], [data-ht-base] [%[1]s], [data-ht-base][%[1]s])", attribute)
 	if !document.StrictMode {
 		selectors += fmt.Sprintf(":not([ht-each] [%[1]s], [ht-each][%[1]s], [ht-base] [%[1]s], [ht-base][%[1]s])", attribute)

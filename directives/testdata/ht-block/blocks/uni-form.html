@@ -35,7 +35,7 @@
             font-weight: bold;
         }
     </style>
-    <form ht-attrs='action:action; method:method; target:target'>
+    <form action='${ action, "" }' method='${ method, "" }' target='${ target, "" }' ht-apply>
         <form-group data-group='email'>
             <label for='email'>Email<span title='required' aria-label='required'> *</span></label>
             <input class='form-control' name='email' id='email' tabindex='101' type='email' placeholder='you@example.com' required>
@@ -50,7 +50,7 @@
         <form-group data-group='uid'><input class='form-control' name='uid' id='uid' tabindex='103' placeholder=' aria-label=' type='hidden' hidden></form-group>
         <form-group data-group='href'><input class='form-control' name='href' id='href' tabindex='104' placeholder=' aria-label=' type='hidden' hidden></form-group>
         <form-group>
-            <input class='form-control form-submit' id='form-submit' tabindex='105' type='submit' aria-label='Subscribe' value='Subscribe' ht-attrs='value:submit'>
+            <input class='form-control form-submit' id='form-submit' tabindex='105' type='submit' aria-label='Subscribe' value='${ submit, "Subscribe" }' ht-apply>
         </form-group>
     </form>
 </uni-form>

@@ -61,7 +61,7 @@ func Process(document *htdocument.Document, data *htdata.TemplateData, userData 
 		PipeDirective{},
 		EachDirective{},
 		ApplyDirective{},
-		AttrsDirective{},
+		AttributeMapDirective{},
 		BlockDirective{},
 		BaseDirective{},
 	}

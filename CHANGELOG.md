@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **BREAKING:** Replaced legacy `ht-attrs` declarations with repeatable map-valued `${ ... }` attributes applied in source order; later maps win conflicts and directive-valued map keys are skipped. Removed runtime `ht-attr`; `hyperctl theme migrate` converts compatible targeted singular declarations to ordinary templated attributes plus `ht-apply`, while unsupported singular and legacy plural syntax is reported for manual migration.
+* **BREAKING:** Removed exported directive attribute-name slices in favor of each directive's `Attributes` method.
+* Fixed same-element `ht-include` and `ht-each` processing so the fragment is included before loop expansion and clone-local variables resolve correctly.
 * Added `variable.ResolveValue` for typed `${ ... }` lookup resolution. Typed and rendered lookups share nil-only fallback semantics, preserving false, zero, empty strings, and empty containers; `RenderString` leaves strings unquoted and JSON-encodes other non-nil values.
 * Added `data.IsTruthy` and changed `TemplateData.Has` so false, nil, and empty strings or containers are false while all numbers, including zero, are true.
 * Added the `directives.Directive` interface and standardized core directive discovery and processing, including strict-mode aliases and document-order selector handling.

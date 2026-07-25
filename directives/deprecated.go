@@ -17,6 +17,7 @@ func (DeprecatedDirective) Attributes(_ bool) []string {
 	return []string{
 		"data-ht-not", "ht-not",
 		"data-ht-template", "ht-template",
+		"data-ht-attr", "ht-attr",
 		"data-ht-content", "ht-content",
 		"data-ht-param", "ht-param",
 		"data-ht-query", "ht-query",

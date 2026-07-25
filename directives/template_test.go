@@ -390,7 +390,7 @@ func TestRenderVariablesNakedKeypathsRemainLiteral(t *testing.T) {
 			if div == nil {
 				t.Fatalf("expected rendered output to include div; got:\n%s", htmlBytes)
 			}
-			if document.HasAttribute(div, HyperApplyAttributeStrings...) {
+			if document.HasAttribute(div, (ApplyDirective{}).Attributes(false)...) {
 				t.Fatalf("expected %s to be processed and removed; got:\n%s", tc.apply, htmlBytes)
 			}
 			if got := document.GetAttributeString(div, "data-source"); got != "page.sentinel" {

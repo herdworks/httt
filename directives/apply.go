@@ -13,8 +13,6 @@ import (
 	"golang.org/x/net/html"
 )
 
-var HyperApplyAttributeStrings = []string{"data-hyper-template", "hyper-template", "data-ht-apply", "ht-apply"}
-
 type ApplyDirective struct{}
 
 var _ Directive = ApplyDirective{} // make the compiler check Directive interface conformance
@@ -29,6 +27,13 @@ func (d ApplyDirective) Attributes(strict bool) []string {
 
 func (d ApplyDirective) Selectors(strict bool) []string {
 	return defaultDirectiveSelectors(d, strict)
+}
+
+func (ApplyDirective) reservedAttributeNames() []string {
+	return []string{
+		"data-ht-attrs", "ht-attrs",
+		"data-ht-base", "ht-base",
+	}
 }
 
 func (d ApplyDirective) Elements(document *htdocument.Document) []*html.Node {
@@ -52,7 +57,7 @@ func (d ApplyDirective) Process(document *htdocument.Document, element *html.Nod
 	funcs := document.Plugins.FuncMap()
 
 	for index, attribute := range element.Attr {
-		if slices.Contains(HyperApplyAttributeStrings, attribute.Key) {
+		if slices.Contains(d.Attributes(document.StrictMode), attribute.Key) || slices.Contains(d.reservedAttributeNames(), attribute.Key) {
 			continue
 		}
 		syntax := variable.SyntaxDefault
@@ -110,7 +115,7 @@ func (d ApplyDirective) Process(document *htdocument.Document, element *html.Nod
 	}
 
 	if document.TidyMode {
-		htdocument.RemoveAttributes(element, HyperApplyAttributeStrings...)
+		htdocument.RemoveAttributes(element, d.Attributes(false)...)
 	}
 
 	return nil

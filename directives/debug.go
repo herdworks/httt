@@ -13,8 +13,6 @@ import (
 	"golang.org/x/net/html"
 )
 
-var HyperDebugAttributeStrings = []string{"data-ht-debug", "ht-debug"}
-
 type DebugDirective struct{}
 
 var _ Directive = DebugDirective{} // make the compiler check Directive interface conformance
@@ -47,7 +45,7 @@ func (d DebugDirective) Process(document *htdocument.Document, element *html.Nod
 	}
 
 	var modes []string
-	modesString := strings.ReplaceAll(htdocument.GetAttribute(element, HyperDebugAttributeStrings...).Val, " ", "")
+	modesString := strings.ReplaceAll(htdocument.GetAttribute(element, d.Attributes(document.StrictMode)...).Val, " ", "")
 	if len(modesString) > 0 {
 		modes = strings.Split(modesString, ",")
 	}
@@ -64,6 +62,6 @@ func (d DebugDirective) Process(document *htdocument.Document, element *html.Nod
 	}
 	statement = fmt.Appendf(statement, "====================\n")
 	fmt.Fprintln(w, string(statement))
-	htdocument.RemoveAttributes(element, HyperDebugAttributeStrings...)
+	htdocument.RemoveAttributes(element, d.Attributes(false)...)
 	return nil
 }

@@ -100,8 +100,8 @@ func TestParamRequiresManualMigrationForAmbiguousReplacement(t *testing.T) {
 }
 
 func TestDefaultRulesContainConditionalTemplateParamContentAndDebugInPrecedenceOrder(t *testing.T) {
-	if len(migrate.DefaultRules) != 5 {
-		t.Fatalf("DefaultRules length = %d, want 5", len(migrate.DefaultRules))
+	if len(migrate.DefaultRules) != 7 {
+		t.Fatalf("DefaultRules length = %d, want 7", len(migrate.DefaultRules))
 	}
 	selectors := []string{
 		strings.Join(selectorStrings(migrate.DefaultRules[0]), ","),
@@ -109,8 +109,10 @@ func TestDefaultRulesContainConditionalTemplateParamContentAndDebugInPrecedenceO
 		strings.Join(selectorStrings(migrate.DefaultRules[2]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[3]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[4]), ","),
+		strings.Join(selectorStrings(migrate.DefaultRules[5]), ","),
+		strings.Join(selectorStrings(migrate.DefaultRules[6]), ","),
 	}
-	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-template],[data-ht-template];[ht-param],[data-ht-param];[ht-content],[data-ht-content];[ht-debug],[data-ht-debug]"; got != want {
+	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-template],[data-ht-template];[ht-attr],[data-ht-attr];[ht-attrs]:not([ht-attrs^=\"${\"]),[data-ht-attrs]:not([data-ht-attrs^=\"${\"]);[ht-param],[data-ht-param];[ht-content],[data-ht-content];[ht-debug],[data-ht-debug]"; got != want {
 		t.Fatalf("DefaultRules selectors = %q, want %q", got, want)
 	}
 }

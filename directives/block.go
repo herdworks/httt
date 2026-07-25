@@ -10,8 +10,6 @@ import (
 	"golang.org/x/net/html"
 )
 
-var HyperBlockAttributeStrings = []string{"data-ht-block", "ht-block"}
-
 type BlockDirective struct{}
 
 var _ Directive = BlockDirective{} // make the compiler check Directive interface conformance
@@ -68,7 +66,7 @@ func (d BlockDirective) Process(document *htdocument.Document, element *html.Nod
 	}
 
 	var implicitApply bool
-	if fragment.Type == html.ElementNode && !htdocument.HasAttribute(fragment, HyperApplyAttributeStrings...) {
+	if fragment.Type == html.ElementNode && !htdocument.HasAttribute(fragment, ApplyDirective{}.Attributes(document.StrictMode)...) {
 		implicitApply = true
 		htdocument.SetAttribute(fragment, "data-ht-apply", "")
 	}

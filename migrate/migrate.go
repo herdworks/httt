@@ -38,6 +38,8 @@ type Migration struct {
 var DefaultRules = []migrationrules.Rule{
 	migrationrules.Not{},
 	migrationrules.Template{},
+	migrationrules.Attr{},
+	migrationrules.Attrs{},
 	migrationrules.Param{},
 	migrationrules.Content{},
 	migrationrules.Debug{},

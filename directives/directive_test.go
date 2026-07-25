@@ -23,6 +23,7 @@ func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 			strict: []string{
 				"[data-ht-not]", "[ht-not]",
 				"[data-ht-template]", "[ht-template]",
+				"[data-ht-attr]", "[ht-attr]",
 				"[data-ht-content]", "[ht-content]",
 				"[data-ht-param]", "[ht-param]",
 				"[data-ht-query]", "[ht-query]",
@@ -30,6 +31,7 @@ func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 			legacy: []string{
 				"[data-ht-not]", "[ht-not]",
 				"[data-ht-template]", "[ht-template]",
+				"[data-ht-attr]", "[ht-attr]",
 				"[data-ht-content]", "[ht-content]",
 				"[data-ht-param]", "[ht-param]",
 				"[data-ht-query]", "[ht-query]",
@@ -78,16 +80,13 @@ func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 		},
 		{
 			name:      "attrs",
-			directive: AttrsDirective{},
+			directive: AttributeMapDirective{},
 			strict: []string{
 				"[data-ht-attrs]:not([data-ht-each] [data-ht-attrs], [data-ht-each][data-ht-attrs])",
-				"[data-ht-attr]:not([data-ht-each] [data-ht-attr], [data-ht-each][data-ht-attr])",
 			},
 			legacy: []string{
 				"[data-ht-attrs]:not([data-ht-each] [data-ht-attrs], [data-ht-each][data-ht-attrs]):not([ht-each] [data-ht-attrs], [ht-each][data-ht-attrs])",
-				"[data-ht-attr]:not([data-ht-each] [data-ht-attr], [data-ht-each][data-ht-attr]):not([ht-each] [data-ht-attr], [ht-each][data-ht-attr])",
 				"[ht-attrs]:not([ht-each] [ht-attrs], [ht-each][ht-attrs]):not([data-ht-each] [ht-attrs], [data-ht-each][ht-attrs])",
-				"[ht-attr]:not([ht-each] [ht-attr], [ht-each][ht-attr]):not([data-ht-each] [ht-attr], [data-ht-each][ht-attr])",
 			},
 		},
 		{

@@ -234,6 +234,39 @@ func TestEachDefersConditionalBaseAndIncludes(t *testing.T) {
 			t.Fatalf("include did not defer into item clones: %s", output)
 		}
 	})
+
+	t.Run("include on loop root", func(t *testing.T) {
+		document := setupBuiltinTest(t, `<!doctype html><html><body><link-button ht-include="fragments/link-button.html" ht-each="button in ${ buttons }"></link-button></body></html>`, map[string]string{
+			"fragments/link-button.html": `<link-button><a ht-apply href="${ button.href }">${ button.title }</a></link-button>`,
+		})
+		document.TidyMode = true
+		data := htdata.TemplateData{"buttons": []htdata.TemplateData{
+			{"href": "/one", "title": "One"},
+			{"href": "/two", "title": "Two"},
+		}}
+		output, err := Process(document, &data, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Count(string(output), `<a href="/one">One</a>`) != 1 || strings.Count(string(output), `<a href="/two">Two</a>`) != 1 {
+			t.Fatalf("root include did not resolve before loop expansion: %s", output)
+		}
+	})
+}
+
+func TestEachImplicitApplyPreservesAttrsSource(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`<html><head><meta ht-each="meta in ${ page.metadata }" ht-attrs="${ meta }"></head></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := htdata.TemplateData{"page": htdata.TemplateData{"metadata": []htdata.TemplateData{{"name": "og:video", "content": "https://example.com/video.mp4"}}}}
+	output, err := Process(&htdocument.Document{Layout: layout, TidyMode: true}, &data, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(output), `<meta content="https://example.com/video.mp4" name="og:video"/>`) {
+		t.Fatalf("ht-attrs source was not applied after iteration: %s", output)
+	}
 }
 
 func TestEachEmptySourcePlaceholderLifecycle(t *testing.T) {

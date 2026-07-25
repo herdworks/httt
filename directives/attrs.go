@@ -3,68 +3,149 @@ package directives
 import (
 	"fmt"
 	"io"
+	"reflect"
+	"sort"
 	"strings"
 
 	htdata "github.com/herdworks/hypertemplates-go/data"
 	htdocument "github.com/herdworks/hypertemplates-go/document"
+	"github.com/herdworks/hypertemplates-go/variable"
 	"golang.org/x/net/html"
 )
 
-var HyperAttrAttributeStrings = []string{"data-ht-attr", "ht-attr"}
-var HyperAttrsAttributeStrings = []string{"data-ht-attrs", "ht-attrs"}
+type AttributeMapDirective struct{}
 
-type AttrsDirective struct{}
-
-var _ Directive = AttrsDirective{} // make the compiler check Directive interface conformance
-
-func (d AttrsDirective) Attributes(strict bool) []string {
-	attributes := []string{"data-ht-attrs", "data-ht-attr"}
-	if !strict {
-		attributes = append(attributes, "ht-attrs", "ht-attr")
-	}
-	return attributes
+type Attr struct {
+	key   string
+	value any
 }
 
-func (d AttrsDirective) Selectors(strict bool) []string {
+var _ Directive = AttributeMapDirective{}           // make the compiler check Directive interface conformance
+var _ DirectiveExpression = AttributeMapDirective{} // make the compiler check DirectiveExpression interface conformance
+
+func (d AttributeMapDirective) Attributes(strict bool) []string {
+	if strict {
+		return []string{"data-ht-attrs"}
+	}
+	return []string{"data-ht-attrs", "ht-attrs"}
+}
+
+func (d AttributeMapDirective) Selectors(strict bool) []string {
 	return defaultDirectiveSelectors(d, strict)
 }
 
-func (d AttrsDirective) Elements(document *htdocument.Document) []*html.Node {
+func (d AttributeMapDirective) Elements(document *htdocument.Document) []*html.Node {
 	if document == nil {
 		return nil
 	}
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
-func (d AttrsDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
-	if document == nil {
-		return nil
+func (d AttributeMapDirective) Grammar() ExpressionGrammar {
+	// AttributeMapDirective accepts exactly one typed ${ ... } template variable and no operators.
+	return ExpressionGrammar{}
+}
+
+func (d AttributeMapDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) error {
+	directives := htdocument.GetAttributes(element, d.Attributes(document.StrictMode)...)
+	attributes, err := d.parseDirectives(directives, data)
+	if err != nil {
+		return fmt.Errorf("invalid attribute map on %s: %w", htdocument.ElementString(element), err)
 	}
-	paramString := htdocument.GetAttribute(element, HyperAttrsAttributeStrings...).Val
-	for _, attribute := range htdocument.GetAttributes(element, HyperAttrAttributeStrings...) {
-		paramString = strings.TrimSpace(paramString) + fmt.Sprintf("; %s", attribute.Val)
-	}
-	for _, param := range ParseParameters(paramString, data) {
-		rawValue := param.Value()
-		if rawValue == nil {
+	for _, attr := range attributes {
+		if d.skipAttribute(attr.key) || attr.value == nil {
 			continue
 		}
-		switch value := rawValue.(type) {
-		case htdata.TemplateData:
-			for k, v := range value {
-				htdocument.SetAttribute(element, k, fmt.Sprintf("%v", v))
-			}
-		case map[string]any:
-			for k, v := range value {
-				htdocument.SetAttribute(element, k, fmt.Sprintf("%v", v))
-			}
-		default:
-			htdocument.SetAttribute(element, param.Target, fmt.Sprintf("%v", value))
-		}
-		if document.TidyMode {
-			htdocument.RemoveAttributes(element, HyperAttrsAttributeStrings...)
-			htdocument.RemoveAttributes(element, HyperAttrAttributeStrings...)
-		}
+		htdocument.SetAttribute(element, attr.key, fmt.Sprint(attr.value))
+	}
+	if document.TidyMode {
+		htdocument.RemoveAttributes(element, d.Attributes(false)...)
 	}
 	return nil
+}
+
+func (d AttributeMapDirective) parseDirectives(directives []html.Attribute, data variable.Getter) (values []Attr, err error) {
+	for _, directive := range directives {
+		parsed, err := d.parseExpression(directive.Val, data)
+		if err != nil {
+			return nil, fmt.Errorf("%q: %w", directive.Key, err)
+		}
+		values = append(values, parsed...)
+	}
+	return values, nil
+}
+
+func (d AttributeMapDirective) parseExpression(expression string, data variable.Getter) ([]Attr, error) {
+	value, err := d.validateExpression(expression, data)
+	if err != nil || value == nil {
+		return nil, err
+	}
+	mapValue := reflect.ValueOf(value)
+	if mapValue.IsNil() {
+		return nil, nil
+	}
+	values := make([]Attr, 0, mapValue.Len())
+	iter := mapValue.MapRange()
+	for iter.Next() {
+		values = append(values, Attr{
+			key:   iter.Key().String(),
+			value: iter.Value().Interface(),
+		})
+	}
+	sort.Slice(values, func(left, right int) bool { return values[left].key < values[right].key })
+	return values, nil
+}
+
+func (d AttributeMapDirective) validateExpression(expression string, data variable.Getter) (any, error) {
+	tokens, err := Tokenizer(expression, d.Grammar())
+	if err != nil {
+		return nil, err
+	}
+	if len(tokens) != 1 || tokens[0].Kind != TokenVariable {
+		return nil, fmt.Errorf("expected exactly one ${ ... } variable")
+	}
+	value, err := variable.ResolveValue(tokens[0].Raw, data)
+	if err != nil {
+		return nil, err
+	}
+	if value == nil {
+		return nil, nil
+	}
+	mapValue := reflect.ValueOf(value)
+	if mapValue.Kind() != reflect.Map || mapValue.Type().Key().Kind() != reflect.String {
+		return nil, fmt.Errorf("expected a string-keyed map")
+	}
+	return value, nil
+}
+
+func (d AttributeMapDirective) skipAttribute(key string) bool {
+	for _, reserved := range d.reservedAttributeNames() {
+		if strings.EqualFold(key, reserved) {
+			return true
+		}
+	}
+	return false
+}
+
+func (d AttributeMapDirective) reservedAttributeNames() []string {
+	return []string{
+		"data-ht-not", "ht-not",
+		"data-ht-template", "ht-template",
+		"data-ht-content", "ht-content",
+		"data-ht-param", "ht-param",
+		"data-ht-query", "ht-query",
+		"data-ht-attr", "ht-attr",
+		"data-ht-attrs", "ht-attrs",
+		"data-ht-if", "ht-if",
+		"data-ht-debug", "ht-debug",
+		"data-ht-pipe", "ht-pipe",
+		"data-ht-each", "ht-each",
+		"data-ht-offset", "ht-offset",
+		"data-ht-limit", "ht-limit",
+		"data-ht-apply", "ht-apply",
+		"data-hyper-template", "hyper-template",
+		"data-ht-block", "ht-block",
+		"data-ht-base", "ht-base",
+		"data-ht-include", "ht-include",
+	}
 }
