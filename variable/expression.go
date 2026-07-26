@@ -48,9 +48,9 @@ const (
 func (expr *expression) evaluate(data Getter, funcs FuncMap) (any, error) {
 	switch expr.name {
 	case getFuncName:
-		return expr.resolveFallback(data), nil
+		return expr.resolveArguments(data), nil
 	case textFuncName, markdownFuncName:
-		value := expr.resolveFallback(data)
+		value := expr.resolveArguments(data)
 		if nilValue(value) {
 			return nil, nil
 		}
@@ -64,10 +64,13 @@ func (expr *expression) evaluate(data Getter, funcs FuncMap) (any, error) {
 	}
 }
 
-func (expr *expression) resolveFallback(data Getter) any {
+func (expr *expression) resolveArguments(data Getter) any {
 	for _, argument := range expr.arguments {
 		value := argument.resolve(data)
-		if !nilValue(value) {
+		if argument.isLiteral {
+			return value
+		}
+		if !emptyValue(value) {
 			return value
 		}
 	}
@@ -421,9 +424,7 @@ func parseArgument(source string) (argument, error) {
 		return argument{literal: true, isLiteral: true}, nil
 	case "false":
 		return argument{literal: false, isLiteral: true}, nil
-	case "null":
-		return argument{literal: nil, isLiteral: true}, nil
-	case "undefined", "nil", "NaN", "Infinity", "+Infinity", "-Infinity":
+	case "null", "undefined", "nil", "NaN", "Infinity", "+Infinity", "-Infinity":
 		return argument{}, fmt.Errorf("%w: unsupported literal %q", errInvalidVariable, source)
 	}
 	if looksNumeric(source) {

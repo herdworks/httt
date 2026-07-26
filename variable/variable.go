@@ -23,15 +23,15 @@ type FuncMap = texttemplate.FuncMap
 
 // ResolveValue resolves exactly one default-syntax get expression. The
 // expression may use either implicit get syntax or get(...), but every
-// argument must be a keypath. It returns the first non-nil Go value without
-// rendering or converting it to a string.
+// argument must be a keypath. It returns the first non-empty template-data
+// value without rendering or converting it to a string.
 func ResolveValue(source string, data Getter) (any, error) {
 	expression, err := parseTypedExpression(source)
 	if err != nil {
 		return nil, err
 	}
 
-	return expression.resolveFallback(data), nil
+	return expression.resolveArguments(data), nil
 }
 
 // RenderString evaluates template variables and interpolates their values into
@@ -112,6 +112,17 @@ func nilValue(value any) bool {
 	default:
 		return false
 	}
+}
+
+// emptyValue reports whether a value obtained from template data is absent for
+// fallback selection. Explicit literals intentionally use nilValue instead so
+// a final "" fallback remains a valid author-provided value.
+func emptyValue(value any) bool {
+	if nilValue(value) {
+		return true
+	}
+	stringValue, ok := value.(string)
+	return ok && stringValue == ""
 }
 
 func stringify(value any) (string, error) {

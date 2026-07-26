@@ -1,9 +1,9 @@
 package directives
 
 import (
+	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -16,6 +16,7 @@ const (
 	TokenLiteral TokenKind = iota
 	TokenVariable
 	TokenOperator
+	TokenDelimiter
 )
 
 // Token preserves one expression token and its byte range in the source.
@@ -32,178 +33,267 @@ type Tokens []Token
 // syntax. Operators are exact and case-sensitive. Multi-word operators match
 // their words with one or more whitespace characters between them.
 type ExpressionGrammar struct {
-	Operators           []string
+	Operators []string
+	// Separator is emitted as a TokenDelimiter. Like a word operator, it is
+	// case-sensitive and whitespace-delimited.
+	Separator           string
 	AllowQuotedLiterals bool
-}
-
-// CompiledExpressionGrammar is an immutable, tokenization-ready grammar.
-type CompiledExpressionGrammar struct {
-	operators           []grammarOperator
-	allowQuotedLiterals bool
-}
-
-type grammarOperator struct {
-	raw      string
-	words    []string
-	symbolic bool
+	// MaxTokens limits tokens in one expression segment. When Separator is
+	// configured, each delimiter-bounded segment has its own limit. Zero
+	// permits any number of tokens.
+	MaxTokens int
 }
 
 func (tokens Tokens) ContainsVariable() bool {
 	return slices.ContainsFunc(tokens, Token.IsVariable)
 }
 
-func (token Token) IsVariable() bool { return token.Kind == TokenVariable }
-func (token Token) IsOperand() bool  { return token.Kind == TokenVariable || token.Kind == TokenLiteral }
-func (token Token) IsOperator() bool { return token.Kind == TokenOperator }
-
-// CompileExpressionGrammar validates and compiles a grammar for reuse.
-func CompileExpressionGrammar(grammar ExpressionGrammar) (CompiledExpressionGrammar, error) {
-	operators, err := tokenizeOperators(grammar)
-	if err != nil {
-		return CompiledExpressionGrammar{}, err
-	}
-	return CompiledExpressionGrammar{operators: operators, allowQuotedLiterals: grammar.AllowQuotedLiterals}, nil
-}
-
-// MustCompileExpressionGrammar compiles a static grammar or panics.
-func MustCompileExpressionGrammar(grammar ExpressionGrammar) CompiledExpressionGrammar {
-	compiled, err := CompileExpressionGrammar(grammar)
-	if err != nil {
-		panic(err)
-	}
-	return compiled
-}
+func (token Token) IsVariable() bool  { return token.Kind == TokenVariable }
+func (token Token) IsOperand() bool   { return token.Kind == TokenVariable || token.Kind == TokenLiteral }
+func (token Token) IsOperator() bool  { return token.Kind == TokenOperator }
+func (token Token) IsDelimiter() bool { return token.Kind == TokenDelimiter }
 
 // Tokenizer tokenizes one directive expression according to grammar.
 func Tokenizer(expression string, grammar ExpressionGrammar) ([]Token, error) {
-	compiled, err := CompileExpressionGrammar(grammar)
-	if err != nil {
+	if err := validateExpressionGrammar(grammar); err != nil {
 		return nil, err
 	}
-	return compiled.Tokenize(expression)
+	return tokenizeExpression(expression, grammar)
 }
 
-func (grammar CompiledExpressionGrammar) Tokenize(expression string) ([]Token, error) {
-	var tokens []Token
+func tokenizeExpression(expression string, grammar ExpressionGrammar) ([]Token, error) {
+	if grammar.MaxTokens > 0 && grammar.Separator == "" {
+		return tokenizeBoundedExpression(expression, grammar)
+	}
+
+	count := 0
+	segmentCount := 0
 	for cursor := 0; cursor < len(expression); {
 		cursor = skipExpressionWhitespace(expression, cursor)
 		if cursor == len(expression) {
 			break
 		}
-		start := cursor
-		if strings.HasPrefix(expression[cursor:], "${") {
-			end, err := scanVariableToken(expression, cursor)
-			if err != nil {
-				return nil, err
-			}
-			tokens = append(tokens, Token{Kind: TokenVariable, Raw: expression[start:end], Start: start, End: end})
-			cursor = end
-			continue
+		token, end, err := tokenAt(expression, cursor, grammar)
+		if err != nil {
+			return nil, err
 		}
-		if expression[cursor] == '\'' || expression[cursor] == '"' {
-			if !grammar.allowQuotedLiterals {
-				return nil, fmt.Errorf("quoted literals are not allowed at byte %d", cursor)
+		count++
+		if token.IsDelimiter() {
+			segmentCount = 0
+		} else {
+			segmentCount++
+			if grammar.MaxTokens > 0 && segmentCount > grammar.MaxTokens {
+				return nil, fmt.Errorf("expression segment exceeds maximum of %d tokens", grammar.MaxTokens)
 			}
-			end, err := scanQuotedToken(expression, cursor)
-			if err != nil {
-				return nil, err
-			}
-			tokens = append(tokens, Token{Kind: TokenLiteral, Raw: expression[start:end], Quoted: true, Start: start, End: end})
-			cursor = end
-			continue
 		}
-		if _, end, ok := matchOperator(expression, cursor, grammar.operators); ok {
-			tokens = append(tokens, Token{Kind: TokenOperator, Raw: expression[start:end], Start: start, End: end})
-			cursor = end
-			continue
+		cursor = end
+	}
+	tokens := make([]Token, 0, count)
+	for cursor := 0; cursor < len(expression); {
+		cursor = skipExpressionWhitespace(expression, cursor)
+		if cursor == len(expression) {
+			break
 		}
-
-		cursor = scanLiteralToken(expression, cursor, grammar.operators)
-		tokens = append(tokens, Token{Kind: TokenLiteral, Raw: expression[start:cursor], Start: start, End: cursor})
+		token, end, err := tokenAt(expression, cursor, grammar)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, token)
+		cursor = end
 	}
 	return tokens, nil
 }
 
-func tokenizeOperators(grammar ExpressionGrammar) ([]grammarOperator, error) {
-	operators := make([]grammarOperator, 0, len(grammar.Operators))
+// TokenizeNext tokenizes one separator-bounded expression segment. It
+// consumes the separator and returns the source after it. The returned tokens
+// are lexical only; callers choose whether and when to validate their shape.
+func TokenizeNext(expression string, grammar ExpressionGrammar) (remainder string, tokens []Token, err error) {
+	if err := validateExpressionGrammar(grammar); err != nil {
+		return "", nil, err
+	}
+	return tokenizeNextExpression(expression, grammar)
+}
+
+func tokenizeBoundedExpression(expression string, grammar ExpressionGrammar) ([]Token, error) {
+	if skipExpressionWhitespace(expression, 0) == len(expression) {
+		return make([]Token, 0), nil
+	}
+	_, tokens, err := tokenizeNextExpression(expression, grammar)
+	return tokens, err
+}
+
+func tokenizeNextExpression(expression string, grammar ExpressionGrammar) (string, []Token, error) {
+	cursor := skipExpressionWhitespace(expression, 0)
+	if cursor == len(expression) {
+		return "", nil, errors.New("expression requires at least one token")
+	}
+
+	capacity := grammar.MaxTokens
+	if capacity == 0 {
+		capacity = 1
+	}
+	tokens := make([]Token, 0, capacity)
+	for cursor < len(expression) {
+		token, end, err := tokenAt(expression, cursor, grammar)
+		if err != nil {
+			return "", nil, err
+		}
+		if token.IsDelimiter() {
+			if len(tokens) == 0 {
+				return "", nil, errors.New("expression separator must follow a statement")
+			}
+			remainder := expression[end:]
+			next := skipExpressionWhitespace(remainder, 0)
+			if next == len(remainder) {
+				return "", nil, errors.New("expression separator must be followed by a statement")
+			}
+			if _, repeated := matchExpressionOperator(remainder, next, grammar.Separator); repeated {
+				return "", nil, errors.New("expression separator must be followed by a statement")
+			}
+			return remainder, tokens, nil
+		}
+		if grammar.MaxTokens > 0 && len(tokens) == grammar.MaxTokens {
+			return "", nil, fmt.Errorf("expression segment exceeds maximum of %d tokens", grammar.MaxTokens)
+		}
+		tokens = append(tokens, token)
+		cursor = skipExpressionWhitespace(expression, end)
+	}
+	return "", tokens, nil
+}
+
+func tokenAt(expression string, start int, grammar ExpressionGrammar) (Token, int, error) {
+	if strings.HasPrefix(expression[start:], "${") {
+		end, err := scanVariableToken(expression, start)
+		if err != nil {
+			return Token{}, 0, err
+		}
+		return Token{Kind: TokenVariable, Raw: expression[start:end], Start: start, End: end}, end, nil
+	}
+	if expression[start] == '\'' || expression[start] == '"' {
+		if !grammar.AllowQuotedLiterals {
+			return Token{}, 0, fmt.Errorf("quoted literals are not allowed at byte %d", start)
+		}
+		end, err := scanQuotedToken(expression, start)
+		if err != nil {
+			return Token{}, 0, err
+		}
+		return Token{Kind: TokenLiteral, Raw: expression[start:end], Quoted: true, Start: start, End: end}, end, nil
+	}
+	if grammar.Separator != "" {
+		if end, ok := matchExpressionOperator(expression, start, grammar.Separator); ok {
+			return Token{Kind: TokenDelimiter, Raw: expression[start:end], Start: start, End: end}, end, nil
+		}
+	}
+	if end, _, ok := matchExpressionOperators(expression, start, grammar.Operators); ok {
+		return Token{Kind: TokenOperator, Raw: expression[start:end], Start: start, End: end}, end, nil
+	}
+	end := scanLiteralToken(expression, start, grammar.Operators)
+	return Token{Kind: TokenLiteral, Raw: expression[start:end], Start: start, End: end}, end, nil
+}
+
+func validateExpressionGrammar(grammar ExpressionGrammar) error {
+	if grammar.MaxTokens < 0 {
+		return fmt.Errorf("expression grammar maximum tokens cannot be negative")
+	}
 	seen := map[string]bool{}
 	for _, raw := range grammar.Operators {
 		words := strings.Fields(raw)
 		if len(words) == 0 {
-			return nil, fmt.Errorf("expression grammar contains an empty operator")
+			return fmt.Errorf("expression grammar contains an empty operator")
 		}
 		canonical := strings.Join(words, " ")
 		if seen[canonical] {
-			return nil, fmt.Errorf("expression grammar contains an ambiguous operator %q", raw)
+			return fmt.Errorf("expression grammar contains an ambiguous operator %q", raw)
 		}
 		seen[canonical] = true
-		operators = append(operators, grammarOperator{raw: canonical, words: words, symbolic: !operatorWords(words)})
 	}
-	sort.SliceStable(operators, func(left, right int) bool {
-		return len(operators[left].raw) > len(operators[right].raw)
-	})
-	return operators, nil
+	if grammar.Separator != "" && !expressionWordOperator(grammar.Separator) {
+		return fmt.Errorf("expression grammar separator %q must be a word operator", grammar.Separator)
+	}
+	return nil
 }
 
-func operatorWords(words []string) bool {
-	for _, word := range words {
-		for _, char := range word {
-			if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' {
-				return false
-			}
+func expressionWordOperator(operator string) bool {
+	for _, char := range operator {
+		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' && !unicode.IsSpace(char) {
+			return false
 		}
 	}
 	return true
 }
 
-func matchOperator(expression string, start int, operators []grammarOperator) (grammarOperator, int, bool) {
+func matchExpressionOperators(expression string, start int, operators []string) (int, bool, bool) {
+	bestEnd := start
+	bestSymbolic := false
 	for _, operator := range operators {
-		if operator.symbolic {
-			if strings.HasPrefix(expression[start:], operator.raw) {
-				return operator, start + len(operator.raw), true
-			}
+		if len(operator) == 0 || operator[0] != expression[start] {
 			continue
 		}
-		if start > 0 && !expressionWhitespaceBefore(expression, start) {
-			continue
-		}
-		cursor := start
-		matched := true
-		for index, word := range operator.words {
-			if !strings.HasPrefix(expression[cursor:], word) {
-				matched = false
-				break
-			}
-			cursor += len(word)
-			if index < len(operator.words)-1 {
-				next := skipExpressionWhitespace(expression, cursor)
-				if next == cursor {
-					matched = false
-					break
-				}
-				cursor = next
-			}
-		}
-		if matched && (cursor == len(expression) || expressionWhitespaceAt(expression, cursor)) {
-			return operator, cursor, true
+		if end, ok := matchExpressionOperator(expression, start, operator); ok && end > bestEnd {
+			bestEnd = end
+			bestSymbolic = expressionSymbolicStart(operator, 0)
 		}
 	}
-	return grammarOperator{}, start, false
+	return bestEnd, bestSymbolic, bestEnd > start
 }
 
-func scanLiteralToken(expression string, start int, operators []grammarOperator) int {
+func matchExpressionOperator(expression string, start int, operator string) (int, bool) {
+	if expressionSymbolicStart(operator, 0) {
+		if strings.HasPrefix(expression[start:], operator) {
+			return start + len(operator), true
+		}
+		return start, false
+	}
+	if start > 0 && !expressionWhitespaceBefore(expression, start) {
+		return start, false
+	}
+	cursor := start
+	for index := 0; index < len(operator); {
+		wordStart := index
+		for index < len(operator) && !expressionWhitespaceAt(operator, index) {
+			_, size := utf8.DecodeRuneInString(operator[index:])
+			index += size
+		}
+		word := operator[wordStart:index]
+		if word == "" || !strings.HasPrefix(expression[cursor:], word) {
+			return start, false
+		}
+		cursor += len(word)
+		if index < len(operator) {
+			for index < len(operator) && expressionWhitespaceAt(operator, index) {
+				_, size := utf8.DecodeRuneInString(operator[index:])
+				index += size
+			}
+			next := skipExpressionWhitespace(expression, cursor)
+			if next == cursor {
+				return start, false
+			}
+			cursor = next
+		}
+	}
+	return cursor, cursor == len(expression) || expressionWhitespaceAt(expression, cursor)
+}
+
+func scanLiteralToken(expression string, start int, operators []string) int {
 	cursor := start
 	for cursor < len(expression) {
 		if expressionWhitespaceAt(expression, cursor) || strings.HasPrefix(expression[cursor:], "${") || expression[cursor] == '\'' || expression[cursor] == '"' {
 			break
 		}
-		if operator, _, ok := matchOperator(expression, cursor, operators); ok && operator.symbolic {
-			break
+		if expressionSymbolicStart(expression, cursor) {
+			if _, symbolic, ok := matchExpressionOperators(expression, cursor, operators); ok && symbolic {
+				break
+			}
 		}
 		_, size := utf8.DecodeRuneInString(expression[cursor:])
 		cursor += size
 	}
 	return cursor
+}
+
+func expressionSymbolicStart(expression string, start int) bool {
+	char, _ := utf8.DecodeRuneInString(expression[start:])
+	return !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_'
 }
 
 func scanVariableToken(expression string, start int) (int, error) {

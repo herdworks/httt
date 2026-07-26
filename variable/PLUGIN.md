@@ -31,7 +31,7 @@ ${ fmtdate(page.updated_at, page.created_at, "YYYY-MM-DD") }
 ```
 
 Every unquoted argument is resolved through `Getter.Get`. Quoted strings,
-booleans, finite numbers, and `null` are passed as literal values. Plugins
+booleans, and finite numbers are passed as literal values. Plugins
 receive all values in source order, including nil values for missing keypaths.
 They own their argument validation, coercion, fallback, and pass-through policy.
 

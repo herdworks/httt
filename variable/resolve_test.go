@@ -17,17 +17,16 @@ func (getter *recordingGetter) Get(keypath string) any {
 
 func TestResolveValuePreservesTypedValues(t *testing.T) {
 	values := map[string]any{
-		"value.map":          map[string]any{"key": "value"},
-		"value.slice":        []string{"one", "two"},
-		"value.array":        [2]int{1, 2},
-		"value.string":       "text",
-		"value.bool":         false,
-		"value.int":          0,
-		"value.empty_string": "",
-		"value.empty_map":    map[string]any{},
-		"value.empty_slice":  []any{},
-		"value.empty_array":  [0]string{},
-		"value.length()":     2,
+		"value.map":         map[string]any{"key": "value"},
+		"value.slice":       []string{"one", "two"},
+		"value.array":       [2]int{1, 2},
+		"value.string":      "text",
+		"value.bool":        false,
+		"value.int":         0,
+		"value.empty_map":   map[string]any{},
+		"value.empty_slice": []any{},
+		"value.empty_array": [0]string{},
+		"value.length()":    2,
 	}
 
 	for keypath, want := range values {
@@ -47,23 +46,39 @@ func TestResolveValuePreservesTypedValues(t *testing.T) {
 	}
 }
 
-func TestResolveValueUsesOrderedNonNilFallback(t *testing.T) {
+func TestResolveValueTreatsEmptyStringAsMissing(t *testing.T) {
+	getter := &recordingGetter{values: map[string]any{"value.empty_string": ""}}
+
+	got, err := ResolveValue("${ value.empty_string }", getter)
+	if err != nil {
+		t.Fatalf("ResolveValue() error = %v", err)
+	}
+	if got != nil {
+		t.Fatalf("ResolveValue() = %#v, want nil", got)
+	}
+	if !reflect.DeepEqual(getter.calls, []string{"value.empty_string"}) {
+		t.Fatalf("Get calls = %v, want [value.empty_string]", getter.calls)
+	}
+}
+
+func TestResolveValueUsesOrderedNonEmptyDataFallback(t *testing.T) {
 	var nilSlice []string
 	getter := &recordingGetter{values: map[string]any{
 		"first":  nil,
 		"second": nilSlice,
-		"third":  false,
-		"fourth": "unreached",
+		"third":  "",
+		"fourth": false,
+		"fifth":  "unreached",
 	}}
 
-	got, err := ResolveValue("${ first, second, third, fourth }", getter)
+	got, err := ResolveValue("${ first, second, third, fourth, fifth }", getter)
 	if err != nil {
 		t.Fatalf("ResolveValue() error = %v", err)
 	}
 	if got != false {
 		t.Fatalf("ResolveValue() = %#v, want false", got)
 	}
-	wantCalls := []string{"first", "second", "third"}
+	wantCalls := []string{"first", "second", "third", "fourth"}
 	if !reflect.DeepEqual(getter.calls, wantCalls) {
 		t.Fatalf("Get calls = %v, want %v", getter.calls, wantCalls)
 	}

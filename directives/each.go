@@ -18,12 +18,11 @@ import (
 // EachDirective expands one element for every item in an explicit typed source.
 type EachDirective struct{}
 
-var eachGrammar = MustCompileExpressionGrammar(ExpressionGrammar{Operators: []string{"in"}})
-
 var _ Directive = EachDirective{}           // make the compiler check Directive interface conformance
 var _ DirectiveExpression = EachDirective{} // make the compiler check DirectiveExpression interface conformance
 
 var bindingSyntax = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var eachExpressionGrammar = ExpressionGrammar{Operators: []string{"in"}, MaxTokens: 3}
 
 func (EachDirective) Attributes(strict bool) []string {
 	attributes := []string{"data-ht-each"}
@@ -73,8 +72,8 @@ func (d EachDirective) Elements(document *htdocument.Document) []*html.Node {
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
-func (EachDirective) Grammar() CompiledExpressionGrammar {
-	return eachGrammar
+func (EachDirective) ParseExpression(expression string) ([]Token, error) {
+	return tokenizeExpression(expression, eachExpressionGrammar)
 }
 
 func (d EachDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) (err error) {
@@ -141,8 +140,11 @@ func (d EachDirective) Process(document *htdocument.Document, element *html.Node
 }
 
 func (d EachDirective) expressionParser(expression string, data htvariable.Getter) (binding string, values []any, err error) {
-	tokens, err := ParseDirectiveExpression(d, expression)
+	tokens, err := d.ParseExpression(expression)
 	if err != nil {
+		return "", nil, err
+	}
+	if err := d.ValidateExpression(tokens); err != nil {
 		return "", nil, err
 	}
 	binding = tokens[0].Raw

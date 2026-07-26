@@ -15,8 +15,6 @@ import (
 
 type AttributeMapDirective struct{}
 
-var attributeMapGrammar = MustCompileExpressionGrammar(ExpressionGrammar{})
-
 type Attr struct {
 	key   string
 	value any
@@ -24,6 +22,8 @@ type Attr struct {
 
 var _ Directive = AttributeMapDirective{}           // make the compiler check Directive interface conformance
 var _ DirectiveExpression = AttributeMapDirective{} // make the compiler check DirectiveExpression interface conformance
+
+var attributeMapExpressionGrammar = ExpressionGrammar{MaxTokens: 1}
 
 func (d AttributeMapDirective) Attributes(strict bool) []string {
 	if strict {
@@ -43,8 +43,8 @@ func (d AttributeMapDirective) Elements(document *htdocument.Document) []*html.N
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
-func (d AttributeMapDirective) Grammar() CompiledExpressionGrammar {
-	return attributeMapGrammar
+func (AttributeMapDirective) ParseExpression(expression string) ([]Token, error) {
+	return tokenizeExpression(expression, attributeMapExpressionGrammar)
 }
 
 func (AttributeMapDirective) ValidateExpression(tokens []Token) error {
@@ -84,8 +84,11 @@ func (d AttributeMapDirective) parseDirectives(directives []html.Attribute, data
 }
 
 func (d AttributeMapDirective) parseExpression(expression string, data variable.Getter) ([]Attr, error) {
-	tokens, err := ParseDirectiveExpression(d, expression)
+	tokens, err := d.ParseExpression(expression)
 	if err != nil {
+		return nil, err
+	}
+	if err := d.ValidateExpression(tokens); err != nil {
 		return nil, err
 	}
 	value, err := variable.ResolveValue(tokens[0].Raw, data)

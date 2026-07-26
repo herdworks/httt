@@ -16,7 +16,7 @@ func TestRenderCSS(t *testing.T) {
 		{name: "keypath", source: `.a { color: --ht-var("theme.color"); }`, want: `.a { color: red; }`},
 		{name: "missing fallback", source: `--ht-var("theme.missing", blue)`, want: "blue"},
 		{name: "quoted fallback", source: `--ht-var('theme.missing', 'rgb(1, 2, 3)')`, want: "rgb(1, 2, 3)"},
-		{name: "empty does not fall through", source: `--ht-var("theme.empty", blue)`, want: ""},
+		{name: "empty uses fallback", source: `--ht-var("theme.empty", blue)`, want: "blue"},
 		{name: "multiple", source: `--ht-var("theme.color")/--ht-var("theme.missing", x)`, want: "red/x"},
 		{name: "non-boundary", source: `x--ht-var("theme.color")`, want: `x--ht-var("theme.color")`},
 	}

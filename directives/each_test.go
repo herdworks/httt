@@ -320,7 +320,7 @@ func TestEachExpressionParser(t *testing.T) {
 		{name: "whitespace", expression: "\titem\t in\n${ page.items, archive.items } ", binding: "item", values: []any{"page item"}},
 		{name: "uppercase operator", expression: "item IN ${ page.items }", wantErr: "expected iteration operator as the second token"},
 		{name: "missing variable", expression: "item in", wantErr: "expected exactly three tokens"},
-		{name: "extra literal", expression: "item in ${ page.items } extra", wantErr: "expected exactly three tokens"},
+		{name: "extra literal", expression: "item in ${ page.items } extra", wantErr: "exceeds maximum of 3 tokens"},
 		{name: "unterminated variable", expression: "item in ${ page.items", wantErr: "unterminated variable"},
 		{name: "wrong token order", expression: "${ page.items } in item", wantErr: "expected iteration binding as the first token"},
 		{name: "non-operator second token", expression: "item ${ page.items } in", wantErr: "expected iteration operator as the second token"},

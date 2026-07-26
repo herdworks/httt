@@ -7,9 +7,8 @@ import (
 	"io"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	htdata "github.com/herdworks/hypertemplates-go/data"
 	htdocument "github.com/herdworks/hypertemplates-go/document"
@@ -20,6 +19,8 @@ import (
 type ConditionalDirective struct{}
 
 var _ Directive = ConditionalDirective{} // make the compiler check Directive interface conformance
+var _ DirectiveExpression = ConditionalDirective{}
+var _ IncrementalDirectiveExpression = ConditionalDirective{}
 
 type conditionalStatement struct {
 	source   string
@@ -40,6 +41,35 @@ const (
 	conditionalNotIn         conditionalOperator = "not in"
 )
 
+var conditionalExpressionGrammar = ExpressionGrammar{
+	Operators:           []string{"not in", "in", "==", "!=", "=!", "=~", "~=", "!~", "~!", "!"},
+	Separator:           "OR",
+	AllowQuotedLiterals: true,
+	MaxTokens:           3,
+}
+
+type conditionalExpression struct {
+	statements [8]conditionalStatement
+	overflow   []conditionalStatement
+	count      int
+}
+
+func (expression *conditionalExpression) append(statement conditionalStatement) {
+	if expression.count < len(expression.statements) {
+		expression.statements[expression.count] = statement
+	} else {
+		expression.overflow = append(expression.overflow, statement)
+	}
+	expression.count++
+}
+
+func (expression *conditionalExpression) at(index int) conditionalStatement {
+	if index < len(expression.statements) {
+		return expression.statements[index]
+	}
+	return expression.overflow[index-len(expression.statements)]
+}
+
 func (d ConditionalDirective) Attributes(strict bool) []string {
 	attributes := []string{"data-ht-if"}
 	if !strict {
@@ -56,6 +86,25 @@ func (d ConditionalDirective) Elements(document *htdocument.Document) []*html.No
 	}
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
+
+// ParseExpression tokenizes an entire conditional expression. It preserves a
+// flat token stream so all OR branches can be validated before evaluation.
+func (ConditionalDirective) ParseExpression(source string) ([]Token, error) {
+	return tokenizeExpression(source, conditionalExpressionGrammar)
+}
+
+// ParseNextExpression tokenizes one OR-bounded conditional statement. It is
+// available to callers that need bounded incremental parsing; Process keeps
+// the eager whole-expression path to preserve ht-if validation semantics.
+func (ConditionalDirective) ParseNextExpression(source string) (remainder string, tokens []Token, err error) {
+	return tokenizeNextExpression(source, conditionalExpressionGrammar)
+}
+
+// ValidateExpression checks every conditional statement without resolving
+// values, rendering plugins, or compiling regular expressions.
+func (ConditionalDirective) ValidateExpression(tokens []Token) error {
+	return validateConditionalTokenGroups(tokens)
+}
 func (d ConditionalDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
 	if document == nil {
 		return nil
@@ -71,30 +120,28 @@ func (d ConditionalDirective) Process(document *htdocument.Document, element *ht
 		if strings.TrimSpace(attribute.Val) == "" {
 			return wrapConditionalError(attribute, element, errors.New("ht-if directives require a non-empty conditional expression"))
 		}
-		var statement *conditionalStatement
-		expression := attribute.Val
-		for {
-			// iterate over condition expression statements
-			if expression, statement, err = nextConditionalStatement(expression); err != nil {
-				return wrapConditionalError(attribute, element, err)
-			}
-			if statement == nil {
-				// we have reached the end of the expression and no statements returned true
-				// TODO: use ht-hidden and data-ht-hidden for untidy conditional elements
-				htdocument.SetAttribute(element, "hidden", "true")
-				if document.TidyMode {
-					htdocument.RemoveElement(element)
-				}
-				return nil
-			}
-
-			truthy, err := evaluateConditionalStatement(*statement, data, funcs)
+		var expression conditionalExpression
+		if err := parseConditionalExpression(attribute.Val, &expression); err != nil {
+			return wrapConditionalError(attribute, element, err)
+		}
+		matched := false
+		for index := 0; index < expression.count; index++ {
+			truthy, err := evaluateConditionalStatement(expression.at(index), data, funcs)
 			if err != nil {
 				return wrapConditionalError(attribute, element, err)
 			}
 			if truthy {
-				break // the condition returned true
+				matched = true
+				break
 			}
+		}
+		if !matched {
+			// TODO: use ht-hidden and data-ht-hidden for untidy conditional elements
+			htdocument.SetAttribute(element, "hidden", "true")
+			if document.TidyMode {
+				htdocument.RemoveElement(element)
+			}
+			return nil
 		}
 	}
 	if !document.TidyMode {
@@ -106,53 +153,75 @@ func (d ConditionalDirective) Process(document *htdocument.Document, element *ht
 	return nil
 }
 
-func nextConditionalStatement(expression string) (string, *conditionalStatement, error) {
-	expression = strings.TrimSpace(expression)
-	if expression == "" {
-		return "", nil, nil
-	}
-	if strings.HasPrefix(expression, "OR") && (len(expression) == len("OR") || conditionalWhitespaceAfter(expression, len("OR"))) {
-		expression = strings.TrimSpace(expression[len("OR"):])
-		if expression == "" {
-			return "", nil, errors.New("conditional OR must be followed by a statement")
-		}
-		if strings.HasPrefix(expression, "OR") && (len(expression) == len("OR") || conditionalWhitespaceAfter(expression, len("OR"))) {
-			return "", nil, errors.New("conditional OR must be followed by a statement")
-		}
-	}
-
-	for cursor := 0; cursor < len(expression); {
-		if strings.HasPrefix(expression[cursor:], "${") {
-			end := skipConditionalVariable(expression, cursor)
-			if end == 0 {
-				break
-			}
-			cursor = end
-			continue
-		}
-		if expression[cursor] == '\'' || expression[cursor] == '"' {
-			end := skipConditionalQuote(expression, cursor)
-			if end == 0 {
-				break
-			}
-			cursor = end
-			continue
-		}
-		if expression[cursor] == 'O' && cursor+1 < len(expression) && expression[cursor:cursor+2] == "OR" && conditionalWhitespaceBefore(expression, cursor) && (cursor+2 == len(expression) || conditionalWhitespaceAfter(expression, cursor+2)) {
-			statement, err := parseConditionalStatement(expression[:cursor])
-			if err != nil {
-				return "", nil, err
-			}
-			return strings.TrimSpace(expression[cursor:]), &statement, nil
-		}
-		_, size := utf8.DecodeRuneInString(expression[cursor:])
-		cursor += size
-	}
-	statement, err := parseConditionalStatement(expression)
+func parseConditionalExpression(source string, expression *conditionalExpression) error {
+	tokens, err := (ConditionalDirective{}).ParseExpression(source)
 	if err != nil {
-		return "", nil, err
+		return err
 	}
-	return "", &statement, nil
+	if err := (ConditionalDirective{}).ValidateExpression(tokens); err != nil {
+		return err
+	}
+	return buildConditionalExpression(source, tokens, expression)
+}
+
+func validateConditionalTokenGroups(tokens []Token) error {
+	start := 0
+	if len(tokens) > 0 && isConditionalSeparator(tokens[0]) {
+		start++
+	}
+	for index := start; index < len(tokens); index++ {
+		if !isConditionalSeparator(tokens[index]) {
+			continue
+		}
+		if index == start {
+			return errors.New("conditional OR must be followed by a statement")
+		}
+		if _, err := parseConditionalTokens("", tokens[start:index]); err != nil {
+			return err
+		}
+		start = index + 1
+	}
+	if start == len(tokens) {
+		return errors.New("conditional OR must be followed by a statement")
+	}
+	_, err := parseConditionalTokens("", tokens[start:])
+	return err
+}
+
+func buildConditionalExpression(source string, tokens []Token, expression *conditionalExpression) error {
+	start := 0
+	if len(tokens) > 0 && isConditionalSeparator(tokens[0]) {
+		start++
+	}
+	for index := start; index < len(tokens); index++ {
+		if !isConditionalSeparator(tokens[index]) {
+			continue
+		}
+		statement, err := parseConditionalTokenGroup(source, tokens[start:index])
+		if err != nil {
+			return err
+		}
+		expression.append(statement)
+		start = index + 1
+	}
+	statement, err := parseConditionalTokenGroup(source, tokens[start:])
+	if err != nil {
+		return err
+	}
+	expression.append(statement)
+	return nil
+}
+
+func isConditionalSeparator(token Token) bool {
+	return token.IsDelimiter() && token.Raw == conditionalExpressionGrammar.Separator
+}
+
+func parseConditionalTokenGroup(source string, tokens []Token) (conditionalStatement, error) {
+	if len(tokens) == 0 {
+		return conditionalStatement{}, errors.New("empty conditional statement")
+	}
+	statementSource := source[tokens[0].Start:tokens[len(tokens)-1].End]
+	return parseConditionalTokens(statementSource, tokens)
 }
 
 func evaluateConditionalStatement(statement conditionalStatement, data variable.Getter, funcs variable.FuncMap) (bool, error) {
@@ -343,89 +412,64 @@ func parseConditionalStatement(source string) (conditionalStatement, error) {
 		return conditionalStatement{}, errors.New("empty conditional statement")
 	}
 
-	tokens, err := tokenizeConditionalStatement(statementSource)
+	tokens, err := (ConditionalDirective{}).ParseExpression(statementSource)
 	if err != nil {
 		return conditionalStatement{}, err
 	}
+	if len(tokens) == 0 {
+		return conditionalStatement{}, errors.New("empty conditional statement")
+	}
+	if slices.ContainsFunc(tokens, isConditionalSeparator) {
+		return conditionalStatement{}, errors.New("conditional statements cannot contain OR")
+	}
+	return parseConditionalTokens(statementSource, tokens)
+}
+
+func parseConditionalTokens(statementSource string, tokens []Token) (conditionalStatement, error) {
 	if len(tokens) == 1 {
-		if strings.HasPrefix(tokens[0], "!") {
-			operand := strings.TrimPrefix(tokens[0], "!")
-			if !isTypedConditionalExpression(operand) {
-				return conditionalStatement{}, errors.New("unary ! must negate exactly one typed presence expression")
-			}
-			return conditionalStatement{source: statementSource, operator: conditionalNot, rhs: operand}, nil
-		}
-		if !isTypedConditionalExpression(tokens[0]) {
+		if !isTypedConditionalExpression(tokens[0].Raw) {
 			return conditionalStatement{}, errors.New("ht-if directives require at least one ${ ... } template variable")
 		}
-		return conditionalStatement{source: statementSource, rhs: tokens[0]}, nil
+		return conditionalStatement{source: statementSource, rhs: tokens[0].Raw}, nil
+	}
+	if len(tokens) == 2 && tokens[0].Raw == "!" && tokens[1].IsVariable() {
+		return conditionalStatement{source: statementSource, operator: conditionalNot, rhs: tokens[1].Raw}, nil
 	}
 	if len(tokens) == 3 {
-		operator := conditionalOperator(tokens[1])
+		if !tokens[1].IsOperator() {
+			return conditionalStatement{}, errors.New("conditional binary operators require whitespace-separated left and right operands")
+		}
+		operator := normalizeConditionalOperator(tokens[1].Raw)
 		switch operator {
 		case conditionalEquals, conditionalNotEquals, conditionalRegexMatch, conditionalRegexNotMatch, conditionalIn:
-			return conditionalStatement{source: statementSource, lhs: tokens[0], operator: operator, rhs: tokens[2]}, nil
-		case "~=":
-			return conditionalStatement{}, errors.New("legacy ~= regex operator is not supported; use =~")
+			return conditionalStatement{source: statementSource, lhs: tokens[0].Raw, operator: operator, rhs: tokens[2].Raw}, nil
 		}
 	}
-	if len(tokens) == 4 && tokens[1] == "not" && tokens[2] == "in" {
-		return conditionalStatement{source: statementSource, lhs: tokens[0], operator: conditionalNotIn, rhs: tokens[3]}, nil
+	if len(tokens) == 3 && normalizeConditionalOperator(tokens[1].Raw) == conditionalNotIn {
+		return conditionalStatement{source: statementSource, lhs: tokens[0].Raw, operator: conditionalNotIn, rhs: tokens[2].Raw}, nil
 	}
 	return conditionalStatement{}, errors.New("conditional binary operators require whitespace-separated left and right operands")
 }
 
-func tokenizeConditionalStatement(source string) ([]string, error) {
-	tokens := make([]string, 0, 3)
-	for cursor := 0; cursor < len(source); {
-		if conditionalWhitespaceAt(source, cursor) {
-			_, size := utf8.DecodeRuneInString(source[cursor:])
-			cursor += size
-			continue
-		}
-		start := cursor
-		if strings.HasPrefix(source[cursor:], "!${") {
-			end := skipConditionalVariable(source, cursor+1)
-			if end == 0 {
-				return nil, errors.New("unterminated template expression in conditional")
-			}
-			cursor = end
-		} else if strings.HasPrefix(source[cursor:], "${") {
-			end := skipConditionalVariable(source, cursor)
-			if end == 0 {
-				return nil, errors.New("unterminated template expression in conditional")
-			}
-			cursor = end
-		} else if source[cursor] == '\'' || source[cursor] == '"' {
-			end := skipConditionalQuote(source, cursor)
-			if end == 0 {
-				return nil, errors.New("unterminated quoted conditional literal")
-			}
-			cursor = end
-		} else {
-			for cursor < len(source) && !conditionalWhitespaceAt(source, cursor) {
-				_, size := utf8.DecodeRuneInString(source[cursor:])
-				cursor += size
-			}
-		}
-		if cursor < len(source) && !conditionalWhitespaceAt(source, cursor) {
-			return nil, errors.New("conditional tokens must be separated by whitespace")
-		}
-		tokens = append(tokens, source[start:cursor])
+func normalizeConditionalOperator(operator string) conditionalOperator {
+	switch operator {
+	case "=!":
+		return conditionalNotEquals
+	case "~=":
+		return conditionalRegexMatch
+	case "~!":
+		return conditionalRegexNotMatch
+	default:
+		return conditionalOperator(operator)
 	}
-	return tokens, nil
-}
-
-func conditionalWhitespaceAt(source string, cursor int) bool {
-	if cursor < 0 || cursor >= len(source) {
-		return false
-	}
-	runeValue, _ := utf8.DecodeRuneInString(source[cursor:])
-	return unicode.IsSpace(runeValue)
 }
 
 func isQuotedConditionalLiteral(source string) bool {
-	return len(source) >= 2 && (source[0] == '\'' || source[0] == '"') && skipConditionalQuote(source, 0) == len(source)
+	if len(source) < 2 || (source[0] != '\'' && source[0] != '"') {
+		return false
+	}
+	end, err := scanQuotedToken(source, 0)
+	return err == nil && end == len(source)
 }
 
 func parseConditionalStringLiteral(source string) (string, error) {
@@ -467,75 +511,8 @@ func isTypedConditionalExpression(source string) bool {
 	if !strings.HasPrefix(source, "${") {
 		return false
 	}
-	return skipConditionalVariable(source, 0) == len(source)
-}
-
-func skipConditionalVariable(source string, start int) int {
-	if start < 0 || start+2 > len(source) || source[start:start+2] != "${" {
-		return 0
-	}
-	quote := byte(0)
-	escaped := false
-	for cursor := start + 2; cursor < len(source); cursor++ {
-		char := source[cursor]
-		if quote != 0 {
-			if escaped {
-				escaped = false
-				continue
-			}
-			if char == '\\' {
-				escaped = true
-				continue
-			}
-			if char == quote {
-				quote = 0
-			}
-			continue
-		}
-		if char == '\'' || char == '"' {
-			quote = char
-			continue
-		}
-		if char == '}' {
-			return cursor + 1
-		}
-	}
-	return 0
-}
-
-func skipConditionalQuote(source string, start int) int {
-	quote := source[start]
-	escaped := false
-	for cursor := start + 1; cursor < len(source); cursor++ {
-		if escaped {
-			escaped = false
-			continue
-		}
-		if source[cursor] == '\\' {
-			escaped = true
-			continue
-		}
-		if source[cursor] == quote {
-			return cursor + 1
-		}
-	}
-	return 0
-}
-
-func conditionalWhitespaceBefore(source string, cursor int) bool {
-	if cursor == 0 {
-		return false
-	}
-	runeValue, _ := utf8.DecodeLastRuneInString(source[:cursor])
-	return unicode.IsSpace(runeValue)
-}
-
-func conditionalWhitespaceAfter(source string, cursor int) bool {
-	if cursor >= len(source) {
-		return false
-	}
-	runeValue, _ := utf8.DecodeRuneInString(source[cursor:])
-	return unicode.IsSpace(runeValue)
+	end, err := scanVariableToken(source, 0)
+	return err == nil && end == len(source)
 }
 
 func removeConditionalAttributes(element *html.Node, attributes []html.Attribute) {

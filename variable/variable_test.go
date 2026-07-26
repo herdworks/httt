@@ -41,7 +41,7 @@ func TestRenderStringImplicitAndExplicitGet(t *testing.T) {
 	}
 }
 
-func TestRenderStringFallbackSelectsFirstNonNil(t *testing.T) {
+func TestRenderStringFallbackSelectsFirstNonEmptyDataValue(t *testing.T) {
 	values := []struct {
 		name  string
 		value any
@@ -49,7 +49,7 @@ func TestRenderStringFallbackSelectsFirstNonNil(t *testing.T) {
 	}{
 		{name: "false", value: false, want: "false"},
 		{name: "zero", value: 0, want: "0"},
-		{name: "empty string", value: "", want: ""},
+		{name: "empty string", value: "", want: "fallback"},
 		{name: "empty slice", value: []any{}, want: "[]"},
 		{name: "empty map", value: map[string]any{}, want: "{}"},
 	}
@@ -67,6 +67,31 @@ func TestRenderStringFallbackSelectsFirstNonNil(t *testing.T) {
 	}
 }
 
+func TestRenderStringAcceptsEmptyLiteralFallback(t *testing.T) {
+	rendered, err := RenderString(`${ page.value, "" }`, testGetter{
+		"page": map[string]any{"value": ""},
+	}, SyntaxDefault)
+	if err != nil {
+		t.Fatalf("RenderString() error = %v", err)
+	}
+	if rendered != "" {
+		t.Fatalf("RenderString() = %q, want empty string", rendered)
+	}
+}
+
+func TestRenderStringRejectsEmptyTemplateDataWithoutFallback(t *testing.T) {
+	_, err := RenderString(`${ page.value }`, testGetter{
+		"page": map[string]any{"value": ""},
+	}, SyntaxDefault)
+	if err == nil {
+		t.Fatal("RenderString() error = nil, want MissingValueError")
+	}
+	var missing *MissingValueError
+	if !errors.As(err, &missing) {
+		t.Fatalf("RenderString() error = %T %v, want MissingValueError", err, err)
+	}
+}
+
 func TestRenderStringPluginArgumentsUseGetterAndSourceOrder(t *testing.T) {
 	getter := &recordingGetter{values: map[string]any{
 		"page.first": "first",
@@ -81,7 +106,7 @@ func TestRenderStringPluginArgumentsUseGetterAndSourceOrder(t *testing.T) {
 	}
 
 	rendered, err := RenderString(
-		`${ example(page.first, page.missing, page.zero, "literal", false, 2.5, null) }`,
+		`${ example(page.first, page.missing, page.zero, "literal", false, 2.5) }`,
 		getter,
 		SyntaxDefault,
 		funcs,
@@ -92,7 +117,7 @@ func TestRenderStringPluginArgumentsUseGetterAndSourceOrder(t *testing.T) {
 	if rendered != "ok" {
 		t.Fatalf("RenderString() = %q, want ok", rendered)
 	}
-	wantArguments := []any{"first", nil, 0, "literal", false, 2.5, nil}
+	wantArguments := []any{"first", nil, 0, "literal", false, 2.5}
 	if !reflect.DeepEqual(got, wantArguments) {
 		t.Fatalf("plugin arguments = %#v, want %#v", got, wantArguments)
 	}
@@ -233,6 +258,7 @@ func TestRenderStringRejectsUnsupportedSyntax(t *testing.T) {
 		{name: "raw template command", source: `${ upper page.title }`},
 		{name: "array literal", source: `${ upper([page.title]) }`},
 		{name: "object literal", source: `${ upper({value: page.title}) }`},
+		{name: "null", source: `${ upper(null) }`},
 		{name: "undefined", source: `${ upper(undefined) }`},
 	}
 	for _, tc := range tests {

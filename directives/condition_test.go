@@ -131,8 +131,11 @@ func TestConditionalComparisonsAndPrecedence(t *testing.T) {
 	}{
 		{expression: `${ page.kind } == "Post"`, want: true},
 		{expression: `${ page.kind } != "draft"`, want: true},
+		{expression: `${ page.kind }=!"draft"`, want: true},
 		{expression: `${ page.path } =~ "^/blog/"`, want: true},
+		{expression: `${ page.path }~="^/blog/"`, want: true},
 		{expression: `${ page.path } !~ "^/private/"`, want: true},
+		{expression: `${ page.path }~!"^/private/"`, want: true},
 		{expression: `"Post" == ${ page.kind }`, want: true},
 		{expression: `"post" == "post"`, want: true},
 		{expression: `"post" == "Post"`, want: false},
@@ -229,9 +232,19 @@ func TestParseConditionalStatement(t *testing.T) {
 			want:   conditionalStatement{source: "!${ page.draft }", operator: conditionalNot, rhs: "${ page.draft }"},
 		},
 		{
+			name:   "spaced negated presence",
+			source: "! ${ page.draft }",
+			want:   conditionalStatement{source: "! ${ page.draft }", operator: conditionalNot, rhs: "${ page.draft }"},
+		},
+		{
 			name:   "comparison",
 			source: `${ page.kind } == "post"`,
 			want:   conditionalStatement{source: `${ page.kind } == "post"`, lhs: "${ page.kind }", operator: conditionalEquals, rhs: `"post"`},
+		},
+		{
+			name:   "compact alias comparison",
+			source: `${ page.kind }=!"draft"`,
+			want:   conditionalStatement{source: `${ page.kind }=!"draft"`, lhs: "${ page.kind }", operator: conditionalNotEquals, rhs: `"draft"`},
 		},
 		{
 			name:   "not in",
@@ -252,47 +265,43 @@ func TestParseConditionalStatement(t *testing.T) {
 	}
 }
 
-func TestNextConditionalStatement(t *testing.T) {
-	tests := []struct {
-		name          string
-		expression    string
-		wantRemaining string
-		wantSource    string
-		wantError     bool
-	}{
-		{name: "empty", expression: "  "},
-		{name: "leading OR", expression: `OR ${ first }`, wantSource: "${ first }"},
-		{name: "next OR", expression: `${ first } OR ${ second }`, wantRemaining: "OR ${ second }", wantSource: "${ first }"},
-		{name: "whitespace around OR", expression: "${ first }\tOR\n${ second }", wantRemaining: "OR\n${ second }", wantSource: "${ first }"},
-		{name: "trailing OR", expression: `${ first } OR`, wantRemaining: "OR", wantSource: "${ first }"},
-		{name: "bare OR", expression: "OR", wantError: true},
-		{name: "repeated OR", expression: `OR OR ${ first }`, wantError: true},
+func TestConditionalDirectiveExpressionAPI(t *testing.T) {
+	directive := ConditionalDirective{}
+	tokens, err := directive.ParseExpression(`${ first } OR ${ second }`)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			remaining, statement, err := nextConditionalStatement(test.expression)
-			if test.wantError {
-				if err == nil {
-					t.Fatal("nextConditionalStatement returned nil error")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if remaining != test.wantRemaining {
-				t.Fatalf("remaining = %q, want %q", remaining, test.wantRemaining)
-			}
-			if test.wantSource == "" {
-				if statement != nil {
-					t.Fatalf("statement = %#v, want nil", statement)
-				}
-				return
-			}
-			if statement == nil || statement.source != test.wantSource {
-				t.Fatalf("statement = %#v, want source %q", statement, test.wantSource)
-			}
-		})
+	if err := directive.ValidateExpression(tokens); err != nil {
+		t.Fatal(err)
+	}
+
+	invalid, err := directive.ParseExpression(`${ first } OR page.title`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := directive.ValidateExpression(invalid); err == nil {
+		t.Fatal("ValidateExpression() accepted an invalid presence statement")
+	}
+}
+
+func TestConditionalDirectiveIncrementalExpressionAPI(t *testing.T) {
+	directive := ConditionalDirective{}
+	remainder, tokens, err := directive.ParseNextExpression(`${ first } OR ${ second }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(tokens), 1; got != want || tokens[0].Raw != `${ first }` {
+		t.Fatalf("first segment = %#v", tokens)
+	}
+	if err := directive.ValidateExpression(tokens); err != nil {
+		t.Fatal(err)
+	}
+	_, tokens, err = directive.ParseNextExpression(remainder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(tokens), 1; got != want || tokens[0].Raw != `${ second }` {
+		t.Fatalf("second segment = %#v", tokens)
 	}
 }
 
@@ -371,11 +380,6 @@ func TestConditionalRejectsUnsupportedGroupingAndOperators(t *testing.T) {
 		"${ value } or ${ other }",
 		"${ value } AND ${ other }",
 		"!${ value } == post",
-		"! ${ value }",
-		"${ value }==post",
-		"${ value }!=post",
-		"${ value }=~post",
-		"${ value }!~post",
 		`"post"in${ values }`,
 		`"post" not in${ values }`,
 		"${ value } ==",
@@ -386,12 +390,12 @@ func TestConditionalRejectsUnsupportedGroupingAndOperators(t *testing.T) {
 	}
 }
 
-func TestConditionalLazyORAndRepeatedAttributes(t *testing.T) {
+func TestConditionalEagerSyntaxAndLazyOREvaluation(t *testing.T) {
 	if got, err := processConditionalExpression(`${ ok } OR ${ missing } =~ "["`, htdata.TemplateData{"ok": true}); err != nil || !got {
-		t.Fatalf("lazy OR = %v, %v; want true", got, err)
+		t.Fatalf("unreachable invalid regex = %v, %v; want true", got, err)
 	}
-	if got, err := processConditionalExpression(`${ ok } OR "unterminated`, htdata.TemplateData{"ok": true}); err != nil || !got {
-		t.Fatalf("lazy OR skipped malformed branch = %v, %v; want true", got, err)
+	if _, err := processConditionalExpression(`${ ok } OR "unterminated`, htdata.TemplateData{"ok": true}); err == nil {
+		t.Fatal("unreachable malformed branch returned nil error")
 	}
 	if _, err := processConditionalExpression(`${ missing } OR ${ missing } =~ "["`, htdata.TemplateData{}); err == nil {
 		t.Fatal("reached invalid lazy OR branch returned nil error")
@@ -402,8 +406,8 @@ func TestConditionalLazyORAndRepeatedAttributes(t *testing.T) {
 	if _, err := processConditionalExpression(`${ missing } OR (${ other })`, htdata.TemplateData{}); err == nil {
 		t.Fatal("reached invalid OR statement returned nil error")
 	}
-	if got, err := processConditionalExpression(`${ ok } OR`, htdata.TemplateData{"ok": true}); err != nil || !got {
-		t.Fatalf("lazy trailing OR = %v, %v; want true", got, err)
+	if _, err := processConditionalExpression(`${ ok } OR`, htdata.TemplateData{"ok": true}); err == nil {
+		t.Fatal("unreachable trailing OR returned nil error")
 	}
 	if _, err := processConditionalExpression(`${ missing } OR`, htdata.TemplateData{}); err == nil {
 		t.Fatal("reached trailing OR returned nil error")
@@ -418,11 +422,24 @@ func TestConditionalLazyORAndRepeatedAttributes(t *testing.T) {
 		t.Fatal("empty expression returned nil error")
 	}
 
-	element := &html.Node{Type: html.ElementNode, Data: "div", Attr: []html.Attribute{
+	pluginCalls := 0
+	element := &html.Node{Type: html.ElementNode, Data: "div", Attr: []html.Attribute{{Key: "ht-if", Val: `${ ok } OR ${ late() } == "value"`}}}
+	document := &htdocument.Document{Layout: element, Plugins: variable.Plugins{
+		"late": {Name: "late", Func: func(...any) (any, error) { pluginCalls++; return "value", nil }},
+	}}
+	data := htdata.TemplateData{"ok": true}
+	if err := (ConditionalDirective{}).Process(document, element, &data, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if pluginCalls != 0 {
+		t.Fatalf("unreached branch called plugin %d times", pluginCalls)
+	}
+
+	element = &html.Node{Type: html.ElementNode, Data: "div", Attr: []html.Attribute{
 		{Key: "ht-if", Val: "${ missing }"},
 		{Key: "ht-if", Val: `${ missing } =~ "["`},
 	}}
-	document := &htdocument.Document{Layout: element}
+	document = &htdocument.Document{Layout: element}
 	if err := (ConditionalDirective{}).Process(document, element, &htdata.TemplateData{}, nil, nil); err != nil {
 		t.Fatalf("repeated attributes: %v", err)
 	}

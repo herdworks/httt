@@ -58,6 +58,7 @@ func TestTokenizer(t *testing.T) {
 		{name: "unterminated quoted literal", expression: `"value`, grammar: ExpressionGrammar{AllowQuotedLiterals: true}, wantErr: true},
 		{name: "unterminated variable", expression: `${ value`, grammar: ExpressionGrammar{}, wantErr: true},
 		{name: "ambiguous grammar", expression: "value", grammar: ExpressionGrammar{Operators: []string{"in", "in"}}, wantErr: true},
+		{name: "negative maximum tokens", expression: "value", grammar: ExpressionGrammar{MaxTokens: -1}, wantErr: true},
 	}
 
 	for _, test := range tests {
@@ -87,5 +88,88 @@ func TestTokenizerKeepsQuotedVariableContentRaw(t *testing.T) {
 	}
 	if len(tokens) != 3 || tokens[2].Kind != TokenVariable || tokens[2].Raw != `${ get(page.title, "\"}") }` {
 		t.Fatalf("Tokenizer() = %#v", tokens)
+	}
+}
+
+func TestTokenizerEmitsSeparatorAsDelimiter(t *testing.T) {
+	grammar := ExpressionGrammar{Operators: []string{"=="}, Separator: "OR", AllowQuotedLiterals: true}
+	tokens, err := Tokenizer(`${ first } OR ${ second }`, grammar)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(tokens), 3; got != want {
+		t.Fatalf("token count = %d, want %d", got, want)
+	}
+	if got := tokens[1]; got.Kind != TokenDelimiter || got.Raw != "OR" {
+		t.Fatalf("separator token = %#v, want TokenDelimiter OR", got)
+	}
+}
+
+func TestTokenizerSupportsLargeTokenSequences(t *testing.T) {
+	tokens, err := Tokenizer("one two three four five", ExpressionGrammar{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(tokens), 5; got != want {
+		t.Fatalf("token count = %d, want %d", got, want)
+	}
+	if got, want := tokens[4].Raw, "five"; got != want {
+		t.Fatalf("last token = %q, want %q", got, want)
+	}
+}
+
+func TestTokenizerMaxTokens(t *testing.T) {
+	tests := []struct {
+		name       string
+		expression string
+		grammar    ExpressionGrammar
+		wantErr    bool
+	}{
+		{name: "exact limit", expression: "one two three", grammar: ExpressionGrammar{MaxTokens: 3}},
+		{name: "excess token", expression: "one two three four", grammar: ExpressionGrammar{MaxTokens: 3}, wantErr: true},
+		{name: "whitespace tail", expression: "one two three \t", grammar: ExpressionGrammar{MaxTokens: 3}},
+		{name: "separator resets limit", expression: "one two three OR four five six", grammar: ExpressionGrammar{Separator: "OR", MaxTokens: 3}},
+		{name: "separator segment excess", expression: "one two three four OR five", grammar: ExpressionGrammar{Separator: "OR", MaxTokens: 3}, wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Tokenizer(test.expression, test.grammar)
+			if test.wantErr && err == nil {
+				t.Fatal("Tokenizer() error = nil")
+			}
+			if !test.wantErr && err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestTokenizeNext(t *testing.T) {
+	grammar := ExpressionGrammar{Separator: "OR", MaxTokens: 3}
+	remainder, tokens, err := TokenizeNext("one OR two three", grammar)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := remainder, " two three"; got != want {
+		t.Fatalf("remainder = %q, want %q", got, want)
+	}
+	if got, want := len(tokens), 1; got != want || tokens[0].Raw != "one" {
+		t.Fatalf("tokens = %#v, want [one]", tokens)
+	}
+	remainder, tokens, err = TokenizeNext(remainder, grammar)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remainder != "" || len(tokens) != 2 {
+		t.Fatalf("final segment = (%q, %#v), want empty remainder and two tokens", remainder, tokens)
+	}
+
+	for _, expression := range []string{"", "OR one", "one OR"} {
+		if _, _, err := TokenizeNext(expression, grammar); err == nil {
+			t.Errorf("TokenizeNext(%q) error = nil", expression)
+		}
+	}
+	if _, _, err := TokenizeNext("one OR OR two", grammar); err == nil {
+		t.Fatal("TokenizeNext() accepted a repeated separator")
 	}
 }

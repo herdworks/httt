@@ -23,7 +23,7 @@ ${ example(page.foo, page.bar, "Placeholder") }
 
 An expression that does not begin with `name(` is an implicit `get`. Every
 unquoted argument is a keypath and is resolved through `Getter.Get`. Literal
-arguments may be quoted strings, booleans, finite numbers, or `null`.
+arguments may be quoted strings, booleans, or finite numbers.
 
 Nested calls, grouping parentheses, arrays, objects, `undefined`, trailing
 commas, and pipe operators are not supported. Complex logic belongs in a
@@ -36,9 +36,11 @@ Implicit `get`, explicit `get`, `text`, and `markdown` treat their arguments as
 an ordered fallback list. They require at least one keypath and permit at most
 one final scalar literal fallback.
 
-The first non-nil value wins. False, zero, empty strings, and empty containers
-are selected values and do not fall through. If every keypath is missing or
-nil and there is no literal fallback, the expression evaluates to nil.
+The first non-empty template-data value wins. Missing values, typed nils, and
+empty strings fall through; false, zero, and empty containers remain selected
+values. A final literal, including `""`, is an explicit author-provided value
+and is selected literally. If every keypath is missing, nil, or an empty
+string and there is no literal fallback, the expression evaluates to nil.
 
 Generic plugins do not apply fallback semantics. They receive every resolved
 keypath value or literal argument in source order, including nil values.
@@ -47,7 +49,7 @@ keypath value or literal argument in source order, including nil values.
 
 - `ResolveValue(source, data) (any, error)` accepts exactly one `${ ... }`
   implicit or explicit `get` expression containing keypaths only. It returns
-  the first non-nil Go value without converting its type. Surrounding text,
+  the first non-empty template-data value without converting its type. Surrounding text,
   literals, other functions, and pipes are rejected.
 - `RenderString(source, data, syntax, funcs...) (string, error)` evaluates each
   expression to a typed value and then interpolates it. Strings remain
@@ -67,8 +69,8 @@ the public DSL.
 The directive renderer registers two functions only while rendering element
 text nodes:
 
-- `text(...)` selects its first non-nil argument and HTML-escapes it.
-- `markdown(...)` selects its first non-nil argument and renders it as Markdown.
+- `text(...)` selects its first non-empty template-data argument and HTML-escapes it.
+- `markdown(...)` selects its first non-empty template-data argument and renders it as Markdown.
 
 Both use the same fallback rules as `get`. Attribute and CSS contexts do not
 register these functions.
@@ -89,5 +91,6 @@ grammar:
 ```
 
 The quoted first argument is a variable expression. The optional second CSS
-argument is used only when that complete expression evaluates to nil; false,
-zero, empty strings, and empty containers do not use it.
+argument is used when that complete expression evaluates to nil, including
+when all template-data candidates are empty strings; false, zero, and empty
+containers do not use it.

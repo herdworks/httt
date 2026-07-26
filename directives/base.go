@@ -18,7 +18,7 @@ type BaseDirective struct{}
 var _ Directive = BaseDirective{}           // make the compiler check Directive interface conformance
 var _ DirectiveExpression = BaseDirective{} // make the compiler check DirectiveExpression interface conformance
 
-var baseGrammar = MustCompileExpressionGrammar(ExpressionGrammar{Operators: []string{"on"}})
+var baseExpressionGrammar = ExpressionGrammar{Operators: []string{"on"}, MaxTokens: 3}
 
 func (d BaseDirective) Attributes(strict bool) []string {
 	attributes := []string{"data-ht-base"}
@@ -39,8 +39,8 @@ func (d BaseDirective) Elements(document *htdocument.Document) []*html.Node {
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
-func (BaseDirective) Grammar() CompiledExpressionGrammar {
-	return baseGrammar
+func (BaseDirective) ParseExpression(expression string) ([]Token, error) {
+	return tokenizeExpression(expression, baseExpressionGrammar)
 }
 
 func (BaseDirective) ValidateExpression(tokens []Token) error {
@@ -98,8 +98,11 @@ func (d BaseDirective) Process(document *htdocument.Document, element *html.Node
 }
 
 func (d BaseDirective) parseExpression(source string) (string, string, error) {
-	tokens, err := ParseDirectiveExpression(d, source)
+	tokens, err := d.ParseExpression(source)
 	if err != nil {
+		return "", "", err
+	}
+	if err := d.ValidateExpression(tokens); err != nil {
 		return "", "", err
 	}
 	return tokens[0].Raw, tokens[2].Raw, nil

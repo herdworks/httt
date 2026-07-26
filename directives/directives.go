@@ -20,25 +20,20 @@ type Directive interface {
 	Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) error
 }
 
-// DirectiveExpression is a directive with a grammar for its attribute
-// expression syntax.
+// DirectiveExpression is a directive with a parseable attribute expression
+// syntax. Validation remains explicit so callers can control when it occurs.
 type DirectiveExpression interface {
 	Directive
-	Grammar() CompiledExpressionGrammar
+	ParseExpression(string) ([]Token, error)
 	ValidateExpression([]Token) error
 }
 
-// ParseDirectiveExpression tokenizes a directive expression and validates its
-// token shape against the directive's grammar.
-func ParseDirectiveExpression(directive DirectiveExpression, expression string) ([]Token, error) {
-	tokens, err := directive.Grammar().Tokenize(expression)
-	if err != nil {
-		return nil, err
-	}
-	if err := directive.ValidateExpression(tokens); err != nil {
-		return nil, err
-	}
-	return tokens, nil
+// IncrementalDirectiveExpression optionally parses one delimiter-bounded
+// expression segment at a time. ParseNextExpression is lexical only; callers
+// explicitly validate the returned token sequence.
+type IncrementalDirectiveExpression interface {
+	DirectiveExpression
+	ParseNextExpression(string) (remainder string, tokens []Token, err error)
 }
 
 // Process resolves includes and renders the document's directive pipeline.
