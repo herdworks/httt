@@ -2,6 +2,7 @@ package directives
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -25,6 +26,7 @@ type Token struct {
 	Start  int
 	End    int
 }
+type Tokens []Token
 
 // ExpressionGrammar configures tokenization for one directive expression
 // syntax. Operators are exact and case-sensitive. Multi-word operators match
@@ -34,19 +36,54 @@ type ExpressionGrammar struct {
 	AllowQuotedLiterals bool
 }
 
+// CompiledExpressionGrammar is an immutable, tokenization-ready grammar.
+type CompiledExpressionGrammar struct {
+	operators           []grammarOperator
+	allowQuotedLiterals bool
+}
+
 type grammarOperator struct {
 	raw      string
 	words    []string
 	symbolic bool
 }
 
+func (tokens Tokens) ContainsVariable() bool {
+	return slices.ContainsFunc(tokens, Token.IsVariable)
+}
+
+func (token Token) IsVariable() bool { return token.Kind == TokenVariable }
+func (token Token) IsOperand() bool  { return token.Kind == TokenVariable || token.Kind == TokenLiteral }
+func (token Token) IsOperator() bool { return token.Kind == TokenOperator }
+
+// CompileExpressionGrammar validates and compiles a grammar for reuse.
+func CompileExpressionGrammar(grammar ExpressionGrammar) (CompiledExpressionGrammar, error) {
+	operators, err := tokenizeOperators(grammar)
+	if err != nil {
+		return CompiledExpressionGrammar{}, err
+	}
+	return CompiledExpressionGrammar{operators: operators, allowQuotedLiterals: grammar.AllowQuotedLiterals}, nil
+}
+
+// MustCompileExpressionGrammar compiles a static grammar or panics.
+func MustCompileExpressionGrammar(grammar ExpressionGrammar) CompiledExpressionGrammar {
+	compiled, err := CompileExpressionGrammar(grammar)
+	if err != nil {
+		panic(err)
+	}
+	return compiled
+}
+
 // Tokenizer tokenizes one directive expression according to grammar.
 func Tokenizer(expression string, grammar ExpressionGrammar) ([]Token, error) {
-	operators, err := tokenizeOperators(grammar)
+	compiled, err := CompileExpressionGrammar(grammar)
 	if err != nil {
 		return nil, err
 	}
+	return compiled.Tokenize(expression)
+}
 
+func (grammar CompiledExpressionGrammar) Tokenize(expression string) ([]Token, error) {
 	var tokens []Token
 	for cursor := 0; cursor < len(expression); {
 		cursor = skipExpressionWhitespace(expression, cursor)
@@ -64,7 +101,7 @@ func Tokenizer(expression string, grammar ExpressionGrammar) ([]Token, error) {
 			continue
 		}
 		if expression[cursor] == '\'' || expression[cursor] == '"' {
-			if !grammar.AllowQuotedLiterals {
+			if !grammar.allowQuotedLiterals {
 				return nil, fmt.Errorf("quoted literals are not allowed at byte %d", cursor)
 			}
 			end, err := scanQuotedToken(expression, cursor)
@@ -75,13 +112,13 @@ func Tokenizer(expression string, grammar ExpressionGrammar) ([]Token, error) {
 			cursor = end
 			continue
 		}
-		if _, end, ok := matchOperator(expression, cursor, operators); ok {
+		if _, end, ok := matchOperator(expression, cursor, grammar.operators); ok {
 			tokens = append(tokens, Token{Kind: TokenOperator, Raw: expression[start:end], Start: start, End: end})
 			cursor = end
 			continue
 		}
 
-		cursor = scanLiteralToken(expression, cursor, operators)
+		cursor = scanLiteralToken(expression, cursor, grammar.operators)
 		tokens = append(tokens, Token{Kind: TokenLiteral, Raw: expression[start:cursor], Start: start, End: cursor})
 	}
 	return tokens, nil
@@ -125,6 +162,9 @@ func matchOperator(expression string, start int, operators []grammarOperator) (g
 			if strings.HasPrefix(expression[start:], operator.raw) {
 				return operator, start + len(operator.raw), true
 			}
+			continue
+		}
+		if start > 0 && !expressionWhitespaceBefore(expression, start) {
 			continue
 		}
 		cursor := start
@@ -230,4 +270,12 @@ func skipExpressionWhitespace(expression string, start int) int {
 func expressionWhitespaceAt(expression string, start int) bool {
 	char, _ := utf8.DecodeRuneInString(expression[start:])
 	return unicode.IsSpace(char)
+}
+
+func expressionWhitespaceBefore(expression string, end int) bool {
+	if end <= 0 || end > len(expression) {
+		return false
+	}
+	runeValue, _ := utf8.DecodeLastRuneInString(expression[:end])
+	return unicode.IsSpace(runeValue)
 }

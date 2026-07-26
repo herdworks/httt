@@ -24,7 +24,21 @@ type Directive interface {
 // expression syntax.
 type DirectiveExpression interface {
 	Directive
-	Grammar() ExpressionGrammar
+	Grammar() CompiledExpressionGrammar
+	ValidateExpression([]Token) error
+}
+
+// ParseDirectiveExpression tokenizes a directive expression and validates its
+// token shape against the directive's grammar.
+func ParseDirectiveExpression(directive DirectiveExpression, expression string) ([]Token, error) {
+	tokens, err := directive.Grammar().Tokenize(expression)
+	if err != nil {
+		return nil, err
+	}
+	if err := directive.ValidateExpression(tokens); err != nil {
+		return nil, err
+	}
+	return tokens, nil
 }
 
 // Process resolves includes and renders the document's directive pipeline.

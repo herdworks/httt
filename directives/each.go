@@ -18,6 +18,8 @@ import (
 // EachDirective expands one element for every item in an explicit typed source.
 type EachDirective struct{}
 
+var eachGrammar = MustCompileExpressionGrammar(ExpressionGrammar{Operators: []string{"in"}})
+
 var _ Directive = EachDirective{}           // make the compiler check Directive interface conformance
 var _ DirectiveExpression = EachDirective{} // make the compiler check DirectiveExpression interface conformance
 
@@ -71,8 +73,8 @@ func (d EachDirective) Elements(document *htdocument.Document) []*html.Node {
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
-func (EachDirective) Grammar() ExpressionGrammar {
-	return ExpressionGrammar{Operators: []string{"in"}}
+func (EachDirective) Grammar() CompiledExpressionGrammar {
+	return eachGrammar
 }
 
 func (d EachDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) (err error) {
@@ -139,11 +141,8 @@ func (d EachDirective) Process(document *htdocument.Document, element *html.Node
 }
 
 func (d EachDirective) expressionParser(expression string, data htvariable.Getter) (binding string, values []any, err error) {
-	tokens, err := Tokenizer(expression, d.Grammar())
+	tokens, err := ParseDirectiveExpression(d, expression)
 	if err != nil {
-		return "", nil, err
-	}
-	if err := d.validateExpression(tokens); err != nil {
 		return "", nil, err
 	}
 	binding = tokens[0].Raw
@@ -154,7 +153,7 @@ func (d EachDirective) expressionParser(expression string, data htvariable.Gette
 	return binding, values, nil
 }
 
-func (d EachDirective) validateExpression(tokens []Token) error {
+func (d EachDirective) ValidateExpression(tokens []Token) error {
 	if len(tokens) != 3 {
 		return fmt.Errorf("expected exactly three tokens: binding in ${ variable }")
 	}
@@ -164,11 +163,8 @@ func (d EachDirective) validateExpression(tokens []Token) error {
 	if tokens[0].Quoted || !bindingSyntax.MatchString(tokens[0].Raw) || tokens[0].Raw == "each" {
 		return fmt.Errorf("invalid iteration binding %q", tokens[0].Raw)
 	}
-	if tokens[1].Kind != TokenOperator {
+	if tokens[1].Kind != TokenOperator || tokens[1].Raw != "in" {
 		return fmt.Errorf("expected iteration operator as the second token")
-	}
-	if tokens[1].Raw != "in" {
-		return fmt.Errorf("invalid iteration operator %q, expected %q", tokens[1].Raw, "in")
 	}
 	if tokens[2].Kind != TokenVariable {
 		return fmt.Errorf("expected template variable ${ ... } as the third token")

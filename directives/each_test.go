@@ -203,7 +203,7 @@ func TestEachNormalizesLiteralWindowAttributes(t *testing.T) {
 
 func TestEachDefersConditionalBaseAndIncludes(t *testing.T) {
 	t.Run("conditional and base", func(t *testing.T) {
-		layout, err := html.Parse(strings.NewReader(`<html><body><section ht-each="item in ${ items }" ht-if="${ item.visible }" ht-base="href:item.base"><a ht-apply href="entry">${ item.name }</a></section></body></html>`))
+		layout, err := html.Parse(strings.NewReader(`<html><body><section ht-each="item in ${ items }" ht-if="${ item.visible }" ht-base="href on ${ item.base }"><a ht-apply href="entry">${ item.name }</a></section></body></html>`))
 		if err != nil {
 			t.Fatal(err)
 		}

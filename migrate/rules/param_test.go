@@ -1,6 +1,7 @@
 package rules_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,9 +100,30 @@ func TestParamRequiresManualMigrationForAmbiguousReplacement(t *testing.T) {
 	}
 }
 
-func TestDefaultRulesContainConditionalTemplateParamContentAndDebugInPrecedenceOrder(t *testing.T) {
-	if len(migrate.DefaultRules) != 7 {
-		t.Fatalf("DefaultRules length = %d, want 7", len(migrate.DefaultRules))
+func TestParamInteractivePreviewShowsCompleteNodeReplacement(t *testing.T) {
+	_, themePath, resourcePath := writeThemeResource(t, `<span class="discarded" data-ht-param="page.title" data-default="Untitled"><b>discarded</b></span>`)
+	var output bytes.Buffer
+	report, err := (migrate.Migration{
+		ThemePath:   themePath,
+		Interactive: true,
+		Input:       strings.NewReader("y\n"),
+		Output:      &output,
+		Rules:       []rules.Rule{rules.Param{}},
+	}).Run()
+	if err != nil || report.Counters.Migrated != 1 || !report.Complete() {
+		t.Fatalf("report = %#v, err = %v", report, err)
+	}
+	if got := output.String(); !strings.Contains(got, "before:") || !strings.Contains(got, `data-ht-param`) || !strings.Contains(got, "after:") || !strings.Contains(got, `data-ht-apply`) || !strings.Contains(got, `<div`) {
+		t.Fatalf("interactive output = %q", got)
+	}
+	if got, want := readResource(t, resourcePath), `<div data-ht-apply="">${ page.title, &#34;Untitled&#34; }</div>`; got != want {
+		t.Fatalf("resource = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultRulesContainConditionalTemplateParamContentQueryAndDebugInPrecedenceOrder(t *testing.T) {
+	if len(migrate.DefaultRules) != 8 {
+		t.Fatalf("DefaultRules length = %d, want 8", len(migrate.DefaultRules))
 	}
 	selectors := []string{
 		strings.Join(selectorStrings(migrate.DefaultRules[0]), ","),
@@ -111,8 +133,9 @@ func TestDefaultRulesContainConditionalTemplateParamContentAndDebugInPrecedenceO
 		strings.Join(selectorStrings(migrate.DefaultRules[4]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[5]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[6]), ","),
+		strings.Join(selectorStrings(migrate.DefaultRules[7]), ","),
 	}
-	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-template],[data-ht-template];[ht-attr],[data-ht-attr];[ht-attrs]:not([ht-attrs^=\"${\"]),[data-ht-attrs]:not([data-ht-attrs^=\"${\"]);[ht-param],[data-ht-param];[ht-content],[data-ht-content];[ht-debug],[data-ht-debug]"; got != want {
+	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-template],[data-ht-template];[ht-attr],[data-ht-attr];[ht-attrs]:not([ht-attrs^=\"${\"]),[data-ht-attrs]:not([data-ht-attrs^=\"${\"]);[ht-param],[data-ht-param];[ht-content],[data-ht-content];[ht-query],[data-ht-query];[ht-debug],[data-ht-debug]"; got != want {
 		t.Fatalf("DefaultRules selectors = %q, want %q", got, want)
 	}
 }

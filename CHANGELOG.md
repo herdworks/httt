@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 * **BREAKING:** Replaced legacy `ht-attrs` declarations with repeatable map-valued `${ ... }` attributes applied in source order; later maps win conflicts and directive-valued map keys are skipped. Removed runtime `ht-attr`; `hyperctl theme migrate` converts compatible targeted singular declarations to ordinary templated attributes plus `ht-apply`, while unsupported singular and legacy plural syntax is reported for manual migration.
 * **BREAKING:** Removed exported directive attribute-name slices in favor of each directive's `Attributes` method.
+* **BREAKING:** Changed `DirectiveExpression.Grammar` to return a reusable `CompiledExpressionGrammar`; use `CompileExpressionGrammar` or `MustCompileExpressionGrammar` for custom directive grammars. This avoids recompiling operator tables for every directive attribute.
 * Fixed same-element `ht-include` and `ht-each` processing so the fragment is included before loop expansion and clone-local variables resolve correctly.
 * Added `variable.ResolveValue` for typed `${ ... }` lookup resolution. Typed and rendered lookups share nil-only fallback semantics, preserving false, zero, empty strings, and empty containers; `RenderString` leaves strings unquoted and JSON-encodes other non-nil values.
 * Added `data.IsTruthy` and changed `TemplateData.Has` so false, nil, and empty strings or containers are false while all numbers, including zero, are true.
@@ -25,7 +26,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 * **BREAKING:** Removed runtime `ht-template` / `data-ht-template`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts compatible legacy loops to `ht-each`, rewrites `ht.index` / `ht.count` / `ht.total` metadata references to `each.*`, and reports unresolved aliases or same-element active-loop conflicts.
 * **BREAKING:** Removed runtime `ht-content` / `data-ht-content`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts supported content directives to `ht-apply` and reports unsafe legacy shapes for manual conversion.
 * **BREAKING:** Removed runtime `ht-param` / `data-ht-param`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts supported parameter elements to `ht-apply` output and reports unsafe legacy shapes for manual conversion.
-* **BREAKING:** Removed runtime `ht-query` / `data-ht-query`. Stale attributes now fail with a `hyperctl theme migrate` hint; query migration is planned for the next Phase 2 increment.
+* **BREAKING:** Removed runtime `ht-query` / `data-ht-query`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts compatible query declarations to raw templated URL components, preserves static queries and fragments, and warns when a single template-variable URL might already render a query string or fragment.
+* **BREAKING:** `ht-base` now requires repeatable `<target> on ${ variable }` declarations. Legacy colon/semicolon syntax is rejected by directive validation and must be updated manually.
 * Changed `ht-block` to run only in the final top-level document pass. Block templates receive `block.*` data plus only the caller-provided `userData` context, keeping outer render data unavailable unless the caller explicitly permits it.
 
 ## v0.33.1 (2026-07-22)
