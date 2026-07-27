@@ -467,77 +467,27 @@ func TestCurrentAndManualProposalsDoNotRewrite(t *testing.T) {
 	}
 }
 
-func TestInteractiveDeclineRollsBackAndAcceptKeepsLiveMutation(t *testing.T) {
+func TestDebugMigrationReportsLegacyDataModesWithoutMutatingCurrentSyntax(t *testing.T) {
 	root := t.TempDir()
 	themePath := writeTheme(t, root, `{}`)
-	path := writeFile(t, root, "fragments/debug.html", `<div data-ht-debug="one"></div><p data-ht-debug="two"></p>`)
-	output := &bytes.Buffer{}
+	source := `<div ht-debug="data"></div><p data-ht-debug="element,data"></p><a ht-debug="element"></a><b data-ht-debug="${ page.title }"></b>`
+	path := writeFile(t, root, "fragments/debug.html", source)
 
 	report, err := (Migration{
-		ThemePath:   themePath,
-		Interactive: true,
-		Input:       strings.NewReader("n\ny\n"),
-		Output:      output,
-		Rules:       []Rule{migrationrules.Debug{}},
+		ThemePath: themePath,
+		Rules:     []Rule{migrationrules.Debug{}},
 	}).Run()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Counters.OptionalFound != 2 || report.Counters.OptionalRetained != 1 || report.Counters.OptionalRemoved != 1 {
+	if report.Counters.Unresolved != 2 || report.Counters.OptionalFound != 0 || report.Counters.FilesChanged != 0 {
 		t.Fatalf("counters = %#v", report.Counters)
 	}
-	if len(report.Results) != 1 {
+	if len(report.Results) != 2 {
 		t.Fatalf("results = %#v", report.Results)
 	}
-	if got, want := readFile(t, path), `<div data-ht-debug="one"></div><p></p>`; got != want {
+	if got, want := readFile(t, path), source; got != want {
 		t.Fatalf("source = %q, want %q", got, want)
-	}
-	if got, want := output.String(), "Migration candidate for [ht-debug], [data-ht-debug] in fragments/debug.html:\nmigrate optional data-ht-debug directive?"; !strings.Contains(got, want) {
-		t.Fatalf("prompt = %q, want it to contain %q", got, want)
-	}
-}
-
-func TestInterruptionDiscardsCurrentRuleFilePass(t *testing.T) {
-	root := t.TempDir()
-	themePath := writeTheme(t, root, `{}`)
-	first := writeFile(t, root, "fragments/a.html", `<div ht-debug></div>`)
-	second := writeFile(t, root, "fragments/b.html", `<div ht-debug></div><p ht-debug></p>`)
-
-	report, err := (Migration{
-		ThemePath:   themePath,
-		Interactive: true,
-		Input:       strings.NewReader("y\ny\n"),
-		Output:      &bytes.Buffer{},
-		Rules:       []Rule{migrationrules.Debug{}},
-	}).Run()
-	if !errors.Is(err, ErrInterrupted) {
-		t.Fatalf("error = %v, want ErrInterrupted", err)
-	}
-	if !report.Interrupted || report.Counters.OptionalRemoved != 1 || report.Counters.FilesChanged != 1 {
-		t.Fatalf("report = %#v", report)
-	}
-	if got, want := readFile(t, first), `<div></div>`; got != want {
-		t.Fatalf("first file = %q, want %q", got, want)
-	}
-	if got, want := readFile(t, second), `<div ht-debug></div><p ht-debug></p>`; got != want {
-		t.Fatalf("interrupted file = %q, want unchanged %q", got, want)
-	}
-
-	resumed, err := (Migration{
-		ThemePath:   themePath,
-		Interactive: true,
-		Input:       strings.NewReader("y\ny\n"),
-		Output:      &bytes.Buffer{},
-		Rules:       []Rule{migrationrules.Debug{}},
-	}).Run()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resumed.Counters.OptionalRemoved != 2 || resumed.Counters.FilesChanged != 1 {
-		t.Fatalf("resumed report = %#v", resumed)
-	}
-	if got, want := readFile(t, second), `<div></div><p></p>`; got != want {
-		t.Fatalf("resumed file = %q, want %q", got, want)
 	}
 }
 
@@ -557,46 +507,6 @@ func TestCandidateReplacesFragmentRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got, want := readFile(t, path), `<new></new>`; got != want {
-		t.Fatalf("source = %q, want %q", got, want)
-	}
-}
-
-func TestDefaultMigrationRetainsDebug(t *testing.T) {
-	root := t.TempDir()
-	themePath := writeTheme(t, root, `{}`)
-	path := writeFile(t, root, "fragments/default.html", `<div ht-debug></div>`)
-
-	report, err := (Migration{ThemePath: themePath}).Run()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Counters.OptionalFound != 1 || report.Counters.OptionalRetained != 1 || report.Counters.Unresolved != 0 || !report.Complete() {
-		t.Fatalf("report = %#v", report)
-	}
-	if readFile(t, path) != `<div ht-debug></div>` {
-		t.Fatal("default migration rewrote source")
-	}
-}
-
-func TestInteractiveDebugRemovesBothAliasesFromOneElementCandidate(t *testing.T) {
-	root := t.TempDir()
-	themePath := writeTheme(t, root, `{}`)
-	path := writeFile(t, root, "fragments/debug-aliases.html", `<div ht-debug data-ht-debug></div>`)
-
-	report, err := (Migration{
-		ThemePath:   themePath,
-		Interactive: true,
-		Input:       strings.NewReader("y\n"),
-		Output:      &bytes.Buffer{},
-		Rules:       []Rule{migrationrules.Debug{}},
-	}).Run()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if report.Counters.OptionalFound != 1 || report.Counters.OptionalRemoved != 1 {
-		t.Fatalf("report = %#v", report)
-	}
-	if got, want := readFile(t, path), `<div></div>`; got != want {
 		t.Fatalf("source = %q, want %q", got, want)
 	}
 }
