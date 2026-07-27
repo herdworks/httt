@@ -3,45 +3,73 @@ package directives
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"slices"
 
+	htdata "github.com/herdworks/hypertemplates-go/data"
 	htdocument "github.com/herdworks/hypertemplates-go/document"
 	"golang.org/x/net/html"
 )
+
+// IncludeDirective replaces ht-include placeholders with theme fragments.
+type IncludeDirective struct{}
+
+var _ Directive = IncludeDirective{} // make the compiler check Directive interface conformance
 
 var (
 	ErrInclude         = errors.New("ht-include error")
 	ErrIncludeFragment = errors.New("ht-include fragment error")
 )
 
-var HyperIncludeAttributeStrings = []string{"data-ht-include", "ht-include"}
-
-func ResolveIncludes(document *htdocument.Document) (err error) {
-	for _, element := range HyperIncludeElements(document) {
-		if err = Include(document, element); err != nil {
-			return errors.Join(ErrInclude, err)
-		}
+func (IncludeDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-include"}
+	if !strict {
+		attributes = append(attributes, "ht-include")
 	}
-	if len(HyperIncludeElements(document)) > 0 {
-		if err = ResolveIncludes(document); err != nil {
-			return errors.Join(ErrInclude, err)
-		}
-	}
-	return nil
+	return attributes
 }
 
-func Include(document *htdocument.Document, element *html.Node) (err error) {
-	var fragments []*html.Node
-	path := htdocument.GetAttribute(element, HyperIncludeAttributeStrings...).Val
-	if fragments, err = IncludeFragments(document, element, path); err != nil {
-		return errors.Join(ErrInclude, err)
+func (d IncludeDirective) Selectors(strict bool) []string {
+	// Unlike defaultDirectiveSelectors, keep includes on an ht-each root so
+	// the fragment is resolved before the loop expands it. Only descendants
+	// of a loop are deferred to the nested render pass.
+	selectors := []string{"[data-ht-include]:not([data-ht-each] [data-ht-include])"}
+	if !strict {
+		selectors[0] += ":not([ht-each] [data-ht-include])"
+		selectors = append(selectors, "[ht-include]:not([ht-each] [ht-include]):not([data-ht-each] [ht-include])")
+	}
+	return selectors
+}
+
+func (d IncludeDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil {
+		return nil
+	}
+	return htdocument.QueryAll(document.Layout, d.Selectors(document.StrictMode)...)
+}
+
+// NextElements returns the next include depth after the current batch has
+// been replaced.
+func (d IncludeDirective) NextElements(document *htdocument.Document) []*html.Node {
+	return d.Elements(document)
+}
+
+func (d IncludeDirective) Process(document *htdocument.Document, element *html.Node, _ *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) error {
+	if element == nil || element.Parent == nil {
+		return nil
+	}
+	attribute := htdocument.GetAttribute(element, d.Attributes(false)...)
+	path := attribute.Val
+	fragments, err := IncludeFragments(document, element, path)
+	if err != nil {
+		return fmt.Errorf("ht-include: error evaluating %q=%q:\n%s\n%w", attribute.Key, attribute.Val, htdocument.ElementString(element), errors.Join(ErrInclude, err))
 	}
 	htdocument.ForwardAttributes(element, fragments, forwardedAttributeSkipKeys()...)
 	htdocument.OuterHTML(element, fragments)
 	return nil
 }
-
 func IncludeFragments(document *htdocument.Document, element *html.Node, path string) (fragments []*html.Node, err error) {
 	var fragmentBytes []byte
 	var found bool
@@ -80,18 +108,8 @@ func IncludeFragment(document *htdocument.Document, element *html.Node, path str
 	return fragments[0], nil
 }
 
-func HyperIncludeElements(document *htdocument.Document) []*html.Node {
-	selectors := []string{"[data-ht-include]:not([data-ht-each] [data-ht-include])"}
-	if document.StrictMode {
-		return htdocument.QueryAll(document.Layout, selectors...)
-	}
-	selectors[0] += ":not([ht-each] [data-ht-include])"
-	selectors = append(selectors, "[ht-include]:not([ht-each] [ht-include]):not([data-ht-each] [ht-include])")
-	return htdocument.QueryAll(document.Layout, selectors...)
-}
-
 func forwardedAttributeSkipKeys() []string {
-	keys := slices.Clone(HyperIncludeAttributeStrings)
+	keys := slices.Clone(IncludeDirective{}.Attributes(false))
 	keys = append(keys, BlockDirective{}.Attributes(false)...)
 	return keys
 }

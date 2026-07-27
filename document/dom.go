@@ -22,16 +22,6 @@ func (document *Document) AttributeData(element *html.Node) data.TemplateData {
 	return AttributeData(element)
 }
 
-func (document *Document) LayoutData() (out data.TemplateData) {
-	out = data.TemplateData{}
-	for _, element := range QueryAll(document.Layout, "meta[name^='layout:']") {
-		key := strings.Replace(GetAttributeString(element, "name"), "layout:", "", -1)
-		value := GetAttributeString(element, "content")
-		out.Set(key, value)
-	}
-	return out
-}
-
 func (document *Document) IsAbsoluteHref(href string) bool {
 	return IsAbsoluteHref(href)
 }

@@ -17,6 +17,7 @@ type Directive interface {
 	Attributes(strict bool) []string
 	Selectors(strict bool) []string
 	Elements(document *htdocument.Document) []*html.Node
+	NextElements(document *htdocument.Document) []*html.Node
 	Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) error
 }
 
@@ -36,7 +37,7 @@ type IncrementalDirectiveExpression interface {
 	ParseNextExpression(string) (remainder string, tokens []Token, err error)
 }
 
-// Process resolves includes and renders the document's directive pipeline.
+// Process renders the document's directive pipeline.
 func Process(document *htdocument.Document, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) (htmlBytes []byte, err error) {
 	if w == nil {
 		w = os.Stdout
@@ -47,37 +48,36 @@ func Process(document *htdocument.Document, data *htdata.TemplateData, userData 
 	}
 	document.EnsureMarkdownConfig()
 
-	// recursively resolve all include directives
-	if err = ResolveIncludes(document); err != nil {
-		return nil, err
-	}
-
-	// include builtin layout fragments
-	if err = htdocument.IncludeBuiltins(document); err != nil {
-		return nil, err
-	}
-
-	// Block fragments receive only caller-approved user data and block data.
-	if !document.BlockMode {
-		data.Set("layout", document.LayoutData())
-	}
-
-	// process directives
+	// templating directives
 	directives := []Directive{
-		DeprecatedDirective{},
-		ConditionalDirective{},
-		DebugDirective{},
-		PipeDirective{},
-		EachDirective{},
-		ApplyDirective{},
-		AttributeMapDirective{},
-		BlockDirective{},
-		BaseDirective{},
+		IncludeDirective{},      // ht-include
+		BuiltinsDirective{},     //
+		LayoutDataDirective{},   //
+		DeprecatedDirective{},   //
+		ConditionalDirective{},  // ht-if
+		DebugDirective{},        // ht-debug
+		PipeDirective{},         // ht-pipe
+		EachDirective{},         // ht-each
+		ApplyDirective{},        // ht-apply
+		AttributeMapDirective{}, // ht-attrs
+		BlockDirective{},        // ht-block
+		BaseDirective{},         // ht-base
 	}
+
+	// Execute directives in declaration order.
+	//
+	// NOTE: Directives observe the DOM produced by preceding directives (if any).
 	for _, directive := range directives {
-		for _, element := range directive.Elements(document) {
-			if err = directive.Process(document, element, data, userData, w); err != nil {
-				return nil, err
+		// Process each element in the initial directive.Elements() snapshot.
+		//
+		// Then optionally process elements returned by directive.NextElements().
+		//
+		// NOTE: Single-pass directives should return no elements from directive.NextElements().
+		for elements := directive.Elements(document); len(elements) > 0; elements = directive.NextElements(document) {
+			for _, element := range elements {
+				if err = directive.Process(document, element, data, userData, w); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

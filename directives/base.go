@@ -39,6 +39,8 @@ func (d BaseDirective) Elements(document *htdocument.Document) []*html.Node {
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
+func (BaseDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
 func (BaseDirective) ParseExpression(expression string) ([]Token, error) {
 	return tokenizeExpression(expression, baseExpressionGrammar)
 }

@@ -39,6 +39,8 @@ func (d DeprecatedDirective) Elements(document *htdocument.Document) []*html.Nod
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
+func (DeprecatedDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
 func (d DeprecatedDirective) Process(document *htdocument.Document, element *html.Node, _ *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
 	if attributes := htdocument.GetAttributes(element, d.Attributes(document.StrictMode)...); len(attributes) > 0 {
 		return fmt.Errorf("the %q directive is no longer supported (see 'hyperctl theme migrate' for replacements);\n\n%s", attributes[0].Key, htdocument.ElementString(element))

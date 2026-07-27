@@ -36,6 +36,8 @@ func (d DebugDirective) Elements(document *htdocument.Document) []*html.Node {
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
+func (DebugDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
 func (d DebugDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, w io.Writer) (err error) {
 	if document == nil {
 		return nil

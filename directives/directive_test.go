@@ -56,6 +56,15 @@ func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 			},
 		},
 		{
+			name:      "include",
+			directive: IncludeDirective{},
+			strict:    []string{"[data-ht-include]:not([data-ht-each] [data-ht-include])"},
+			legacy: []string{
+				"[data-ht-include]:not([data-ht-each] [data-ht-include]):not([ht-each] [data-ht-include])",
+				"[ht-include]:not([ht-each] [ht-include]):not([data-ht-each] [ht-include])",
+			},
+		},
+		{
 			name:      "each",
 			directive: EachDirective{},
 			strict:    []string{"[data-ht-each]:not([data-ht-each] [data-ht-each])"},
@@ -184,6 +193,8 @@ func (sharedSelectorDirective) Selectors(strict bool) []string {
 }
 
 func (sharedSelectorDirective) Elements(*htdocument.Document) []*html.Node { return nil }
+
+func (sharedSelectorDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
 
 func (sharedSelectorDirective) Process(*htdocument.Document, *html.Node, *htdata.TemplateData, *htdata.TemplateData, io.Writer) error {
 	return nil

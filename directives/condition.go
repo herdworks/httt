@@ -87,6 +87,8 @@ func (d ConditionalDirective) Elements(document *htdocument.Document) []*html.No
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
+func (ConditionalDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
 // ParseExpression tokenizes an entire conditional expression. It preserves a
 // flat token stream so all OR branches can be validated before evaluation.
 func (ConditionalDirective) ParseExpression(source string) ([]Token, error) {

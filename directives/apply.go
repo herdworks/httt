@@ -43,6 +43,8 @@ func (d ApplyDirective) Elements(document *htdocument.Document) []*html.Node {
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
+func (ApplyDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
 func (d ApplyDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
 	if document == nil {
 		return nil

@@ -17,9 +17,8 @@ import (
 	"golang.org/x/net/html"
 )
 
-// Template.ResolveIncludes
-// Ensure that ht-include elements are properly resolved.
-func TestResolveIncludes(t *testing.T) {
+// IncludeDirective resolves ht-include elements, including nested fragments.
+func TestIncludeDirective(t *testing.T) {
 	tests := []struct {
 		name    string
 		layout  string
@@ -61,7 +60,7 @@ func TestResolveIncludes(t *testing.T) {
 			if template.Layout == nil {
 				t.Fatalf("template.Layout is nil")
 			}
-			err = ResolveIncludes(template)
+			err = processIncludes(template)
 			if tc.err == nil && err != nil {
 				t.Fatalf("error resolving includes: %v", err)
 			}
@@ -98,7 +97,7 @@ func TestResolveIncludesRejectsUnsafeReferences(t *testing.T) {
 			}
 			document.SetAttribute(include, "ht-include", tc.ref)
 
-			err := ResolveIncludes(doc)
+			err := processIncludes(doc)
 			if !errors.Is(err, ErrIncludeFragment) {
 				t.Fatalf("expected ErrIncludeFragment for %q, got: %v", tc.ref, err)
 			}
@@ -139,7 +138,7 @@ func TestAttributeForwarding(t *testing.T) {
 			if template.Layout == nil {
 				t.Fatalf("template.Layout is nil")
 			}
-			if err = ResolveIncludes(template); err != nil {
+			if err = processIncludes(template); err != nil {
 				t.Fatalf("error resolving includes: %v", err)
 			}
 			if matches := document.QueryAll(template.Layout, "header#hero"); len(matches) != 1 {
@@ -149,6 +148,50 @@ func TestAttributeForwarding(t *testing.T) {
 				t.Fatalf("expected 1 match for footer#forwarded, got %d", len(matches))
 			}
 		})
+	}
+}
+
+func processIncludes(document *document.Document) error {
+	directive := IncludeDirective{}
+	for elements := directive.Elements(document); len(elements) > 0; elements = directive.NextElements(document) {
+		for _, element := range elements {
+			if err := directive.Process(document, element, nil, nil, nil); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func TestIncludeDirectiveProcessesOneDepthAtATime(t *testing.T) {
+	document := setupBuiltinTest(t,
+		`<!doctype html><html><head></head><body><div ht-include="fragments/outer.html"></div><div ht-include="fragments/sibling.html"></div></body></html>`,
+		map[string]string{
+			"fragments/outer.html": `<section ht-include="fragments/nested.html"></section>`,
+		},
+	)
+	_, err := Process(document, &TemplateData{}, nil, nil)
+	if err == nil {
+		t.Fatal("Process() error = nil, want missing sibling include")
+	}
+	if !strings.Contains(err.Error(), "fragments/sibling") {
+		t.Fatalf("Process() error = %v, want sibling include error before nested include error", err)
+	}
+}
+
+func TestIncludeDirectiveErrorIncludesAttributeAndElementContext(t *testing.T) {
+	document := setupBuiltinTest(t, `<!doctype html><html><head></head><body><section id="missing" ht-include="fragments/missing.html"></section></body></html>`, nil)
+	_, err := Process(document, &TemplateData{}, nil, nil)
+	if err == nil {
+		t.Fatal("Process() error = nil, want missing include error")
+	}
+	if !errors.Is(err, ErrInclude) || !errors.Is(err, ErrIncludeFragment) {
+		t.Fatalf("Process() error = %v, want include sentinels", err)
+	}
+	for _, want := range []string{`failed evaluating directive attribute "ht-include"="fragments/missing.html"`, `<section id="missing" ht-include="fragments/missing.html">`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Process() error = %v, want %q context", err, want)
+		}
 	}
 }
 

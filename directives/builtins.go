@@ -1,22 +1,38 @@
-package document
+package directives
 
 import (
 	"bytes"
+	"io"
 
+	htdata "github.com/herdworks/hypertemplates-go/data"
+	htdocument "github.com/herdworks/hypertemplates-go/document"
 	"github.com/herdworks/hypertemplates-go/theme"
 	"golang.org/x/net/html"
 )
 
-// IncludeBuiltins injects the default builtin fragments into doc.
-func IncludeBuiltins(document *Document) error {
-	return includeBuiltinSlots(document, theme.DefaultBuiltins())
-}
+// BuiltinsDirective injects the default builtin fragments into a layout.
+type BuiltinsDirective struct{}
 
-func includeBuiltinSlots(document *Document, slots []theme.Builtin) error {
-	if document.BlockMode {
+var _ Directive = BuiltinsDirective{} // make the compiler check Directive interface conformance
+
+func (BuiltinsDirective) Attributes(bool) []string { return []string{} }
+
+func (BuiltinsDirective) Selectors(bool) []string { return nil }
+
+func (BuiltinsDirective) Elements(document *htdocument.Document) []*html.Node {
+	if document == nil || document.Layout == nil {
 		return nil
 	}
-	for _, slot := range slots {
+	return []*html.Node{document.Layout}
+}
+
+func (BuiltinsDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
+func (BuiltinsDirective) Process(document *htdocument.Document, _ *html.Node, _ *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) error {
+	if document == nil || document.BlockMode {
+		return nil
+	}
+	for _, slot := range theme.DefaultBuiltins() {
 		if err := includeBuiltinSlot(document, slot); err != nil {
 			return err
 		}
@@ -24,19 +40,13 @@ func includeBuiltinSlots(document *Document, slots []theme.Builtin) error {
 	return nil
 }
 
-func includeBuiltinSlot(document *Document, slot theme.Builtin) error {
+func includeBuiltinSlot(document *htdocument.Document, slot theme.Builtin) error {
 	fragmentBytes, found, err := resolveBuiltinFragment(document, slot.Fragment)
-	if err != nil {
+	if err != nil || !found || len(fragmentBytes) == 0 {
 		return err
 	}
-	if !found {
-		return nil
-	}
-	if len(fragmentBytes) == 0 {
-		return nil
-	}
 
-	target := Query(document.Layout, slot.Selector)
+	target := htdocument.Query(document.Layout, slot.Selector)
 	if target == nil {
 		return nil
 	}
@@ -86,7 +96,7 @@ func includeBuiltinSlot(document *Document, slot theme.Builtin) error {
 	return nil
 }
 
-func resolveBuiltinFragment(document *Document, ref string) ([]byte, bool, error) {
+func resolveBuiltinFragment(document *htdocument.Document, ref string) ([]byte, bool, error) {
 	if document.Theme != nil {
 		return document.Theme.ResourceBytes(ref)
 	}

@@ -37,6 +37,8 @@ func (d PipeDirective) Elements(document *htdocument.Document) []*html.Node {
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
+func (PipeDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
 func (d PipeDirective) Process(document *htdocument.Document, element *html.Node, _ *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
 	if document == nil {
 		return nil

@@ -72,6 +72,8 @@ func (d EachDirective) Elements(document *htdocument.Document) []*html.Node {
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
+func (EachDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
 func (EachDirective) ParseExpression(expression string) ([]Token, error) {
 	return tokenizeExpression(expression, eachExpressionGrammar)
 }

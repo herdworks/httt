@@ -38,6 +38,8 @@ func (d BlockDirective) Elements(document *htdocument.Document) []*html.Node {
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
+func (BlockDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
 func (d BlockDirective) Process(document *htdocument.Document, element *html.Node, _ *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) (err error) {
 	if document == nil || document.IsFragment() || element == nil {
 		return nil

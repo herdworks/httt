@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 * **BREAKING:** Template-variable literal arguments are limited to quoted strings, booleans, and finite numbers; bare `null` is rejected.
 * Added `data.IsTruthy` and changed `TemplateData.Has` so false, nil, and empty strings or containers are false while all numbers, including zero, are true.
 * Added the `directives.Directive` interface and standardized core directive discovery and processing, including strict-mode aliases and document-order selector handling.
+* **BREAKING:** Added `Directive.NextElements` for directives that require successive DOM batches. Include resolution, builtin injection, and layout metadata population now run as `IncludeDirective`, `BuiltinsDirective`, and `LayoutDataDirective` passes; layout metadata is limited to `layout:*` meta elements in a layout document's `<head>`, never fragments. Removed `ResolveIncludes`, `document.IncludeBuiltins`, and `Document.LayoutData`.
+* Changed `ht-include` failures to identify the source directive attribute and surrounding element while retaining typed include errors.
 * Changed directive variable errors to identify the rendered attribute or text location and surrounding element for syntax, lookup, plugin, and rendering failures.
 * Changed `document.Query`, `QueryAll`, and `QueryRoot` to treat variadic selectors as one CSS selector group, preserving document order and returning each matching element once.
 * Changed `ht-param` migration to emit function-call syntax for Markdown and leave source-less parameters unresolved, and moved optional `ht-debug` cleanup to the end of the default migration rule order.

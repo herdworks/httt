@@ -43,6 +43,8 @@ func (d AttributeMapDirective) Elements(document *htdocument.Document) []*html.N
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
 }
 
+func (AttributeMapDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
+
 func (AttributeMapDirective) ParseExpression(expression string) ([]Token, error) {
 	return tokenizeExpression(expression, attributeMapExpressionGrammar)
 }
