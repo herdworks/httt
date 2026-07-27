@@ -9,6 +9,17 @@ import (
 	"unicode/utf8"
 )
 
+// Token preserves one expression token and its byte range in the source.
+type Token struct {
+	Kind   TokenKind
+	Raw    string
+	Quoted bool
+	Start  int
+	End    int
+}
+
+type Tokens []Token
+
 // TokenKind identifies one lexical unit in a directive expression.
 type TokenKind uint8
 
@@ -18,16 +29,6 @@ const (
 	TokenOperator
 	TokenDelimiter
 )
-
-// Token preserves one expression token and its byte range in the source.
-type Token struct {
-	Kind   TokenKind
-	Raw    string
-	Quoted bool
-	Start  int
-	End    int
-}
-type Tokens []Token
 
 // ExpressionGrammar configures tokenization for one directive expression
 // syntax. Operators are exact and case-sensitive. Multi-word operators match
@@ -48,10 +49,41 @@ func (tokens Tokens) ContainsVariable() bool {
 	return slices.ContainsFunc(tokens, Token.IsVariable)
 }
 
+// Expression reconstructs a normalized expression from its lexical tokens.
+// Tokenization intentionally discards inter-token whitespace, so tokens are
+// joined with one space.
+func (tokens Tokens) Expression() string {
+	raw := make([]string, len(tokens))
+	for index, token := range tokens {
+		raw[index] = token.Raw
+	}
+	return strings.Join(raw, " ")
+}
+
 func (token Token) IsVariable() bool  { return token.Kind == TokenVariable }
 func (token Token) IsOperand() bool   { return token.Kind == TokenVariable || token.Kind == TokenLiteral }
 func (token Token) IsOperator() bool  { return token.Kind == TokenOperator }
 func (token Token) IsDelimiter() bool { return token.Kind == TokenDelimiter }
+
+// Unquoted returns a quoted literal token's contents with quote and
+// backslash escapes removed. Non-quoted tokens retain their raw text.
+func (token Token) Unquoted() string {
+	if !token.Quoted {
+		return token.Raw
+	}
+	var value strings.Builder
+	value.Grow(len(token.Raw) - 2)
+	for index := 1; index < len(token.Raw)-1; index++ {
+		if token.Raw[index] == '\\' {
+			index++
+			if token.Raw[index] != token.Raw[0] && token.Raw[index] != '\\' {
+				value.WriteByte('\\')
+			}
+		}
+		value.WriteByte(token.Raw[index])
+	}
+	return value.String()
+}
 
 // Tokenizer tokenizes one directive expression according to grammar.
 func Tokenizer(expression string, grammar ExpressionGrammar) ([]Token, error) {

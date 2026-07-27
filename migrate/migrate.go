@@ -43,6 +43,7 @@ var DefaultRules = []migrationrules.Rule{
 	migrationrules.Param{},
 	migrationrules.Content{},
 	migrationrules.Query{},
+	migrationrules.Pipe{},
 	migrationrules.Debug{},
 }
 

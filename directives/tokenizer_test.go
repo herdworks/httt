@@ -91,6 +91,23 @@ func TestTokenizerKeepsQuotedVariableContentRaw(t *testing.T) {
 	}
 }
 
+func TestTokenUnquoted(t *testing.T) {
+	tests := []struct {
+		token Token
+		want  string
+	}{
+		{token: Token{Raw: `"head style"`, Quoted: true}, want: "head style"},
+		{token: Token{Raw: `'head \'style\''`, Quoted: true}, want: "head 'style'"},
+		{token: Token{Raw: `"selector\\d"`, Quoted: true}, want: `selector\d`},
+		{token: Token{Raw: "literal"}, want: "literal"},
+	}
+	for _, test := range tests {
+		if got := test.token.Unquoted(); got != test.want {
+			t.Fatalf("Unquoted(%#v) = %q, want %q", test.token, got, test.want)
+		}
+	}
+}
+
 func TestTokenizerEmitsSeparatorAsDelimiter(t *testing.T) {
 	grammar := ExpressionGrammar{Operators: []string{"=="}, Separator: "OR", AllowQuotedLiterals: true}
 	tokens, err := Tokenizer(`${ first } OR ${ second }`, grammar)

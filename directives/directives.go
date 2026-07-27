@@ -26,7 +26,7 @@ type Directive interface {
 type DirectiveExpression interface {
 	Directive
 	ParseExpression(string) ([]Token, error)
-	ValidateExpression([]Token) error
+	ValidateExpression(Tokens) error
 }
 
 // IncrementalDirectiveExpression optionally parses one delimiter-bounded
@@ -54,8 +54,8 @@ func Process(document *htdocument.Document, data *htdata.TemplateData, userData 
 		BuiltinsDirective{},     //
 		LayoutDataDirective{},   //
 		DeprecatedDirective{},   //
-		ConditionalDirective{},  // ht-if
 		DebugDirective{},        // ht-debug
+		ConditionalDirective{},  // ht-if
 		PipeDirective{},         // ht-pipe
 		EachDirective{},         // ht-each
 		ApplyDirective{},        // ht-apply

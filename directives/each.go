@@ -157,7 +157,7 @@ func (d EachDirective) expressionParser(expression string, data htvariable.Gette
 	return binding, values, nil
 }
 
-func (d EachDirective) ValidateExpression(tokens []Token) error {
+func (d EachDirective) ValidateExpression(tokens Tokens) error {
 	if len(tokens) != 3 {
 		return fmt.Errorf("expected exactly three tokens: binding in ${ variable }")
 	}

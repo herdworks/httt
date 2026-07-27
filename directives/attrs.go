@@ -49,7 +49,7 @@ func (AttributeMapDirective) ParseExpression(expression string) ([]Token, error)
 	return tokenizeExpression(expression, attributeMapExpressionGrammar)
 }
 
-func (AttributeMapDirective) ValidateExpression(tokens []Token) error {
+func (AttributeMapDirective) ValidateExpression(tokens Tokens) error {
 	if len(tokens) != 1 || tokens[0].Kind != TokenVariable {
 		return fmt.Errorf("expected exactly one ${ ... } variable")
 	}

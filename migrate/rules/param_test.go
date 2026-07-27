@@ -121,9 +121,9 @@ func TestParamInteractivePreviewShowsCompleteNodeReplacement(t *testing.T) {
 	}
 }
 
-func TestDefaultRulesContainConditionalTemplateParamContentQueryAndDebugInPrecedenceOrder(t *testing.T) {
-	if len(migrate.DefaultRules) != 8 {
-		t.Fatalf("DefaultRules length = %d, want 8", len(migrate.DefaultRules))
+func TestDefaultRulesContainConditionalTemplateParamContentQueryPipeAndDebugInPrecedenceOrder(t *testing.T) {
+	if len(migrate.DefaultRules) != 9 {
+		t.Fatalf("DefaultRules length = %d, want 9", len(migrate.DefaultRules))
 	}
 	selectors := []string{
 		strings.Join(selectorStrings(migrate.DefaultRules[0]), ","),
@@ -134,8 +134,9 @@ func TestDefaultRulesContainConditionalTemplateParamContentQueryAndDebugInPreced
 		strings.Join(selectorStrings(migrate.DefaultRules[5]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[6]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[7]), ","),
+		strings.Join(selectorStrings(migrate.DefaultRules[8]), ","),
 	}
-	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-template],[data-ht-template];[ht-attr],[data-ht-attr];[ht-attrs]:not([ht-attrs^=\"${\"]),[data-ht-attrs]:not([data-ht-attrs^=\"${\"]);[ht-param],[data-ht-param];[ht-content],[data-ht-content];[ht-query],[data-ht-query];[ht-debug],[data-ht-debug]"; got != want {
+	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-template],[data-ht-template];[ht-attr],[data-ht-attr];[ht-attrs]:not([ht-attrs^=\"${\"]),[data-ht-attrs]:not([data-ht-attrs^=\"${\"]);[ht-param],[data-ht-param];[ht-content],[data-ht-content];[ht-query],[data-ht-query];[data-ht-pipe]:not([data-ht-pipe^='to ']),[ht-pipe]:not([ht-pipe^='to ']);[ht-debug],[data-ht-debug]"; got != want {
 		t.Fatalf("DefaultRules selectors = %q, want %q", got, want)
 	}
 }

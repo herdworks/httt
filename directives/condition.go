@@ -18,8 +18,8 @@ import (
 
 type ConditionalDirective struct{}
 
-var _ Directive = ConditionalDirective{} // make the compiler check Directive interface conformance
-var _ DirectiveExpression = ConditionalDirective{}
+var _ Directive = ConditionalDirective{}           // make the compiler check Directive interface conformance
+var _ DirectiveExpression = ConditionalDirective{} // make the compiler check DirectiveExpression interface conformance
 var _ IncrementalDirectiveExpression = ConditionalDirective{}
 
 type conditionalStatement struct {
@@ -104,7 +104,7 @@ func (ConditionalDirective) ParseNextExpression(source string) (remainder string
 
 // ValidateExpression checks every conditional statement without resolving
 // values, rendering plugins, or compiling regular expressions.
-func (ConditionalDirective) ValidateExpression(tokens []Token) error {
+func (ConditionalDirective) ValidateExpression(tokens Tokens) error {
 	return validateConditionalTokenGroups(tokens)
 }
 func (d ConditionalDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {

@@ -45,7 +45,7 @@ func (BaseDirective) ParseExpression(expression string) ([]Token, error) {
 	return tokenizeExpression(expression, baseExpressionGrammar)
 }
 
-func (BaseDirective) ValidateExpression(tokens []Token) error {
+func (BaseDirective) ValidateExpression(tokens Tokens) error {
 	if len(tokens) != 3 || tokens[0].Kind != TokenLiteral || tokens[0].Quoted || tokens[1].Kind != TokenOperator || tokens[1].Raw != "on" || tokens[2].Kind != TokenVariable {
 		return fmt.Errorf("ht-base requires '<attribute> on ${ ... }'")
 	}

@@ -188,7 +188,7 @@ func TestIncludeDirectiveErrorIncludesAttributeAndElementContext(t *testing.T) {
 	if !errors.Is(err, ErrInclude) || !errors.Is(err, ErrIncludeFragment) {
 		t.Fatalf("Process() error = %v, want include sentinels", err)
 	}
-	for _, want := range []string{`failed evaluating directive attribute "ht-include"="fragments/missing.html"`, `<section id="missing" ht-include="fragments/missing.html">`} {
+	for _, want := range []string{`ht-include: error evaluating "ht-include"="fragments/missing.html"`, `<section id="missing" ht-include="fragments/missing.html">`} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("Process() error = %v, want %q context", err, want)
 		}
