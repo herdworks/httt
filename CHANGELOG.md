@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.33.1 (2026-07-27)
+
 * Updated the GitHub Actions Go toolchain to v1.26.2 so benchmark tests using `testing.B.Loop` compile in CI.
 
 ## v0.33.0 (2026-07-27)
