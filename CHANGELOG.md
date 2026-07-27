@@ -6,54 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
-* **BREAKING:** Replaced legacy `ht-attrs` declarations with repeatable map-valued `${ ... }` attributes applied in source order; later maps win conflicts and directive-valued map keys are skipped. Removed runtime `ht-attr`; `hyperctl theme migrate` converts compatible targeted singular declarations to ordinary templated attributes plus `ht-apply`, while unsupported singular and legacy plural syntax is reported for manual migration.
-* **BREAKING:** Removed exported directive attribute-name slices in favor of each directive's `Attributes` method.
-* **BREAKING:** Replaced `DirectiveExpression.Grammar` with directive-owned `ParseExpression` plus explicit `ValidateExpression`; added optional `IncrementalDirectiveExpression.ParseNextExpression`. Removed `CompiledExpressionGrammar`, `CompileExpressionGrammar`, and `MustCompileExpressionGrammar`.
-* Added shared generic expression tokenization with structural delimiters and `ExpressionGrammar.MaxTokens` for bounded directive expressions. Token limits apply to each separator-bounded segment and reject surplus non-whitespace tokens.
-* Fixed same-element `ht-include` and `ht-each` processing so the fragment is included before loop expansion and clone-local variables resolve correctly.
-* Added `variable.ResolveValue` for typed `${ ... }` lookup resolution. Typed and rendered lookups fall through missing, nil, and empty-string template-data values while preserving false, zero, and empty containers; a final literal fallback, including `""`, is selected literally. `RenderString` leaves strings unquoted and JSON-encodes other non-nil values.
-* **BREAKING:** Template-variable literal arguments are limited to quoted strings, booleans, and finite numbers; bare `null` is rejected.
-* Added `data.IsTruthy` and changed `TemplateData.Has` so false, nil, and empty strings or containers are false while all numbers, including zero, are true.
-* Added the `directives.Directive` interface and standardized core directive discovery and processing, including strict-mode aliases and document-order selector handling.
-* **BREAKING:** Added `Directive.NextElements` for directives that require successive DOM batches. Include resolution, builtin injection, and layout metadata population now run as `IncludeDirective`, `BuiltinsDirective`, and `LayoutDataDirective` passes; layout metadata is limited to `layout:*` meta elements in a layout document's `<head>`, never fragments. Removed `ResolveIncludes`, `document.IncludeBuiltins`, and `Document.LayoutData`.
-* Changed `ht-include` failures to identify the source directive attribute and surrounding element while retaining typed include errors.
-* Changed directive variable errors to identify the rendered attribute or text location and surrounding element for syntax, lookup, plugin, and rendering failures.
-* Changed `document.Query`, `QueryAll`, and `QueryRoot` to treat variadic selectors as one CSS selector group, preserving document order and returning each matching element once.
-* Changed `ht-param` migration to emit function-call syntax for Markdown and leave source-less parameters unresolved. The final default migration rule reports legacy `ht-debug` values ending in `data` for manual conversion.
-* **BREAKING:** Replaced template-variable pipelines and raw `text/template` commands with implicit lookup lists or one JavaScript-style top-level call to built-in functions (`get`, `text`, and `markdown`), or a registered plugin. Template variable function nesting, grouping, and pipes are no longer supported.
-* **BREAKING:** Changed variable plugins to receive resolved keypath and literal arguments in source order, including nil values, and reserved `text` and `markdown` as built-in function names.
-* **BREAKING:** Renamed `variable.Merge` to `variable.MergePlugins`; renamed the directive rendering API to `directives.RenderVariables`, `directives.HyperApplyElements`, and `directives.HyperApplyAttributeStrings`; and renamed `document.MarkdownValueFunc` to `document.MarkdownVariableFunc`. The old exports have been removed.
-* **BREAKING:** Renamed CSS variable interpolation from `--ht-value(...)` to `--ht-var(...)`; the old spelling is no longer recognized.
-* **BREAKING:** Replaced active `ht-if` evaluation with explicit typed `${ ... }` expressions, comparisons, lazy uppercase `OR`, repeated-attribute `AND`, and slice membership through `in` / `not in`. Naked presence values and empty conditions are now syntax errors; naked comparison operands remain literals.
-* `ht-if` now validates every uppercase-`OR` branch before evaluation, while still short-circuiting variable lookups, plugin calls, and regex compilation after the first true branch. Symbolic comparisons accept compact spelling; `=!`, `~=`, and `~!` normalize to `!=`, `=~`, and `!~`.
-* **BREAKING:** Changed `ht-debug` to accept one token per repeated attribute: the fixed `element` operator or one complete `${ ... }` template variable. Bare modes such as `data` and comma-separated mode lists are rejected; `hyperctl theme migrate` reports legacy values ending in `data` for manual conversion. It runs before `ht-if`, so element output inspects authored DOM before conditional processing.
-* **BREAKING:** Removed runtime support for `ht-not` and `data-ht-not`; stale templates now fail with a migration hint. `hyperctl theme migrate` converts deprecated presence, equality, regex, comma/semicolon alternatives, aliases, and mixed conditional gates to `ht-if`; active `ht-if` values are not rewritten and migration reruns are idempotent.
-* **BREAKING:** Added `ht-each` / `data-ht-each` typed loops with literal offset/limit windows, shallow isolated per-item scopes, and `each.index` / `each.count` / `each.total` metadata. `each.count` describes the emitted window and `each.total` the complete source; `each` is reserved as loop-local state. Loops defer descendant directive processing until each clone is rendered.
-* **BREAKING:** Removed runtime `ht-template` / `data-ht-template`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts compatible legacy loops to `ht-each`, rewrites `ht.index` / `ht.count` / `ht.total` metadata references to `each.*`, and reports unresolved aliases or same-element active-loop conflicts.
-* **BREAKING:** Removed runtime `ht-content` / `data-ht-content`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts supported content directives to `ht-apply` and reports unsafe legacy shapes for manual conversion.
-* **BREAKING:** Removed runtime `ht-param` / `data-ht-param`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts supported parameter elements to `ht-apply` output and reports unsafe legacy shapes for manual conversion.
-* **BREAKING:** Removed runtime `ht-query` / `data-ht-query`. Stale attributes now fail with a `hyperctl theme migrate` hint; migration converts compatible query declarations to raw templated URL components, preserves static queries and fragments, and warns when a single template-variable URL might already render a query string or fragment.
-* **BREAKING:** `ht-base` now requires repeatable `<target> on ${ variable }` declarations. Legacy colon/semicolon syntax is rejected by directive validation and must be updated manually.
-* **BREAKING:** `ht-pipe` now requires `to "<selector>"` with an optional `as <type>` clause. All selectors are quoted literal configuration; template-variable syntax within a selector is not rendered. Repeated `ht-pipe` / `data-ht-pipe` attributes are source-ordered fallbacks. `element` moves the source, while `text`, `css`, `js`, and `javascript` append its text. `hyperctl theme migrate` converts legacy pipe declarations and leaves multi-declaration attributes unresolved.
-* Changed `ht-block` to run only in the final top-level document pass. Block templates receive `block.*` data plus only the caller-provided `userData` context, keeping outer render data unavailable unless the caller explicitly permits it.
+Major redesign of the HT templating directives. All directives that provide access to template data now use the ${ ... } variable syntax. Directives that were obviated by template variable substitution have been removed to improve overall template consistency. Conditional directives have been consolidated into a single more expressive ht-if directive w/ support for multi-variable expressions (e.g. '${ ... } == ${ ... }'). Every directive can now define its own syntax within a shared grammar – the common denominator is now the template variable, not an obtuse `<target>:<keypath[,keypath]>==<condition>` syntax. Most of the new directives use a new/shared token-based parser with support for template variables, operators, separators, and literal values.
 
-## v0.33.1 (2026-07-22)
+This release drops support for `ht-not`, `ht-attr`, `ht-content`, `ht-query`, and `ht-param`. The `ht-template` directive has been replaced with a new `ht-each` directive. A new `hyperctl theme migrate` command has been provided for semi-automated migration of legacy templating directives, and build logs now produce more helpful error messages to help troubleshoot template directive syntax errors.
 
-* Added `migrate.Migration` and its per-rule/per-file `Job` pipeline for incremental theme migrations, including interactive review, durable completed passes, and optional complete-theme output copies.
-* Added the public stateless migration-rule API with shared candidate, proposal, report, and typed-error values, plus initial `ht-param` migration and optional `ht-debug` cleanup rules.
-* Fixed `document.CloneElement` to preserve element namespace metadata.
-
-## v0.33.0 (2026-07-20)
-
-* **BREAKING:** Renamed the `value` package to `variable` to align the Go API with the documented template-variable terminology. Callers must replace imports of `github.com/herdworks/hypertemplates-go/value` with `github.com/herdworks/hypertemplates-go/variable`; the old package has been removed.
-* **BREAKING:** Refactored the template runtime into explicit `files`, `theme`, `document`, and `directives` packages. New callers should use `theme.Theme`, `document.Document`, and `directives.Process`; the root package keeps `Render` plus the existing data and markdown re-exports.
-* **BREAKING:** Removed root-level production compatibility for `Template`, `Theme`, builtin resource state, directive errors, directive parameter types, and file/path helper wrappers. Builtin resource APIs now live in `theme`, directive processing and errors live in `directives`, document/DOM helpers live in `document`, and path/list helpers live in `files`.
-* Added caller-replaceable `theme.BuiltinsFS` resource packs, with default builtin metadata and resource lookup helpers owned by the `theme` package.
-* Added non-stuttering public file helper names in `files`: `List`, `ListByPattern`, `CleanRelativePath`, `ValidateRelativePath`, `LocalPath`, `LocalPaths`, and `RelativePath`.
-* Enabled Goldmark parser attribute support in HyperMark alongside automatic heading IDs.
-* Split directive implementations into focused files under `directives` while preserving the existing directive pass order and behavior.
-* Changed `ht-include` resource loading to use `theme.Theme.ResourceBytes`, preserving theme-over-builtin precedence and empty-file opt-out while rejecting unsafe resource references.
-* Moved directive, file, and theme regression coverage into the owning package test suites, with directive fixtures now scoped under `directives/testdata`.
+* **BREAKING:** Moved the template runtime to the `files`, `theme`, `document`, and `directives` packages, and renamed the `value` package to `variable`. The former root-level runtime compatibility APIs have been removed; callers should use the focused package APIs and `directives.Process`.
+* **BREAKING:** Reworked template-variable syntax around explicit `${ ... }` expressions, ordered fallbacks, and one top-level built-in or plugin call. Pipelines, raw `text/template` commands, nesting, grouping, and bare `null` are no longer supported.
+* **BREAKING:** Renamed CSS variable interpolation from `--ht-value(...)` to `--ht-var(...)`; the former spelling is no longer recognized.
+* **BREAKING:** Redesigned conditional and loop directives. `ht-if` now uses typed presence expressions and explicit comparisons; `ht-each` replaces `ht-template` with typed sources, literal windows, and `each.index` / `each.count` / `each.total` loop metadata. Runtime `ht-not` and `ht-template` have been removed and fail with migration hints.
+* **BREAKING:** Replaced legacy `ht-attrs` declarations with repeatable map-valued `${ ... }` attributes; later maps win and directive-valued keys are skipped. Runtime `ht-attr` has been removed. `ht-content`, `ht-param`, and `ht-query` are likewise migration-only; use `ht-apply` and explicit template output.
+* **BREAKING:** `ht-base` now requires repeatable `<target> on ${ variable }` declarations, and `ht-pipe` requires `to "<selector>"` with an optional `as <type>` clause. Pipe destinations are quoted literal configuration and repeated declarations are source-ordered fallbacks.
+* **BREAKING:** Replaced exported directive attribute lists and grammar APIs with directive-owned discovery and parsing methods. Renamed `variable.Merge` to `variable.MergePlugins`, directive rendering helpers, and `document.MarkdownValueFunc`; removed the old exports.
+* Added new `hyperctl theme migrate` command for migrating themes with legacy templating directives.
+* Improved directive processing and diagnostics: includes expand before same-element loops, active directives require explicit template-data syntax, and errors identify the authored directive or rendered location. `ht-debug` now accepts only repeated `element` or complete `${ ... }` values, while `ht-block` runs only in the final top-level pass with restricted caller data.
 
 ## v0.32.0 (2026-07-01)
 
@@ -130,11 +95,11 @@ is not supported (esbuild rejects it in IIFE format).
 
 ## 0.27.0 (2026-05-06)
 
-Added support for new embedded/builtin template fragments, and simplified the "plugins" implementation. 
+Added support for new embedded/builtin template fragments, and simplified the "plugins" implementation.
 
-Add a new RenderBuiltins step to the template.Process() procedure, with a new `head_start.html` fragment that prepends the `<head>` element. Callers can override the embedded filesystem with their own resources, and they can configure the default builtins. 
+Add a new RenderBuiltins step to the template.Process() procedure, with a new `head_start.html` fragment that prepends the `<head>` element. Callers can override the embedded filesystem with their own resources, and they can configure the default builtins.
 
-Unified user-facing and internal meaning of plugins by consolidating `hypertemplates-go/plugin` into `hypertemplates-go/scripting` and adding support for plugin Kinds. 
+Unified user-facing and internal meaning of plugins by consolidating `hypertemplates-go/plugin` into `hypertemplates-go/scripting` and adding support for plugin Kinds.
 
 * Unified the user-facing and internal meaning of "plugin": a JavaScript file with a named entrypoint and optional local bindings, with concerns split across `scripting` (runtime), `value` (variable-substitution plugins), and `data` (computed-namespace plugins). The `hypertemplates-go/plugins` package is gone.
 * Added `scripting.Plugin` (`Name`, `Path`, `Source`, `Entrypoint`, `Bindings`) with `Compile()` for reusable callables (variable-substitution shape) and `Run(ctx)` for one-shot evaluation with bindings (computed-namespace shape).
@@ -153,7 +118,7 @@ Unified user-facing and internal meaning of plugins by consolidating `hypertempl
 
 ## v0.26.1 (2026-05-05)
 
-Added support for "implicit ht-apply" on ht-template elements. 
+Added support for "implicit ht-apply" on ht-template elements.
 
 ## v0.26.0 (2026-05-05)
 
@@ -227,7 +192,7 @@ Method count on `TemplateData` drops from ~22 to 11. Doc comments now mirror the
 
 ## v0.22.0 (2026-04-28)
 
-Added new plugins package with formalized HyperTemplates plugin spec, and redesigned HyperTemplates internals around relative paths, replacing the overly complex HyperFile struct with a collection of helper methods that require callers to provider root directories as context for relative path []string slices. 
+Added new plugins package with formalized HyperTemplates plugin spec, and redesigned HyperTemplates internals around relative paths, replacing the overly complex HyperFile struct with a collection of helper methods that require callers to provider root directories as context for relative path []string slices.
 
 * Added `ListFiles`, `ListFilesByPattern`, `CleanRelativeFilePath`, `LocalFilePath`, `LocalFilePaths`, and `RelativeFilePath` for file discovery, validation, and root-relative path conversion.
 * Added the `plugins` package for scripting-backed plugin loading, metadata, merging, and `text/template` function-map adapters.
@@ -247,8 +212,8 @@ Added a new `ht-apply` templating directive and all-new variable subtitution sys
 
 _NOTE: variable substitution was designed to look and function similar to variable substitution in [Javascript template literals], but the HyperTemplates implementation is **not** based on Javascript._
 
-* Added new template variable declaration, with `${ ... }` delimiter. 
-  Template variables can be used in element attributes, _and_ text nodes. 
+* Added new template variable declaration, with `${ ... }` delimiter.
+  Template variables can be used in element attributes, _and_ text nodes.
 
   ```html
   <title ht-apply>${site.title} | ${page.title}</title>
@@ -257,7 +222,7 @@ _NOTE: variable substitution was designed to look and function similar to variab
 
 * Added new `ht-apply` template directive that enables variable substitution on template element attributes and text nodes.
 
-  _NOTE: text node variable substitution is scoped to **direct descendents** of a template element. 
+  _NOTE: text node variable substitution is scoped to **direct descendents** of a template element.
   In the following example, the `${page.greeting.planet}` variable will be replaced, but the `${page.greeting.galaxy}` variable will not. The former is a a direct descendent text node of the parent `<a>` element, but the latter is a direct descendant text node of the nested `<span>` element (a grandchild of the parent `<a>` element)._
 
   ```html
@@ -266,12 +231,12 @@ _NOTE: variable substitution was designed to look and function similar to variab
   </a>
   ```
 
-* Added a CSS template variable declaration, with `--ht-value( ... )` delimiter. 
-  
-  > NOTE: variable subtitution in `<style>` elements and `style=''` attributes must use the CSS syntax. 
-  > 
+* Added a CSS template variable declaration, with `--ht-value( ... )` delimiter.
+
+  > NOTE: variable subtitution in `<style>` elements and `style=''` attributes must use the CSS syntax.
+  >
   > Example:
-  > 
+  >
   > ```html
   > <style ht-apply>
   >     :root article {
@@ -280,13 +245,13 @@ _NOTE: variable substitution was designed to look and function similar to variab
   > </style>
   > ```
   >
-  > HyperTemplates CSS variables support two arguments: 
-  > 
+  > HyperTemplates CSS variables support two arguments:
+  >
   > * a comma-separated list of template data keys (see `"page.colors.text, page.colors.body"` above)
   > * a fallback value (see `rgba(0,0,0,0.5)` above), which can be any valid CSS value
   >
-  > NOTE: The variable substitution syntax for CSS conforms to the [CSS custom function] specification, 
-  > which means they are valid CSS. 
+  > NOTE: The variable substitution syntax for CSS conforms to the [CSS custom function] specification,
+  > which means they are valid CSS.
   > Syntax highlighters rejoice!
 
 * Templating variables support functions. The only function that is currently supported is: `default`, for providing fallback values.
@@ -304,10 +269,10 @@ _NOTE: variable substitution was designed to look and function similar to variab
 
 ## v0.20.0 (2026-04-21)
 
-Added support for template data array accessors (e.g. `page.attachments.1.href`). 
-Added user-generated template data in `ht-block` elements, so `ht-block` elements can access `page.*` template data properties. 
+Added support for template data array accessors (e.g. `page.attachments.1.href`).
+Added user-generated template data in `ht-block` elements, so `ht-block` elements can access `page.*` template data properties.
 Added the `value` package and template value rendering support for `${ ... }` template values backed by `TemplateData.Get()`.
-Improved HyperMark support for detecting inline vs block-level `ht-block` elements and `<!-- more -->` comment detection. 
+Improved HyperMark support for detecting inline vs block-level `ht-block` elements and `<!-- more -->` comment detection.
 
 * Added support for 1-indexed array accessors to `TemplateData.Get()` (e.g. `foo.bar.1.example`).
 * Added support for passing a discrete `userData *TemplateData` parameter to `Template.Process()`;
@@ -331,8 +296,8 @@ Improved HyperMark support for detecting inline vs block-level `ht-block` elemen
 * Added `version.go` with `hypertemplates.LibVersion` and `hypertemplates.LibReleaseDate` properties
 * Update `github.com/herdworks/hyperfeed-go` package to v0.19.1
 
-> **NOTE:** until now the `github.com/herdworks/hypertemplates-go` package has attempted to stay in sync with the full suite of HyperTexting packages: 
-> 
+> **NOTE:** until now the `github.com/herdworks/hypertemplates-go` package has attempted to stay in sync with the full suite of HyperTexting packages:
+>
 > * `hypergraph-go`
 > * `hyperfeed-go`
 > * `hypertemplates-go`
@@ -342,8 +307,8 @@ Improved HyperMark support for detecting inline vs block-level `ht-block` elemen
 > * `libhypertexting`
 > * `HyperTextingKit`
 > * `hypertexting-app`
-> 
-> Starting with this release we will decouple the library package versions from the user-facing app versions. 
+>
+> Starting with this release we will decouple the library package versions from the user-facing app versions.
 
 ## v0.18.1 (2026-03-01)
 
