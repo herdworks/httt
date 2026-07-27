@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* Updated the GitHub Actions Go toolchain to v1.26.2 so benchmark tests using `testing.B.Loop` compile in CI.
+
 ## v0.33.0 (2026-07-27)
 
 Major redesign of the HT templating directives. All directives that provide access to template data now use the ${ ... } variable syntax. Directives that were obviated by template variable substitution have been removed to improve overall template consistency. Conditional directives have been consolidated into a single more expressive ht-if directive w/ support for multi-variable expressions (e.g. '${ ... } == ${ ... }'). Every directive can now define its own syntax within a shared grammar – the common denominator is now the template variable, not an obtuse `<target>:<keypath[,keypath]>==<condition>` syntax. Most of the new directives use a new/shared token-based parser with support for template variables, operators, separators, and literal values.
