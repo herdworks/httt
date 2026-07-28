@@ -265,7 +265,7 @@ func TestParseConditionalStatement(t *testing.T) {
 	}
 }
 
-func TestConditionalDirectiveExpressionAPI(t *testing.T) {
+func TestConditionalDirectiveExpressiveAPI(t *testing.T) {
 	directive := ConditionalDirective{}
 	tokens, err := directive.ParseExpression(`${ first } OR ${ second }`)
 	if err != nil {
@@ -281,27 +281,6 @@ func TestConditionalDirectiveExpressionAPI(t *testing.T) {
 	}
 	if err := directive.ValidateExpression(invalid); err == nil {
 		t.Fatal("ValidateExpression() accepted an invalid presence statement")
-	}
-}
-
-func TestConditionalDirectiveIncrementalExpressionAPI(t *testing.T) {
-	directive := ConditionalDirective{}
-	remainder, tokens, err := directive.ParseNextExpression(`${ first } OR ${ second }`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := len(tokens), 1; got != want || tokens[0].Raw != `${ first }` {
-		t.Fatalf("first segment = %#v", tokens)
-	}
-	if err := directive.ValidateExpression(tokens); err != nil {
-		t.Fatal(err)
-	}
-	_, tokens, err = directive.ParseNextExpression(remainder)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := len(tokens), 1; got != want || tokens[0].Raw != `${ second }` {
-		t.Fatalf("second segment = %#v", tokens)
 	}
 }
 

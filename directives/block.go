@@ -60,7 +60,7 @@ func (d BlockDirective) Process(document *htdocument.Document, element *html.Nod
 	if fragment, err = IncludeFragment(document, element, fragmentRef); err != nil {
 		return err
 	}
-	htdocument.ForwardAttributes(element, []*html.Node{fragment}, forwardedAttributeSkipKeys()...)
+	htdocument.ForwardAttributes(element, []*html.Node{fragment}, nil, forwardedAttributeSkipKeys()...)
 	fragmentData.Set("block", document.AttributeData(element))
 	fragmentNodes = htdocument.ChildNodes(element)
 	if len(fragmentNodes) > 0 {

@@ -160,33 +160,3 @@ func TestTokenizerMaxTokens(t *testing.T) {
 		})
 	}
 }
-
-func TestTokenizeNext(t *testing.T) {
-	grammar := ExpressionGrammar{Separator: "OR", MaxTokens: 3}
-	remainder, tokens, err := TokenizeNext("one OR two three", grammar)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := remainder, " two three"; got != want {
-		t.Fatalf("remainder = %q, want %q", got, want)
-	}
-	if got, want := len(tokens), 1; got != want || tokens[0].Raw != "one" {
-		t.Fatalf("tokens = %#v, want [one]", tokens)
-	}
-	remainder, tokens, err = TokenizeNext(remainder, grammar)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if remainder != "" || len(tokens) != 2 {
-		t.Fatalf("final segment = (%q, %#v), want empty remainder and two tokens", remainder, tokens)
-	}
-
-	for _, expression := range []string{"", "OR one", "one OR"} {
-		if _, _, err := TokenizeNext(expression, grammar); err == nil {
-			t.Errorf("TokenizeNext(%q) error = nil", expression)
-		}
-	}
-	if _, _, err := TokenizeNext("one OR OR two", grammar); err == nil {
-		t.Fatal("TokenizeNext() accepted a repeated separator")
-	}
-}

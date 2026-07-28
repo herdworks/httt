@@ -19,8 +19,7 @@ import (
 type ConditionalDirective struct{}
 
 var _ Directive = ConditionalDirective{}           // make the compiler check Directive interface conformance
-var _ DirectiveExpression = ConditionalDirective{} // make the compiler check DirectiveExpression interface conformance
-var _ IncrementalDirectiveExpression = ConditionalDirective{}
+var _ ExpressiveDirective = ConditionalDirective{} // make the compiler check ExpressiveDirective interface conformance
 
 type conditionalStatement struct {
 	source   string
@@ -93,13 +92,6 @@ func (ConditionalDirective) NextElements(*htdocument.Document) []*html.Node { re
 // flat token stream so all OR branches can be validated before evaluation.
 func (ConditionalDirective) ParseExpression(source string) ([]Token, error) {
 	return tokenizeExpression(source, conditionalExpressionGrammar)
-}
-
-// ParseNextExpression tokenizes one OR-bounded conditional statement. It is
-// available to callers that need bounded incremental parsing; Process keeps
-// the eager whole-expression path to preserve ht-if validation semantics.
-func (ConditionalDirective) ParseNextExpression(source string) (remainder string, tokens []Token, err error) {
-	return tokenizeNextExpression(source, conditionalExpressionGrammar)
 }
 
 // ValidateExpression checks every conditional statement without resolving

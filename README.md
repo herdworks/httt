@@ -25,6 +25,27 @@ used as a loop binding.
 `ht-template` and `data-ht-template` are no longer runtime directives. Run
 `hyperctl theme migrate` before rendering themes that still use them.
 
+## Local bindings
+
+Use one or more `ht-with` modifiers to give complete `${ ... }` lookups short,
+element-local names. The exact syntax is `${ variable } as binding`; bindings
+run in source order, so a later one can reference an earlier name:
+
+```html
+<example-fragment
+  ht-include="fragments/example"
+  ht-apply
+  ht-with="${ page.foo } as foo"
+></example-fragment>
+```
+
+With `ht-apply`, bindings apply only to that element's attributes and direct
+text-node children. With `ht-each`, they run after the loop item and `each.*`
+metadata are available, and remain available to that clone and its children.
+An `ht-with` not consumed by either directive causes an implicit `ht-apply` on
+the same element. Bindings use a shallow local data scope and never mutate the
+outer render data. `each` remains reserved and cannot be used as a binding.
+
 ## Blocks
 
 `ht-block` is the directive intended for HTML supplied by content/template-data

@@ -12,29 +12,37 @@ import (
 	"golang.org/x/net/html"
 )
 
-// The Directive interface
+// The ExpressiveDirective interface is a specification for directives with a
+// defined grammar.
+type ExpressiveDirective interface {
+	GrammarProvider
+	Directive
+}
+
+// The Directive interface is a specification for element processing directives.
 type Directive interface {
-	Attributes(strict bool) []string
-	Selectors(strict bool) []string
-	Elements(document *htdocument.Document) []*html.Node
-	NextElements(document *htdocument.Document) []*html.Node
+	ElementProcessor
+}
+
+type ElementProcessor interface {
+	ElementProvider
 	Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, userData *htdata.TemplateData, w io.Writer) error
 }
 
-// DirectiveExpression is a directive with a parseable attribute expression
-// syntax. Validation remains explicit so callers can control when it occurs.
-type DirectiveExpression interface {
-	Directive
-	ParseExpression(string) ([]Token, error)
-	ValidateExpression(Tokens) error
+type ElementProvider interface {
+	AttributeProvider
+	Elements(document *htdocument.Document) []*html.Node
+	NextElements(document *htdocument.Document) []*html.Node
 }
 
-// IncrementalDirectiveExpression optionally parses one delimiter-bounded
-// expression segment at a time. ParseNextExpression is lexical only; callers
-// explicitly validate the returned token sequence.
-type IncrementalDirectiveExpression interface {
-	DirectiveExpression
-	ParseNextExpression(string) (remainder string, tokens []Token, err error)
+type AttributeProvider interface {
+	Attributes(strict bool) []string
+	Selectors(strict bool) []string
+}
+
+type GrammarProvider interface {
+	ParseExpression(string) ([]Token, error)
+	ValidateExpression(Tokens) error
 }
 
 // Process renders the document's directive pipeline.
@@ -85,7 +93,7 @@ func Process(document *htdocument.Document, data *htdata.TemplateData, userData 
 	return document.HTML(document.Layout), nil
 }
 
-func defaultDirectiveSelectors(d Directive, strict bool) []string {
+func defaultDirectiveSelectors(d AttributeProvider, strict bool) []string {
 	strictAttributes := d.Attributes(true)
 	var selectors []string
 	for _, attribute := range strictAttributes {

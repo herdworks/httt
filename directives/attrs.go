@@ -21,7 +21,7 @@ type Attr struct {
 }
 
 var _ Directive = AttributeMapDirective{}           // make the compiler check Directive interface conformance
-var _ DirectiveExpression = AttributeMapDirective{} // make the compiler check DirectiveExpression interface conformance
+var _ ExpressiveDirective = AttributeMapDirective{} // make the compiler check ExpressiveDirective interface conformance
 
 var attributeMapExpressionGrammar = ExpressionGrammar{MaxTokens: 1}
 
@@ -141,7 +141,7 @@ func (d AttributeMapDirective) reservedAttributeNames() []string {
 		"data-ht-offset", "ht-offset",
 		"data-ht-limit", "ht-limit",
 		"data-ht-apply", "ht-apply",
-		"data-hyper-template", "hyper-template",
+		"data-ht-with", "ht-with",
 		"data-ht-block", "ht-block",
 		"data-ht-base", "ht-base",
 		"data-ht-include", "ht-include",

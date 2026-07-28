@@ -15,7 +15,7 @@ import (
 type DebugDirective struct{}
 
 var _ Directive = DebugDirective{}           // make the compiler check Directive interface conformance
-var _ DirectiveExpression = DebugDirective{} // make the compiler check DirectiveExpression interface conformance
+var _ ExpressiveDirective = DebugDirective{} // make the compiler check ExpressiveDirective interface conformance
 
 var debugExpressionGrammar = ExpressionGrammar{Operators: []string{"element"}, MaxTokens: 1}
 

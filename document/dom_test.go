@@ -1,6 +1,7 @@
 package document
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -87,6 +88,26 @@ func TestGetAttributesPreservesSourceOrderAndOriginalAttributes(t *testing.T) {
 	got := GetAttributes(element, "data-ht-if", "ht-if")
 	if len(got) != 2 || got[0].Key != "HT-IF" || got[0].Val != "first" || got[1].Key != "data-ht-if" || got[1].Val != "second" {
 		t.Fatalf("GetAttributes = %#v, want matching attributes in source order", got)
+	}
+}
+
+func TestForwardAttributesAppendsConfiguredRepeatedKeys(t *testing.T) {
+	placeholder := &html.Node{Type: html.ElementNode, Attr: []html.Attribute{
+		{Key: "class", Val: "forwarded"},
+		{Key: "ht-with", Val: "${ page.author } as author"},
+		{Key: "ht-with", Val: "${ author.name } as name"},
+		{Key: "ht-include", Val: "fragments/example"},
+	}}
+	fragment := &html.Node{Type: html.ElementNode, Attr: []html.Attribute{{Key: "class", Val: "fragment"}}}
+
+	ForwardAttributes(placeholder, []*html.Node{fragment}, []string{"ht-with"}, "ht-include")
+
+	if got, want := fragment.Attr, []html.Attribute{
+		{Key: "class", Val: "forwarded"},
+		{Key: "ht-with", Val: "${ page.author } as author"},
+		{Key: "ht-with", Val: "${ author.name } as name"},
+	}; !slices.Equal(got, want) {
+		t.Fatalf("fragment attributes = %#v, want %#v", got, want)
 	}
 }
 

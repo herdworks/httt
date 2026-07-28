@@ -606,6 +606,41 @@ func TestClone(t *testing.T) {
 	})
 }
 
+func TestShallowClone(t *testing.T) {
+	t.Run("nil receiver and nil map are writable", func(t *testing.T) {
+		var nilPointer *TemplateData
+		clone := nilPointer.ShallowClone()
+		clone["title"] = "fallback"
+		if got := clone.Get("title"); got != "fallback" {
+			t.Fatalf("nil receiver clone = %#v", got)
+		}
+
+		var nilMap TemplateData
+		clone = (&nilMap).ShallowClone()
+		clone["title"] = "fallback"
+		if got := clone.Get("title"); got != "fallback" {
+			t.Fatalf("nil map clone = %#v", got)
+		}
+	})
+
+	t.Run("copies only top-level bindings", func(t *testing.T) {
+		original := TemplateData{
+			"title": "original",
+			"page":  TemplateData{"title": "nested"},
+		}
+		clone := (&original).ShallowClone()
+		clone["title"] = "clone"
+		clone.Get("page").(TemplateData)["title"] = "shared nested"
+
+		if got := original.Get("title"); got != "original" {
+			t.Fatalf("original top-level value = %#v, want original", got)
+		}
+		if got := original.Get("page.title"); got != "shared nested" {
+			t.Fatalf("original nested value = %#v, want shared nested", got)
+		}
+	})
+}
+
 func TestMerge(t *testing.T) {
 	base := TemplateData{
 		"a": "keep",

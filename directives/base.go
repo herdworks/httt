@@ -16,7 +16,7 @@ import (
 type BaseDirective struct{}
 
 var _ Directive = BaseDirective{}           // make the compiler check Directive interface conformance
-var _ DirectiveExpression = BaseDirective{} // make the compiler check DirectiveExpression interface conformance
+var _ ExpressiveDirective = BaseDirective{} // make the compiler check ExpressiveDirective interface conformance
 
 var baseExpressionGrammar = ExpressionGrammar{Operators: []string{"on"}, MaxTokens: 3}
 

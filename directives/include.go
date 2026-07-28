@@ -66,7 +66,7 @@ func (d IncludeDirective) Process(document *htdocument.Document, element *html.N
 	if err != nil {
 		return fmt.Errorf("ht-include: error evaluating %q=%q:\n%s\n%w", attribute.Key, attribute.Val, htdocument.ElementString(element), errors.Join(ErrInclude, err))
 	}
-	htdocument.ForwardAttributes(element, fragments, forwardedAttributeSkipKeys()...)
+	htdocument.ForwardAttributes(element, fragments, WithModifier{}.Attributes(false), forwardedAttributeSkipKeys()...)
 	htdocument.OuterHTML(element, fragments)
 	return nil
 }

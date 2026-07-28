@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* Added repeatable `ht-with="${ variable } as binding"` modifiers for local,
+  source-ordered bindings on `ht-apply` and `ht-each`. Remaining `ht-with`
+  modifiers trigger an implicit `ht-apply` on their element.
+* Added `TemplateData.ShallowClone` for writable, top-level-local template-data
+  scopes and `document.AddAttribute` for preserving repeated HTML attributes.
+* Changed `document.ForwardAttributes` to accept `appendingKeys`
+  before its skipped keys, preserving repeated attributes such as `ht-with` in
+  source order.
+* Renamed `DirectiveExpression` to `ExpressiveDirective` 
+* Removed unused incremental-expression APIs: `IncrementalDirectiveExpression`,
+  `TokenizeNext`, and `ConditionalDirective.ParseNextExpression`.
+
 ## v0.33.1 (2026-07-27)
 
 * Updated the GitHub Actions Go toolchain to v1.26.2 so benchmark tests using `testing.B.Loop` compile in CI.

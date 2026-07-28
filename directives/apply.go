@@ -18,9 +18,9 @@ type ApplyDirective struct{}
 var _ Directive = ApplyDirective{} // make the compiler check Directive interface conformance
 
 func (d ApplyDirective) Attributes(strict bool) []string {
-	attributes := []string{"data-ht-apply", "data-hyper-template"}
+	attributes := []string{"data-ht-apply", "data-ht-with"}
 	if !strict {
-		attributes = append(attributes, "ht-apply", "hyper-template")
+		attributes = append(attributes, "ht-apply", "ht-with")
 	}
 	return attributes
 }
@@ -46,18 +46,24 @@ func (d ApplyDirective) Elements(document *htdocument.Document) []*html.Node {
 func (ApplyDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
 
 func (d ApplyDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
-	if document == nil {
-		return nil
-	}
-	if element == nil {
-		return nil
-	}
-	if element.Type != html.ElementNode {
+	if document == nil || element == nil || element.Type != html.ElementNode {
 		return nil
 	}
 
+	// shallow clone data and apply ht-with bindings, if any
+	scoped := data.ShallowClone()
+	if err = (WithModifier{}).Bindings(element, &scoped, document.StrictMode); err != nil {
+		return fmt.Errorf(
+			"ht-apply: invalid ht-with directive modifier;\n%s\n%w",
+			htdocument.ElementString(element),
+			err,
+		)
+	}
+
+	// load custom plugins
 	funcs := document.Plugins.FuncMap()
 
+	// process template variables
 	for index, attribute := range element.Attr {
 		if slices.Contains(d.Attributes(document.StrictMode), attribute.Key) || slices.Contains(d.reservedAttributeNames(), attribute.Key) {
 			continue
@@ -69,7 +75,7 @@ func (d ApplyDirective) Process(document *htdocument.Document, element *html.Nod
 		if !containsSyntaxMarker(attribute.Val, syntax) {
 			continue
 		}
-		rendered, err := variable.RenderString(attribute.Val, data, syntax, funcs)
+		rendered, err := variable.RenderString(attribute.Val, &scoped, syntax, funcs)
 		if err != nil {
 			return wrapVariableError(err, fmt.Sprintf("attribute %q", attribute.Key), element)
 		}
@@ -84,7 +90,7 @@ func (d ApplyDirective) Process(document *htdocument.Document, element *html.Nod
 			if !containsSyntaxMarker(child.Data, variable.SyntaxCSS) {
 				continue
 			}
-			rendered, err := variable.RenderString(child.Data, data, variable.SyntaxCSS, funcs)
+			rendered, err := variable.RenderString(child.Data, &scoped, variable.SyntaxCSS, funcs)
 			if err != nil {
 				return wrapVariableError(err, "<style> text content", element)
 			}
@@ -105,7 +111,7 @@ func (d ApplyDirective) Process(document *htdocument.Document, element *html.Nod
 			if !containsSyntaxMarker(child.Data, variable.SyntaxDefault) {
 				continue
 			}
-			nodes, err := variable.RenderNodes(child.Data, data, element, funcs, nodeFuncs)
+			nodes, err := variable.RenderNodes(child.Data, &scoped, element, funcs, nodeFuncs)
 			if err != nil {
 				return wrapVariableError(err, "element text content", element)
 			}
@@ -116,6 +122,7 @@ func (d ApplyDirective) Process(document *htdocument.Document, element *html.Nod
 		}
 	}
 
+	htdocument.RemoveAttributes(element, WithModifier{}.Attributes(false)...)
 	if document.TidyMode {
 		htdocument.RemoveAttributes(element, d.Attributes(false)...)
 	}

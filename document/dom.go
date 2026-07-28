@@ -86,31 +86,26 @@ func QueryRoot(node *html.Node, query ...string) (elements []*html.Node) {
 	return append(elements, cascadia.QueryAll(node, sel)...)
 }
 
-func ForwardAttributes(placeholder *html.Node, fragments []*html.Node, skipKeys ...string) {
-	var attributes []html.Attribute
-	if len(fragments) == 0 {
+// ForwardAttributes forwards every placeholder attribute except skipKeys to
+// the first element fragment. Attributes matching appendingKeys retain repeated
+// source-order values; all other attributes replace the fragment's matching
+// attribute.
+func ForwardAttributes(placeholder *html.Node, fragments []*html.Node, appendingKeys []string, skipKeys ...string) {
+	if placeholder == nil || len(fragments) == 0 {
 		return
 	}
-	for _, attr := range placeholder.Attr {
-		if slices.Contains(skipKeys, attr.Key) {
-			continue
-		}
-		attributes = append(attributes, attr)
-	}
 	for _, fragment := range fragments {
-		if fragment.Type == html.ErrorNode {
+		if fragment.Type != html.ElementNode {
 			continue
 		}
-		if fragment.Type == html.TextNode {
-			continue
-		}
-		if fragment.Type == html.CommentNode {
-			continue
-		}
-		if fragment.Type == html.DoctypeNode {
-			continue
-		}
-		for _, attr := range attributes {
+		for _, attr := range placeholder.Attr {
+			if matchesAttributeKey(attr.Key, skipKeys...) {
+				continue
+			}
+			if matchesAttributeKey(attr.Key, appendingKeys...) {
+				AddAttribute(fragment, attr)
+				continue
+			}
 			SetAttribute(fragment, attr.Key, attr.Val)
 		}
 		break
@@ -194,32 +189,25 @@ func GetAttributes(element *html.Node, keys ...string) (values []html.Attribute)
 	return values
 }
 
-func matchesAttributeKey(key string, keys ...string) bool {
-	for _, candidate := range keys {
-		if strings.EqualFold(key, candidate) {
-			return true
-		}
-	}
-	return false
-}
-
 func SetAttribute(element *html.Node, key string, value string) {
-	if element.Type != html.ElementNode {
+	if element == nil || element.Type != html.ElementNode {
 		return
 	}
-	attributeIndex := -1
-	for i, attr := range element.Attr {
-		if attr.Key != key {
-			continue
+	for index := range element.Attr {
+		if element.Attr[index].Key == key {
+			element.Attr[index].Val = value
+			return
 		}
-		attributeIndex = i
-		break
 	}
-	if attributeIndex >= 0 {
-		element.Attr[attributeIndex] = html.Attribute{Key: key, Val: value}
-	} else {
-		element.Attr = append(element.Attr, html.Attribute{Key: key, Val: value})
+	AddAttribute(element, html.Attribute{Key: key, Val: value})
+}
+
+// AddAttribute appends attribute without coalescing an existing key.
+func AddAttribute(element *html.Node, attribute html.Attribute) {
+	if element == nil || element.Type != html.ElementNode {
+		return
 	}
+	element.Attr = append(element.Attr, attribute)
 }
 
 func RemoveElement(element *html.Node) {
@@ -358,4 +346,13 @@ func ElementString(element *html.Node) string {
 		return ""
 	}
 	return stdhtml.UnescapeString(buffer.String())
+}
+
+func matchesAttributeKey(key string, keys ...string) bool {
+	for _, candidate := range keys {
+		if strings.EqualFold(key, candidate) {
+			return true
+		}
+	}
+	return false
 }

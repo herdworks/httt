@@ -27,6 +27,7 @@ package data
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"sort"
 	"strconv"
@@ -104,6 +105,13 @@ func (d TemplateData) Get(key string) any {
 // absent, use Get and inspect the result directly.
 func (d TemplateData) Has(key string) bool {
 	return IsTruthy(d.Get(key))
+}
+
+func (d *TemplateData) ShallowClone() TemplateData {
+	if d == nil || *d == nil {
+		return TemplateData{}
+	}
+	return maps.Clone(*d)
 }
 
 // IsTruthy reports whether value has the same truthiness used by TemplateData.Has.

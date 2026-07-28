@@ -13,7 +13,7 @@ import (
 type PipeDirective struct{}
 
 var _ Directive = PipeDirective{}           // make the compiler check Directive interface conformance
-var _ DirectiveExpression = PipeDirective{} // make the compiler check DirectiveExpression interface conformance
+var _ ExpressiveDirective = PipeDirective{} // make the compiler check ExpressiveDirective interface conformance
 
 var pipeExpressionGrammar = ExpressionGrammar{Operators: []string{"to", "as"}, AllowQuotedLiterals: true, MaxTokens: 4}
 

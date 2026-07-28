@@ -13,7 +13,7 @@ import (
 func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 	tests := []struct {
 		name      string
-		directive Directive
+		directive interface{ Selectors(bool) []string }
 		strict    []string
 		legacy    []string
 	}{
@@ -78,13 +78,24 @@ func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 			directive: ApplyDirective{},
 			strict: []string{
 				"[data-ht-apply]:not([data-ht-each] [data-ht-apply], [data-ht-each][data-ht-apply])",
-				"[data-hyper-template]:not([data-ht-each] [data-hyper-template], [data-ht-each][data-hyper-template])",
+				"[data-ht-with]:not([data-ht-each] [data-ht-with], [data-ht-each][data-ht-with])",
 			},
 			legacy: []string{
 				"[data-ht-apply]:not([data-ht-each] [data-ht-apply], [data-ht-each][data-ht-apply]):not([ht-each] [data-ht-apply], [ht-each][data-ht-apply])",
-				"[data-hyper-template]:not([data-ht-each] [data-hyper-template], [data-ht-each][data-hyper-template]):not([ht-each] [data-hyper-template], [ht-each][data-hyper-template])",
+				"[data-ht-with]:not([data-ht-each] [data-ht-with], [data-ht-each][data-ht-with]):not([ht-each] [data-ht-with], [ht-each][data-ht-with])",
 				"[ht-apply]:not([ht-each] [ht-apply], [ht-each][ht-apply]):not([data-ht-each] [ht-apply], [data-ht-each][ht-apply])",
-				"[hyper-template]:not([ht-each] [hyper-template], [ht-each][hyper-template]):not([data-ht-each] [hyper-template], [data-ht-each][hyper-template])",
+				"[ht-with]:not([ht-each] [ht-with], [ht-each][ht-with]):not([data-ht-each] [ht-with], [data-ht-each][ht-with])",
+			},
+		},
+		{
+			name:      "with",
+			directive: WithModifier{},
+			strict: []string{
+				"[data-ht-with]:not([data-ht-each] [data-ht-with], [data-ht-each][data-ht-with])",
+			},
+			legacy: []string{
+				"[data-ht-with]:not([data-ht-each] [data-ht-with], [data-ht-each][data-ht-with]):not([ht-each] [data-ht-with], [ht-each][data-ht-with])",
+				"[ht-with]:not([ht-each] [ht-with], [ht-each][ht-with]):not([data-ht-each] [ht-with], [data-ht-each][ht-with])",
 			},
 		},
 		{

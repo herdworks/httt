@@ -1,7 +1,6 @@
 package directives
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -136,61 +135,24 @@ func tokenizeExpression(expression string, grammar ExpressionGrammar) ([]Token, 
 	return tokens, nil
 }
 
-// TokenizeNext tokenizes one separator-bounded expression segment. It
-// consumes the separator and returns the source after it. The returned tokens
-// are lexical only; callers choose whether and when to validate their shape.
-func TokenizeNext(expression string, grammar ExpressionGrammar) (remainder string, tokens []Token, err error) {
-	if err := validateExpressionGrammar(grammar); err != nil {
-		return "", nil, err
-	}
-	return tokenizeNextExpression(expression, grammar)
-}
-
 func tokenizeBoundedExpression(expression string, grammar ExpressionGrammar) ([]Token, error) {
-	if skipExpressionWhitespace(expression, 0) == len(expression) {
-		return make([]Token, 0), nil
-	}
-	_, tokens, err := tokenizeNextExpression(expression, grammar)
-	return tokens, err
-}
-
-func tokenizeNextExpression(expression string, grammar ExpressionGrammar) (string, []Token, error) {
 	cursor := skipExpressionWhitespace(expression, 0)
 	if cursor == len(expression) {
-		return "", nil, errors.New("expression requires at least one token")
+		return make([]Token, 0), nil
 	}
-
-	capacity := grammar.MaxTokens
-	if capacity == 0 {
-		capacity = 1
-	}
-	tokens := make([]Token, 0, capacity)
+	tokens := make([]Token, 0, grammar.MaxTokens)
 	for cursor < len(expression) {
 		token, end, err := tokenAt(expression, cursor, grammar)
 		if err != nil {
-			return "", nil, err
-		}
-		if token.IsDelimiter() {
-			if len(tokens) == 0 {
-				return "", nil, errors.New("expression separator must follow a statement")
-			}
-			remainder := expression[end:]
-			next := skipExpressionWhitespace(remainder, 0)
-			if next == len(remainder) {
-				return "", nil, errors.New("expression separator must be followed by a statement")
-			}
-			if _, repeated := matchExpressionOperator(remainder, next, grammar.Separator); repeated {
-				return "", nil, errors.New("expression separator must be followed by a statement")
-			}
-			return remainder, tokens, nil
+			return nil, err
 		}
 		if grammar.MaxTokens > 0 && len(tokens) == grammar.MaxTokens {
-			return "", nil, fmt.Errorf("expression segment exceeds maximum of %d tokens", grammar.MaxTokens)
+			return nil, fmt.Errorf("expression exceeds maximum of %d tokens", grammar.MaxTokens)
 		}
 		tokens = append(tokens, token)
 		cursor = skipExpressionWhitespace(expression, end)
 	}
-	return "", tokens, nil
+	return tokens, nil
 }
 
 func tokenAt(expression string, start int, grammar ExpressionGrammar) (Token, int, error) {

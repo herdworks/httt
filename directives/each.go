@@ -3,7 +3,6 @@ package directives
 import (
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"reflect"
 	"regexp"
@@ -19,7 +18,7 @@ import (
 type EachDirective struct{}
 
 var _ Directive = EachDirective{}           // make the compiler check Directive interface conformance
-var _ DirectiveExpression = EachDirective{} // make the compiler check DirectiveExpression interface conformance
+var _ ExpressiveDirective = EachDirective{} // make the compiler check ExpressiveDirective interface conformance
 
 var bindingSyntax = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var eachExpressionGrammar = ExpressionGrammar{Operators: []string{"in"}, MaxTokens: 3}
@@ -52,6 +51,7 @@ func (d EachDirective) allAttributes(strict bool) []string {
 	attributes := d.Attributes(strict)
 	attributes = append(attributes, d.offsetAttributes(strict)...)
 	attributes = append(attributes, d.limitAttributes(strict)...)
+	attributes = append(attributes, WithModifier{}.Attributes(strict)...)
 	return attributes
 }
 
@@ -113,12 +113,16 @@ func (d EachDirective) Process(document *htdocument.Document, element *html.Node
 		// metadata remain local without duplicating the complete data graph.
 		// Template data is read-only during rendering; values under unchanged
 		// bindings are intentionally shared with the outer context.
-		nested := maps.Clone(*data)
-		if nested == nil {
-			nested = htdata.TemplateData{}
-		}
+		nested := data.ShallowClone()
 		nested[binding] = value
 		nested["each"] = htdata.TemplateData{"index": index, "count": count, "total": len(values)}
+		if err := (WithModifier{}).Bindings(element, &nested, document.StrictMode); err != nil {
+			return fmt.Errorf(
+				"ht-each: invalid ht-with directive modifier;\n%s\n%w",
+				htdocument.ElementString(element),
+				err,
+			)
+		}
 
 		// process the fragment and insert it into the parent element
 		nestedDoc := htdocument.Document{Layout: layoutFragment, Theme: document.Theme, TidyMode: document.TidyMode, MarkdownConfig: document.MarkdownConfig, Plugins: document.Plugins}
@@ -135,6 +139,7 @@ func (d EachDirective) Process(document *htdocument.Document, element *html.Node
 
 	// clean up
 	htdocument.SetAttribute(element, "hidden", "true")
+	htdocument.RemoveAttributes(element, WithModifier{}.Attributes(false)...)
 	if document.TidyMode {
 		htdocument.RemoveElement(element)
 	}
