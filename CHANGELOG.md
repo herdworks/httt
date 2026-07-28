@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.34.0 (2026-07-28)
+
+New ht-with directive modifier for custom bindings!
+
 * Added repeatable `ht-with="${ variable } as binding"` modifiers for local,
   source-ordered bindings on `ht-apply` and `ht-each`. Remaining `ht-with`
   modifiers trigger an implicit `ht-apply` on their element.
