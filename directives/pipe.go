@@ -1,7 +1,9 @@
 package directives
 
 import (
+	"bytes"
 	"fmt"
+	"hash/maphash"
 	"io"
 	"slices"
 
@@ -15,7 +17,7 @@ type PipeDirective struct{}
 var _ Directive = PipeDirective{}           // make the compiler check Directive interface conformance
 var _ ExpressiveDirective = PipeDirective{} // make the compiler check ExpressiveDirective interface conformance
 
-var pipeExpressionGrammar = ExpressionGrammar{Operators: []string{"to", "as"}, AllowQuotedLiterals: true, MaxTokens: 4}
+var pipeExpressionGrammar = ExpressionGrammar{Operators: []string{"from", "as"}, AllowQuotedLiterals: true, MaxTokens: 4}
 
 func (d PipeDirective) Attributes(strict bool) []string {
 	attributes := []string{"data-ht-pipe"}
@@ -34,7 +36,7 @@ func (d PipeDirective) Selectors(strict bool) []string {
 }
 
 func (d PipeDirective) Elements(document *htdocument.Document) []*html.Node {
-	if document == nil {
+	if document == nil || document.IsFragment() {
 		return nil
 	}
 	return htdocument.QueryRoot(document.Layout, d.Selectors(document.StrictMode)...)
@@ -50,15 +52,15 @@ func (d PipeDirective) ValidateExpression(tokens Tokens) error {
 	switch {
 	case len(tokens) != 2 && len(tokens) != 4:
 		// syntax error
-		return fmt.Errorf("ht-pipe: syntax error (expected 'to \"<selector>\"' or 'to \"<selector>\" as <type>'; got: %q)", tokens.Expression())
-	case tokens[0].Kind != TokenOperator || tokens[0].Raw != "to":
-		// all ht-pipe expressions must start with the "to" operator
-		return fmt.Errorf("ht-pipe: missing \"to\" keyword (expected 'to \"<selector>\"' or 'to \"<selector>\" as <type>'; got: %q)", tokens.Expression())
+		return fmt.Errorf("ht-pipe: syntax error (expected 'from \"<selector>\"' or 'from \"<selector>\" as <type>'; got: %q)", tokens.Expression())
+	case tokens[0].Kind != TokenOperator || tokens[0].Raw != "from":
+		// all ht-pipe expressions must start with the "from" operator
+		return fmt.Errorf("ht-pipe: missing \"from\" keyword (expected 'from \"<selector>\"' or 'from \"<selector>\" as <type>'; got: %q)", tokens.Expression())
 	case tokens[1].Kind != TokenLiteral || !tokens[1].Quoted || tokens[1].Unquoted() == "":
 		// all ht-pipe selectors must be non-empty quoted strings
-		return fmt.Errorf("ht-pipe: selector must be a quoted string (expected 'to \"<selector>\"' or 'to \"<selector>\" as <type>'; got: %q)", tokens.Expression())
+		return fmt.Errorf("ht-pipe: selector must be a quoted string (expected 'from \"<selector>\"' or 'from \"<selector>\" as <type>'; got: %q)", tokens.Expression())
 	case len(tokens) == 2:
-		// valid 'to "<selector>"' syntax
+		// valid 'from "<selector>"' syntax
 		return nil
 	case tokens[2].Kind != TokenOperator || tokens[2].Raw != "as" || tokens[3].Kind != TokenLiteral:
 		// invalid "as <type>" expression
@@ -67,38 +69,44 @@ func (d PipeDirective) ValidateExpression(tokens Tokens) error {
 		// unsupported pipe type
 		return fmt.Errorf("ht-pipe: unsupported pipe type (got %q expected element, text, css, js, or javascript)", tokens[3].Raw)
 	case len(tokens) == 4:
-		// valid 'to "<selector>" as <type>' syntax
+		// valid 'from "<selector>" as <type>' syntax
 		fallthrough
 	default:
 		return nil
 	}
 }
 
-func (d PipeDirective) Process(document *htdocument.Document, element *html.Node, data *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
-	if document == nil || element == nil || element.Parent == nil {
+func (d PipeDirective) Process(document *htdocument.Document, element *html.Node, _ *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) (err error) {
+	if document == nil || document.IsFragment() || element == nil {
 		return nil
 	}
+	deduper := pipeDeduper{seed: maphash.MakeSeed(), buckets: map[uint64][][]byte{}}
 	attributes := htdocument.GetAttributes(element, d.Attributes(document.StrictMode)...)
 	for _, attribute := range attributes {
 		var selector, mode string
-		var destination *html.Node
 		if selector, mode, err = d.parseAttribute(attribute.Val); err != nil {
 			return fmt.Errorf("error parsing %q directive;\n%s\n%w", attribute.Key, htdocument.ElementString(element), err)
 		}
-		if destination = htdocument.Query(document.Layout, selector); destination == nil {
-			continue // try the next ht-pipe attribute, if any
-		} else if mode != "element" {
-			element.Parent.RemoveChild(element)
-			htdocument.AppendText(destination, htdocument.TextContent(element, true))
-			break // stop processing ht-pipe directives after first successful pipe
-		} else {
-			element.Parent.RemoveChild(element)
-			destination.AppendChild(element)
-			break // stop processing ht-pipe directives after first successful pipe
+		matches := htdocument.QueryAll(document.Layout, selector)
+		unique := make([]*html.Node, 0, len(matches))
+		for _, match := range matches {
+			if match == element {
+				continue
+			}
+			if match.Parent != nil {
+				match.Parent.RemoveChild(match)
+			}
+			if !deduper.seen(match) {
+				unique = append(unique, match)
+			}
 		}
-	}
-	if document.BlockMode {
-		return nil
+		for _, match := range unique {
+			if mode == "element" {
+				element.AppendChild(match)
+				continue
+			}
+			htdocument.AppendText(element, htdocument.TextContent(match, true))
+		}
 	}
 	if document.TidyMode {
 		htdocument.RemoveAttributes(element, d.Attributes(false)...)
@@ -120,4 +128,26 @@ func (d PipeDirective) parseAttribute(source string) (selector string, mode stri
 		mode = "element"
 	}
 	return tokens[1].Unquoted(), mode, nil
+}
+
+// pipeDeduper groups rendered element identities by a fast, process-local hash.
+// Exact byte comparisons inside each bucket preserve correctness on collisions.
+type pipeDeduper struct {
+	seed    maphash.Seed
+	buckets map[uint64][][]byte
+}
+
+func (d *pipeDeduper) seen(element *html.Node) bool {
+	rendered := htdocument.HTML(element)
+	var hash maphash.Hash
+	hash.SetSeed(d.seed)
+	_, _ = hash.Write(rendered)
+	key := hash.Sum64()
+	for _, existing := range d.buckets[key] {
+		if bytes.Equal(existing, rendered) {
+			return true
+		}
+	}
+	d.buckets[key] = append(d.buckets[key], rendered)
+	return false
 }

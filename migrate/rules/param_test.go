@@ -136,7 +136,7 @@ func TestDefaultRulesContainConditionalTemplateParamContentQueryPipeAndDebugInPr
 		strings.Join(selectorStrings(migrate.DefaultRules[7]), ","),
 		strings.Join(selectorStrings(migrate.DefaultRules[8]), ","),
 	}
-	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-template],[data-ht-template];[ht-attr],[data-ht-attr];[ht-attrs]:not([ht-attrs^=\"${\"]),[data-ht-attrs]:not([data-ht-attrs^=\"${\"]);[ht-param],[data-ht-param];[ht-content],[data-ht-content];[ht-query],[data-ht-query];[data-ht-pipe]:not([data-ht-pipe^='to ']),[ht-pipe]:not([ht-pipe^='to ']);[ht-debug$='data'],[data-ht-debug$='data']"; got != want {
+	if got, want := strings.Join(selectors, ";"), "[ht-not],[data-ht-not];[ht-template],[data-ht-template];[ht-attr],[data-ht-attr];[ht-attrs]:not([ht-attrs^=\"${\"]),[data-ht-attrs]:not([data-ht-attrs^=\"${\"]);[ht-param],[data-ht-param];[ht-content],[data-ht-content];[ht-query],[data-ht-query];[data-ht-pipe]:not([data-ht-pipe^='from ']),[ht-pipe]:not([ht-pipe^='from ']);[ht-debug$='data'],[data-ht-debug$='data']"; got != want {
 		t.Fatalf("DefaultRules selectors = %q, want %q", got, want)
 	}
 }

@@ -64,11 +64,11 @@ func Process(document *htdocument.Document, data *htdata.TemplateData, userData 
 		DeprecatedDirective{},   //
 		DebugDirective{},        // ht-debug
 		ConditionalDirective{},  // ht-if
-		PipeDirective{},         // ht-pipe
 		EachDirective{},         // ht-each
 		ApplyDirective{},        // ht-apply
 		AttributeMapDirective{}, // ht-attrs
 		BlockDirective{},        // ht-block
+		PipeDirective{},         // ht-pipe
 		BaseDirective{},         // ht-base
 	}
 

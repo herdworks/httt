@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **BREAKING:** Redesigned `ht-pipe` as a root-document, pull-based directive:
+  annotate a destination with `from "<source selector>" [as <type>]` and mark
+  source elements with ordinary selectors such as `class="component"`. Matching
+  sources are removed, deduplicated by rendered element content, and appended in DOM
+  order. Push-based pipe declarations are reported for manual migration.
+
 ## v0.34.0 (2026-07-28)
 
 New ht-with directive modifier for custom bindings!

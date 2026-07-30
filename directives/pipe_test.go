@@ -9,13 +9,13 @@ import (
 	"golang.org/x/net/html"
 )
 
-func TestPipeParsesQuotedDestinationsAndTypes(t *testing.T) {
+func TestPipeParsesQuotedSourcesAndTypes(t *testing.T) {
 	directive := PipeDirective{}
 	for _, source := range []string{
-		`to "main"`,
-		`to "head style#components" as css`,
-		`to "main" as "element"`,
-		`to '${ layout.pipe_target }' as javascript`,
+		`from "main"`,
+		`from "head style#components" as css`,
+		`from "main" as "element"`,
+		`from '${ layout.pipe_source }' as javascript`,
 	} {
 		tokens, err := directive.ParseExpression(source)
 		if err != nil {
@@ -26,7 +26,7 @@ func TestPipeParsesQuotedDestinationsAndTypes(t *testing.T) {
 		}
 	}
 	for _, source := range []string{
-		`main`, `to main`, `to "main" css`, `to "main" as unknown`, `to "main`, `to ""`,
+		`main`, `from main`, `to "main"`, `from "main" css`, `from "main" as unknown`, `from "main`, `from ""`,
 	} {
 		tokens, err := directive.ParseExpression(source)
 		if err == nil {
@@ -40,64 +40,94 @@ func TestPipeParsesQuotedDestinationsAndTypes(t *testing.T) {
 
 func TestPipeReportsMalformedTokenCountsWithReconstructedSource(t *testing.T) {
 	directive := PipeDirective{}
-	tokens, err := directive.ParseExpression(`to "main" as`)
+	tokens, err := directive.ParseExpression(`from "main" as`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := directive.ValidateExpression(tokens); err == nil || err.Error() != `ht-pipe: syntax error (expected 'to "<selector>"' or 'to "<selector>" as <type>'; got: "to \"main\" as")` {
+	if err := directive.ValidateExpression(tokens); err == nil || err.Error() != `ht-pipe: syntax error (expected 'from "<selector>"' or 'from "<selector>" as <type>'; got: "from \"main\" as")` {
 		t.Fatalf("ValidateExpression() error = %v", err)
 	}
 }
 
-func TestPipeMovesElementsAndAppendsText(t *testing.T) {
-	t.Run("element", func(t *testing.T) {
-		document, element := pipeDocument(t, `<html><body><main id="target"></main><aside ht-pipe='to "#target"'><p>Moved</p></aside></body></html>`)
-		if err := (PipeDirective{}).Process(document, element, &htdata.TemplateData{}, nil, nil); err != nil {
-			t.Fatal(err)
-		}
-		target := htdocument.Query(document.Layout, "#target")
-		if target == nil || target.FirstChild == nil || target.FirstChild.Data != "aside" {
-			t.Fatalf("target = %s, want moved aside", htdocument.ElementString(target))
-		}
-	})
-	t.Run("text aliases", func(t *testing.T) {
-		document, element := pipeDocument(t, `<html><head><style id="target"></style></head><body><style ht-pipe='to "#target" as css'>body { color: red; }</style></body></html>`)
-		if err := (PipeDirective{}).Process(document, element, &htdata.TemplateData{}, nil, nil); err != nil {
-			t.Fatal(err)
-		}
-		target := htdocument.Query(document.Layout, "#target")
-		if target == nil || !strings.Contains(htdocument.TextContent(target, true), "color: red") || element.Parent != nil {
-			t.Fatalf("target = %s, source parent = %v", htdocument.ElementString(target), element.Parent)
-		}
-	})
-}
-
-func TestPipeTreatsTemplateSyntaxAsALiteralSelector(t *testing.T) {
-	document, element := pipeDocument(t, `<html><body><main id="target"></main><aside ht-pipe='to "${ layout.pipe_target }"'></aside></body></html>`)
-	data := htdata.TemplateData{"layout": htdata.TemplateData{"pipe_target": "#target"}}
-	if err := (PipeDirective{}).Process(document, element, &data, nil, nil); err != nil {
+func TestPipePullsElementsAndTextInSourceOrder(t *testing.T) {
+	document, destination := pipeDocument(t, `<html><head><style id="styles" ht-pipe='from "style.component" as css' ht-pipe='from "script.component" as js'></style></head><body><style class="component">first { color: red; }</style><script class="component">second()</script></body></html>`)
+	if err := (PipeDirective{}).Process(document, destination, &htdata.TemplateData{}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if element.Parent == nil {
+	if got := htdocument.TextContent(destination, true); !strings.Contains(got, "first { color: red; }") || !strings.Contains(got, "second()") || strings.Index(got, "first") > strings.Index(got, "second") {
+		t.Fatalf("destination text = %q, want source-ordered collected content", got)
+	}
+	if htdocument.Query(document.Layout, "style.component") != nil || htdocument.Query(document.Layout, "script.component") != nil {
+		t.Fatalf("pipe sources remained in document: %s", htdocument.ElementString(document.Layout))
+	}
+}
+
+func TestPipeDeduplicatesAndRemovesAllMatchingElements(t *testing.T) {
+	document, destination := pipeDocument(t, `<html><body><main id="target" ht-pipe='from ".component"'></main><aside class="component"><p>one</p></aside><aside class="component"><p>one</p></aside><aside class="component"><p>two</p></aside></body></html>`)
+	if err := (PipeDirective{}).Process(document, destination, &htdata.TemplateData{}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(htdocument.TextContent(destination, true), ">one<"); got != 1 {
+		t.Fatalf("deduplicated destination contains %d copies of one", got)
+	}
+	if got := strings.Count(htdocument.TextContent(destination, true), ">two<"); got != 1 {
+		t.Fatalf("destination contains %d copies of two", got)
+	}
+	components := htdocument.QueryAll(document.Layout, ".component")
+	if len(components) != 2 || components[0].Parent != destination || components[1].Parent != destination {
+		t.Fatalf("matching elements = %#v, want two deduplicated children", components)
+	}
+}
+
+func TestPipeLeavesLiteralTemplateSyntaxUnresolvedAndSkipsFragments(t *testing.T) {
+	document, destination := pipeDocument(t, `<html><body><main ht-pipe='from "${ layout.pipe_source }"'></main><aside class="component">source</aside></body></html>`)
+	data := htdata.TemplateData{"layout": htdata.TemplateData{"pipe_source": ".component"}}
+	if err := (PipeDirective{}).Process(document, destination, &data, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if htdocument.Query(document.Layout, ".component") == nil {
 		t.Fatal("literal selector was resolved as a template-data keypath")
 	}
-}
 
-func TestPipeUsesSourceOrderedFallbackAttributesAndAllowsNoMatch(t *testing.T) {
-	document, element := pipeDocument(t, `<html><body><main id="first"></main><main id="second"></main><aside ht-pipe='to "#missing"' data-ht-pipe='to "#second"'></aside></body></html>`)
-	if err := (PipeDirective{}).Process(document, element, &htdata.TemplateData{}, nil, nil); err != nil {
+	fragment := &htdocument.Document{Layout: destination}
+	if elements := (PipeDirective{}).Elements(fragment); len(elements) != 0 {
+		t.Fatalf("fragment pipe elements = %d, want 0", len(elements))
+	}
+	if err := (PipeDirective{}).Process(fragment, destination, &data, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if target := htdocument.Query(document.Layout, "#second"); target == nil || target.FirstChild != element {
-		t.Fatal("second pipe attribute did not receive the element after the first selector missed")
+	if htdocument.Query(document.Layout, ".component") == nil {
+		t.Fatal("fragment pipe processing removed source")
 	}
+}
 
-	document, element = pipeDocument(t, `<html><body><aside ht-pipe='to "missing"'></aside></body></html>`)
-	if err := (PipeDirective{}).Process(document, element, &htdata.TemplateData{}, nil, nil); err != nil {
-		t.Fatalf("no-match pipe: %v", err)
+func TestPipeRunsAfterEach(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`<html><body><section ht-each='item in ${ items }'><aside class="component" ht-apply>${ item }</aside></section><main id="target" ht-pipe='from ".component"'></main></body></html>`))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if element.Parent == nil {
-		t.Fatal("no-match pipe removed the source element")
+	output, err := Process(&htdocument.Document{Layout: layout, TidyMode: true}, &htdata.TemplateData{"items": []string{"first", "second"}}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := string(output)
+	if strings.Count(result, `class="component"`) != 2 || strings.Index(result, "first") > strings.Index(result, "second") || strings.Contains(result, "ht-pipe") {
+		t.Fatalf("pipe did not collect loop output in source order:\n%s", result)
+	}
+}
+
+func TestPipeRunsAfterBlock(t *testing.T) {
+	document := setupBuiltinTest(t, `<!doctype html><html><head><style id="target" ht-pipe='from "style.component" as css'></style></head><body><component-block ht-block></component-block></body></html>`, map[string]string{
+		"blocks/component-block.html": `<component-block><style class="component">component { color: red; }</style></component-block>`,
+	})
+	document.TidyMode = true
+	output, err := Process(document, &htdata.TemplateData{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := string(output)
+	if !strings.Contains(result, `id="target">component { color: red; }</style>`) || strings.Contains(result, `class="component"`) {
+		t.Fatalf("pipe did not collect block output:\n%s", result)
 	}
 }
 
@@ -109,7 +139,7 @@ func pipeDocument(t *testing.T, source string) (*htdocument.Document, *html.Node
 	}
 	element := htdocument.Query(layout, "[ht-pipe]")
 	if element == nil {
-		t.Fatal("missing pipe element")
+		t.Fatal("missing pipe destination")
 	}
 	return &htdocument.Document{Layout: layout}, element
 }

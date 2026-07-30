@@ -76,7 +76,9 @@ non-text fallback content are reported for manual migration.
 
 Use `hyperctl theme migrate --interactive --theme <theme-dir>` to review and apply safe,
 idempotent conversions for legacy `ht-not`, `ht-template`, `ht-attr`,
-`ht-param`, `ht-content`, `ht-query`, and `ht-pipe` declarations. The command
+`ht-param`, `ht-content`, and `ht-query` declarations. Legacy push-based
+`ht-pipe` declarations are reported for manual migration because a source-side
+directive cannot safely determine its destination or source selector. The command
 can write a complete migrated copy with `--output <directory>` and uses
 interactive review with `--interactive`; unsupported or ambiguous declarations
 are left unchanged and reported with their locations.
@@ -85,5 +87,6 @@ The removed runtime directives above fail with a migration hint. `ht-attrs`
 remains active: each repeated value must be one complete `${ ... }` expression
 that resolves to a string-keyed attribute map, and later maps win conflicts.
 Use `ht-apply` for ordinary templated attributes and text. `ht-base` requires
-repeatable `target on ${ value }` declarations, while `ht-pipe` requires a
-quoted literal destination such as `to "style#components" as css`.
+repeatable `target on ${ value }` declarations, while `ht-pipe` annotates a
+destination with a quoted literal source selector such as
+`from "style.component" as css`.
