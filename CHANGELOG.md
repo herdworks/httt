@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.35.0 (2026-07-30)
+
 * **BREAKING:** Redesigned `ht-pipe` as a root-document, pull-based directive:
   annotate a destination with `from "<source selector>" [as <type>]` and mark
   source elements with ordinary selectors such as `class="component"`. Matching
