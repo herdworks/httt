@@ -20,7 +20,7 @@ func (BuiltinsDirective) Attributes(bool) []string { return []string{} }
 func (BuiltinsDirective) Selectors(bool) []string { return nil }
 
 func (BuiltinsDirective) Elements(document *htdocument.Document) []*html.Node {
-	if document == nil || document.Layout == nil {
+	if document == nil || document.Layout == nil || document.IsFragment() {
 		return nil
 	}
 	return []*html.Node{document.Layout}
@@ -29,7 +29,7 @@ func (BuiltinsDirective) Elements(document *htdocument.Document) []*html.Node {
 func (BuiltinsDirective) NextElements(*htdocument.Document) []*html.Node { return nil }
 
 func (BuiltinsDirective) Process(document *htdocument.Document, _ *html.Node, _ *htdata.TemplateData, _ *htdata.TemplateData, _ io.Writer) error {
-	if document == nil || document.BlockMode {
+	if document == nil || document.BlockMode || document.IsFragment() {
 		return nil
 	}
 	for _, slot := range theme.DefaultBuiltins() {

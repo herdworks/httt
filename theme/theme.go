@@ -30,6 +30,15 @@ type Theme struct {
 	Plugins      variable.Plugins  `json:"-" yaml:"-"`
 }
 
+func (Theme) JSONSchemaName() string    { return "theme" }
+func (Theme) JSONSchemaSummary() string { return "theme.json theme configuration." }
+
+func (Theme) JSONSchemaTitle() string { return "HyperTemplates theme configuration" }
+
+func (Theme) JSONSchemaDescription() string {
+	return "A theme source configuration file stored as theme.json."
+}
+
 type ThemeConfig struct {
 	URL                   string `json:"url,omitempty" yaml:"url,omitempty"`
 	ContentTypesDirectory string `json:"contenttypes_dir,omitempty" yaml:"contenttypes_dir,omitempty"`

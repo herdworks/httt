@@ -1,14 +1,18 @@
 package hypertemplates
 
 import (
+	"bytes"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/herdworks/hypertemplates-go/directives"
 	"github.com/herdworks/hypertemplates-go/document"
 	"github.com/herdworks/hypertemplates-go/theme"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 func Render(dataPath string, layoutPath string, themePath string, untidy bool, markdownConfig *HyperMarkConfig, w io.Writer) ([]byte, error) {
@@ -27,7 +31,7 @@ func Render(dataPath string, layoutPath string, themePath string, untidy bool, m
 	}
 
 	t = &theme.Theme{URI: &url.URL{Path: themePath}}
-	if layout, err = t.ResourceHTML(layoutPath); err != nil {
+	if layout, err = renderLayout(t, layoutPath); err != nil {
 		return nil, err
 	}
 
@@ -37,5 +41,55 @@ func Render(dataPath string, layoutPath string, themePath string, untidy bool, m
 		TidyMode:       !untidy,
 		MarkdownConfig: markdownConfig,
 	}
-	return directives.Process(doc, &data, nil, w)
+	if _, err = directives.Process(doc, &data, nil, w); err != nil {
+		return nil, err
+	}
+	if doc.IsFragment() {
+		return document.HTML(document.ChildNodes(doc.Layout)...), nil
+	}
+	return document.HTML(doc.Layout), nil
+}
+
+// renderLayout parses an explicit HTML document as a DocumentNode and every
+// other resource as a fragment. html.Parse always synthesizes a DocumentNode,
+// so classify the raw resource before parsing it.
+func renderLayout(t *theme.Theme, layoutPath string) (*html.Node, error) {
+	resource, found, err := t.ResourceBytes(layoutPath)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("template resource %q not found", t.ResourcePath(layoutPath))
+	}
+	if hasHTMLRoot(resource) {
+		return html.Parse(bytes.NewReader(resource))
+	}
+	container := &html.Node{Type: html.ElementNode, Data: atom.Div.String(), DataAtom: atom.Div}
+	fragments, err := html.ParseFragment(bytes.NewReader(resource), container)
+	if err != nil {
+		return nil, err
+	}
+	for _, fragment := range fragments {
+		container.AppendChild(fragment)
+	}
+	return container, nil
+}
+
+func hasHTMLRoot(source []byte) bool {
+	tokenizer := html.NewTokenizer(bytes.NewReader(source))
+	for {
+		switch tokenizer.Next() {
+		case html.ErrorToken:
+			return false
+		case html.TextToken:
+			if strings.TrimSpace(string(tokenizer.Raw())) != "" {
+				return false
+			}
+		case html.StartTagToken:
+			name, _ := tokenizer.TagName()
+			return strings.EqualFold(string(name), atom.Html.String())
+		case html.EndTagToken, html.SelfClosingTagToken:
+			return false
+		}
+	}
 }

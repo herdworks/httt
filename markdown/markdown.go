@@ -56,47 +56,6 @@ var DefaultHyperMarkConfig = HyperMarkConfig{
 
 var moreDelimiter = regexp.MustCompile(`<!--\s*more\s*-->`)
 
-// New constructs a HyperMark parser. A nil config is replaced with
-// DefaultHyperMarkConfig.
-func New(config *HyperMarkConfig) *HyperMark {
-	if config == nil {
-		config = &DefaultHyperMarkConfig
-	}
-	md := &HyperMark{
-		Config:      config,
-		FrontMatter: map[string]any{},
-		Mentions:    hypermark.Mentions{},
-	}
-	md.goldmark = goldmark.New(
-		goldmark.WithExtensions(
-			extension.GFM,
-			extension.Footnote,
-			extension.DefinitionList,
-			emoji.Emoji,
-			meta.Meta,
-			highlighting.NewHighlighting(
-				highlighting.WithFormatOptions(
-					chromahtml.WithClasses(true),
-					chromahtml.WithLineNumbers(true),
-				),
-			),
-			hypermark.EntityMentionExtension(&md.Config.Mentions),
-			hypermark.HashtagMentionExtension(&md.Config.Mentions),
-			hypermark.WordCounterExtension(),
-			hypermark.HTBlockHTMLParserExtension(),
-		),
-		goldmark.WithParserOptions(
-			parser.WithAutoHeadingID(),
-			parser.WithAttribute(),
-		),
-		goldmark.WithRendererOptions(
-			html.WithXHTML(),
-			html.WithUnsafe(),
-		),
-	)
-	return md
-}
-
 // Parse renders the markdown content and populates the receiver's fields.
 func (md *HyperMark) Parse(content []byte) error {
 	var buf bytes.Buffer
@@ -150,19 +109,6 @@ func (md *HyperMark) SummarizeContent(htmlBytes []byte) {
 	md.More = string(htmlBytes[loc[1]:])
 }
 
-// Resolve fills empty mention prefix/suffix fields with their defaults.
-func (config *HyperMarkConfig) Resolve() {
-	if config == nil {
-		return
-	}
-	if len(config.Mentions.HrefPrefix) == 0 {
-		config.Mentions.HrefPrefix = hypermark.DefaultMentionConfig.HrefPrefix
-	}
-	if len(config.Mentions.HrefSuffix) == 0 {
-		config.Mentions.HrefSuffix = hypermark.DefaultMentionConfig.HrefSuffix
-	}
-}
-
 // TemplateData returns the markdown's parsed front matter folded together with
 // the rendered content, summary, more-content, mentions, and word count.
 //
@@ -192,6 +138,70 @@ func (md *HyperMark) TemplateData() data.TemplateData {
 		out.Set("wordcount", md.WordCount)
 	}
 	return out
+}
+
+// Resolve fills empty mention prefix/suffix fields with their defaults.
+func (config *HyperMarkConfig) Resolve() {
+	if config == nil {
+		return
+	}
+	if len(config.Mentions.HrefPrefix) == 0 {
+		config.Mentions.HrefPrefix = hypermark.DefaultMentionConfig.HrefPrefix
+	}
+	if len(config.Mentions.HrefSuffix) == 0 {
+		config.Mentions.HrefSuffix = hypermark.DefaultMentionConfig.HrefSuffix
+	}
+}
+
+func (config HyperMarkConfig) JSONSchemaTitle() string {
+	return "HyperMark configuration"
+}
+func (HyperMarkConfig) JSONSchemaName() string    { return "markdown" }
+func (HyperMarkConfig) JSONSchemaSummary() string { return "Markdown rendering configuration." }
+
+func (config HyperMarkConfig) JSONSchemaDescription() string {
+	return "Markdown rendering configuration for HyperTexting content."
+}
+
+// New constructs a HyperMark parser. A nil config is replaced with
+// DefaultHyperMarkConfig.
+func New(config *HyperMarkConfig) *HyperMark {
+	if config == nil {
+		config = &DefaultHyperMarkConfig
+	}
+	md := &HyperMark{
+		Config:      config,
+		FrontMatter: map[string]any{},
+		Mentions:    hypermark.Mentions{},
+	}
+	md.goldmark = goldmark.New(
+		goldmark.WithExtensions(
+			extension.GFM,
+			extension.Footnote,
+			extension.DefinitionList,
+			emoji.Emoji,
+			meta.Meta,
+			highlighting.NewHighlighting(
+				highlighting.WithFormatOptions(
+					chromahtml.WithClasses(true),
+					chromahtml.WithLineNumbers(true),
+				),
+			),
+			hypermark.EntityMentionExtension(&md.Config.Mentions),
+			hypermark.HashtagMentionExtension(&md.Config.Mentions),
+			hypermark.WordCounterExtension(),
+			hypermark.HTBlockHTMLParserExtension(),
+		),
+		goldmark.WithParserOptions(
+			parser.WithAutoHeadingID(),
+			parser.WithAttribute(),
+		),
+		goldmark.WithRendererOptions(
+			html.WithXHTML(),
+			html.WithUnsafe(),
+		),
+	)
+	return md
 }
 
 // UnmarshalTemplateData parses markdown bytes and returns the rendered output

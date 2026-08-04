@@ -13,8 +13,46 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
+// goldmark.Extender implementation
+type MentionExtension struct {
+	Config   *MentionConfig
+	Trigger  []byte
+	Pattern  *regexp.Regexp
+	External bool
+	Mentions Mentions
+}
+
+type MentionConfig struct {
+	HrefPrefix string `json:"href_prefix" yaml:"href_prefix" jsonschema:"default=/tags/"`
+	HrefSuffix string `json:"href_suffix" yaml:"href_suffix" jsonschema:"default=/"`
+}
+
+// parser.InlineParser implementation
+type MentionParser struct {
+	config   *MentionConfig
+	trigger  []byte
+	Pattern  *regexp.Regexp
+	External bool
+	Mentions *Mentions
+}
+
+// renderer.NodeRenderer implementation
+type MentionNodeRenderer struct{}
+
+// ast.Node implementation
+type MentionNode struct {
+	ast.BaseInline
+	Value    []byte
+	Href     []byte
+	External bool
+}
+
+type Mentions map[string][]string
+
 // Global variables for the HyperMention extension
 var (
+	DefaultMentionConfig = MentionConfig{HrefPrefix: "/tags/", HrefSuffix: "/"}
+
 	EntityMentionTrigger []byte            = []byte{'@'}
 	EntityMentionPattern *regexp.Regexp    = regexp.MustCompile(`@([a-zA-Z0-9/_\-]+\.[a-zA-Z0-9/_\-.]+)`)
 	EntityMentions       *MentionExtension = &MentionExtension{Trigger: EntityMentionTrigger, Pattern: EntityMentionPattern, External: false}
@@ -28,34 +66,6 @@ var (
 	// _                  goldmark.Extender      = (*MentionExtension)(nil)
 	// _                  parser.InlineParser    = (*MentionParser)(nil)
 )
-
-func EntityMentionExtension(config *MentionConfig) *MentionExtension {
-	if config == nil {
-		config = &DefaultMentionConfig
-	}
-	extension := EntityMentions
-	extension.Config = config
-	return extension
-}
-func HashtagMentionExtension(config *MentionConfig) *MentionExtension {
-	if config == nil {
-		config = &DefaultMentionConfig
-	}
-	extension := HashtagMentions
-	extension.Config = config
-	return extension
-}
-
-type Mentions map[string][]string
-
-// goldmark.Extender implementation
-type MentionExtension struct {
-	Config   *MentionConfig
-	Trigger  []byte
-	Pattern  *regexp.Regexp
-	External bool
-	Mentions Mentions
-}
 
 func (e *MentionExtension) Extend(m goldmark.Markdown) {
 	if e.Mentions == nil {
@@ -79,26 +89,32 @@ func (e *MentionExtension) Extend(m goldmark.Markdown) {
 	)
 }
 
-// ast.Node implementation
-type MentionNode struct {
-	ast.BaseInline
-	Value    []byte
-	Href     []byte
-	External bool
+func (m *MentionConfig) TagPrefix() string {
+	if m == nil {
+		m = &DefaultMentionConfig
+	}
+	if len(m.HrefPrefix) == 0 {
+		m.HrefPrefix = DefaultMentionConfig.HrefPrefix
+	}
+	return m.HrefPrefix
 }
-
-func (*MentionNode) Kind() ast.NodeKind { return MentionKind }
-func (n *MentionNode) Dump(src []byte, level int) {
-	ast.DumpHelper(n, src, level, map[string]string{"Value": string(n.Value)}, nil)
+func (m *MentionConfig) TagSuffix() string {
+	if m == nil {
+		m = &DefaultMentionConfig
+	}
+	if len(m.HrefSuffix) == 0 {
+		m.HrefSuffix = DefaultMentionConfig.HrefSuffix
+	}
+	return m.HrefSuffix
 }
+func (MentionConfig) JSONSchemaTitle() string {
+	return "Mention configuration"
+}
+func (MentionConfig) JSONSchemaName() string    { return "mention-config" }
+func (MentionConfig) JSONSchemaSummary() string { return "Markdown mention URL configuration." }
 
-// parser.InlineParser implementation
-type MentionParser struct {
-	config   *MentionConfig
-	trigger  []byte
-	Pattern  *regexp.Regexp
-	External bool
-	Mentions *Mentions
+func (MentionConfig) JSONSchemaDescription() string {
+	return "URL components used when rendering Markdown mentions."
 }
 
 func (p *MentionParser) Trigger() []byte { return p.trigger }
@@ -153,9 +169,6 @@ func (p *MentionParser) Resolve(value []byte) []byte {
 	return href
 }
 
-// renderer.NodeRenderer implementation
-type MentionNodeRenderer struct{}
-
 func (r *MentionNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(MentionKind, r.Render)
 }
@@ -189,31 +202,25 @@ func (r *MentionNodeRenderer) exit(w util.BufWriter, _ *MentionNode) {
 	_, _ = w.WriteString("</a>")
 }
 
-type MentionConfig struct {
-	HrefPrefix string `json:"href_prefix" yaml:"href_prefix"`
-	HrefSuffix string `json:"href_suffix" yaml:"href_suffix"`
+func (*MentionNode) Kind() ast.NodeKind { return MentionKind }
+
+func (n *MentionNode) Dump(src []byte, level int) {
+	ast.DumpHelper(n, src, level, map[string]string{"Value": string(n.Value)}, nil)
 }
 
-var DefaultMentionConfig = MentionConfig{
-	HrefPrefix: "/tags/",
-	HrefSuffix: "/",
+func EntityMentionExtension(config *MentionConfig) *MentionExtension {
+	if config == nil {
+		config = &DefaultMentionConfig
+	}
+	extension := EntityMentions
+	extension.Config = config
+	return extension
 }
-
-func (m *MentionConfig) TagPrefix() string {
-	if m == nil {
-		m = &DefaultMentionConfig
+func HashtagMentionExtension(config *MentionConfig) *MentionExtension {
+	if config == nil {
+		config = &DefaultMentionConfig
 	}
-	if len(m.HrefPrefix) == 0 {
-		m.HrefPrefix = DefaultMentionConfig.HrefPrefix
-	}
-	return m.HrefPrefix
-}
-func (m *MentionConfig) TagSuffix() string {
-	if m == nil {
-		m = &DefaultMentionConfig
-	}
-	if len(m.HrefSuffix) == 0 {
-		m.HrefSuffix = DefaultMentionConfig.HrefSuffix
-	}
-	return m.HrefSuffix
+	extension := HashtagMentions
+	extension.Config = config
+	return extension
 }

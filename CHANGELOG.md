@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* Added fragment-aware `Render` support: layouts without an `<html>` root render
+  as fragments, preserve all top-level nodes, and do not inject document-only
+  builtins or process root-only directives.
+* Added JSON Schema metadata for theme, Markdown, and Markdown mention
+  configuration.
+
 ## v0.35.0 (2026-07-30)
 
 * **BREAKING:** Redesigned `ht-pipe` as a root-document, pull-based directive:
