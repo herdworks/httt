@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.36.0 (2026-08-03)
+
 * Added fragment-aware `Render` support: layouts without an `<html>` root render
   as fragments, preserve all top-level nodes, and do not inject document-only
   builtins or process root-only directives.
