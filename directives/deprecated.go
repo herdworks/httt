@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	htdata "github.com/herdworks/hypertemplates-go/data"
-	htdocument "github.com/herdworks/hypertemplates-go/document"
+	htdata "github.com/herdworks/httt/data"
+	htdocument "github.com/herdworks/httt/document"
 	"golang.org/x/net/html"
 )
 

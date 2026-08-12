@@ -1,4 +1,4 @@
-package hypertemplates
+package httt
 
 import (
 	"bytes"
@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/herdworks/hypertemplates-go/directives"
-	"github.com/herdworks/hypertemplates-go/document"
-	"github.com/herdworks/hypertemplates-go/theme"
+	"github.com/herdworks/httt/directives"
+	"github.com/herdworks/httt/document"
+	"github.com/herdworks/httt/theme"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )

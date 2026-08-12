@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	htdata "github.com/herdworks/hypertemplates-go/data"
-	htdocument "github.com/herdworks/hypertemplates-go/document"
-	"github.com/herdworks/hypertemplates-go/variable"
+	htdata "github.com/herdworks/httt/data"
+	htdocument "github.com/herdworks/httt/document"
+	"github.com/herdworks/httt/variable"
 	"golang.org/x/net/html"
 )
 

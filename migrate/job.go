@@ -12,10 +12,10 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	htdocument "github.com/herdworks/hypertemplates-go/document"
-	htfiles "github.com/herdworks/hypertemplates-go/files"
-	migrationrules "github.com/herdworks/hypertemplates-go/migrate/rules"
-	migrationtypes "github.com/herdworks/hypertemplates-go/migrate/types"
+	htdocument "github.com/herdworks/httt/document"
+	htfiles "github.com/herdworks/httt/files"
+	migrationrules "github.com/herdworks/httt/migrate/rules"
+	migrationtypes "github.com/herdworks/httt/migrate/types"
 )
 
 var errJobFailed = errors.New("migration job failed")

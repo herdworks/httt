@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	httheme "github.com/herdworks/hypertemplates-go/theme"
+	httheme "github.com/herdworks/httt/theme"
 )
 
 // File identifies one migratable theme resource.

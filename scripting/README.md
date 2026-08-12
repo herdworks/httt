@@ -12,12 +12,12 @@ It is designed for concurrent use, so one `Engine` can be shared safely across m
 ## Installation
 
 ```sh
-go get github.com/herdworks/hypertemplates-go
+go get github.com/herdworks/httt
 ```
 
 ## Package Overview
 
-The package import path is `github.com/herdworks/hypertemplates-go/scripting`, and the Go package name is `scripting`.
+The package import path is `github.com/herdworks/httt/scripting`, and the Go package name is `scripting`.
 `Engine` is the concurrency-safe evaluator for advanced use cases.
 `Eval` returns the exported Go value returned by a script.
 `EvalString` applies JavaScript string coercion and is the best fit for template-style rendering.
@@ -57,7 +57,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/herdworks/hypertemplates-go/scripting"
+	"github.com/herdworks/httt/scripting"
 )
 
 func main() {
@@ -88,7 +88,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/herdworks/hypertemplates-go/scripting"
+	"github.com/herdworks/httt/scripting"
 )
 
 func main() {
@@ -137,7 +137,7 @@ the `variable` package, call `variable.LoadPlugins`:
 package main
 
 import (
-	htvariable "github.com/herdworks/hypertemplates-go/variable"
+	htvariable "github.com/herdworks/httt/variable"
 )
 
 func main() {
@@ -228,7 +228,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/herdworks/hypertemplates-go/scripting"
+	"github.com/herdworks/httt/scripting"
 )
 
 func main() {
@@ -281,7 +281,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/herdworks/hypertemplates-go/scripting"
+	"github.com/herdworks/httt/scripting"
 )
 
 func main() {

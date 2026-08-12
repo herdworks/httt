@@ -1,7 +1,7 @@
-package hypertemplates
+package httt
 
 import (
-	"github.com/herdworks/hypertemplates-go/markdown"
+	"github.com/herdworks/httt/markdown"
 )
 
 // HyperMark is re-exported from the markdown package for backwards

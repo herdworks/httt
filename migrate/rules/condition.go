@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	migrationtypes "github.com/herdworks/hypertemplates-go/migrate/types"
+	migrationtypes "github.com/herdworks/httt/migrate/types"
 	"golang.org/x/net/html"
 )
 

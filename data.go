@@ -1,11 +1,11 @@
-package hypertemplates
+package httt
 
 import (
-	"github.com/herdworks/hypertemplates-go/data"
-	"github.com/herdworks/hypertemplates-go/htmldata"
-	"github.com/herdworks/hypertemplates-go/markdown"
-	"github.com/herdworks/hypertemplates-go/opmldata"
-	"github.com/herdworks/hypertemplates-go/parse"
+	"github.com/herdworks/httt/data"
+	"github.com/herdworks/httt/htmldata"
+	"github.com/herdworks/httt/markdown"
+	"github.com/herdworks/httt/opmldata"
+	"github.com/herdworks/httt/parse"
 )
 
 // TemplateData is re-exported from the data package for backwards

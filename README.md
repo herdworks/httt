@@ -1,6 +1,6 @@
-# HyperTemplates
+# httt
 
-The `herdworks/hypertemplates-go` package is the HyperTemplates Core templating engine.
+The `github.com/herdworks/httt` package is the HyperTemplates Core templating engine.
 
 ## Iteration
 

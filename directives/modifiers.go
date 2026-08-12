@@ -3,9 +3,9 @@ package directives
 import (
 	"fmt"
 
-	htdata "github.com/herdworks/hypertemplates-go/data"
-	htdocument "github.com/herdworks/hypertemplates-go/document"
-	htvariable "github.com/herdworks/hypertemplates-go/variable"
+	htdata "github.com/herdworks/httt/data"
+	htdocument "github.com/herdworks/httt/document"
+	htvariable "github.com/herdworks/httt/variable"
 	"golang.org/x/net/html"
 )
 

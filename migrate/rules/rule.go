@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/andybalholm/cascadia"
-	"github.com/herdworks/hypertemplates-go/migrate/types"
+	"github.com/herdworks/httt/migrate/types"
 )
 
 // Rule describes one stateless migration over elements matching its CSS

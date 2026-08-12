@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **BREAKING:** Renamed the module to `github.com/herdworks/httt` and the root package from `hypertemplates` to `httt`.
+* Updated the OPML data dependency to `github.com/herdworks/hyperfeed` v0.27.0.
+
 ## v0.36.0 (2026-08-03)
 
 * Added fragment-aware `Render` support: layouts without an `<html>` root render

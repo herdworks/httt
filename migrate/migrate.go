@@ -16,10 +16,10 @@ import (
 
 	"golang.org/x/net/html"
 
-	htdocument "github.com/herdworks/hypertemplates-go/document"
-	migrationrules "github.com/herdworks/hypertemplates-go/migrate/rules"
-	migrationtypes "github.com/herdworks/hypertemplates-go/migrate/types"
-	httheme "github.com/herdworks/hypertemplates-go/theme"
+	htdocument "github.com/herdworks/httt/document"
+	migrationrules "github.com/herdworks/httt/migrate/rules"
+	migrationtypes "github.com/herdworks/httt/migrate/types"
+	httheme "github.com/herdworks/httt/theme"
 )
 
 // Migration describes one configured theme migration job.

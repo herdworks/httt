@@ -1,7 +1,7 @@
 package rules
 
 import (
-	migrationtypes "github.com/herdworks/hypertemplates-go/migrate/types"
+	migrationtypes "github.com/herdworks/httt/migrate/types"
 )
 
 // Debug reports legacy data-mode ht-debug declarations for manual migration.

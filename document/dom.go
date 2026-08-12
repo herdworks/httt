@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/andybalholm/cascadia"
-	"github.com/herdworks/hypertemplates-go/data"
-	htmarkdown "github.com/herdworks/hypertemplates-go/markdown"
+	"github.com/herdworks/httt/data"
+	htmarkdown "github.com/herdworks/httt/markdown"
 	"golang.org/x/net/html"
 )
 

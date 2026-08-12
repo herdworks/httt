@@ -12,7 +12,7 @@ import (
 	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
 
-	"github.com/herdworks/hypertemplates-go/data"
+	"github.com/herdworks/httt/data"
 )
 
 // UnmarshalTemplateData parses HTML bytes and extracts a TemplateData with

@@ -10,8 +10,8 @@ package opmldata
 import (
 	"encoding/json"
 
-	"github.com/herdworks/hyperfeed-go/types/opml"
-	"github.com/herdworks/hypertemplates-go/data"
+	"github.com/herdworks/httt/data"
+	"github.com/herdworks/hyperfeed/opml"
 )
 
 // UnmarshalTemplateData parses OPML bytes and projects the result into a

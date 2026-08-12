@@ -1,4 +1,4 @@
-package hypertemplates
+package httt
 
 import (
 	"os"

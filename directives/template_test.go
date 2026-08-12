@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/herdworks/hypertemplates-go/document"
-	"github.com/herdworks/hypertemplates-go/scripting"
-	httheme "github.com/herdworks/hypertemplates-go/theme"
-	htvariable "github.com/herdworks/hypertemplates-go/variable"
+	"github.com/herdworks/httt/document"
+	"github.com/herdworks/httt/scripting"
+	httheme "github.com/herdworks/httt/theme"
+	htvariable "github.com/herdworks/httt/variable"
 	"golang.org/x/net/html"
 )
 

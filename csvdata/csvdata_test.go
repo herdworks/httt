@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/herdworks/hypertemplates-go/data"
+	"github.com/herdworks/httt/data"
 )
 
 func TestUnmarshalTemplateDataSet(t *testing.T) {

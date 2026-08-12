@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/herdworks/hypertemplates-go/migrate"
-	"github.com/herdworks/hypertemplates-go/migrate/rules"
+	"github.com/herdworks/httt/migrate"
+	"github.com/herdworks/httt/migrate/rules"
 )
 
 func TestAttrMigratesTargetedDeclarations(t *testing.T) {

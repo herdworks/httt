@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/herdworks/hypertemplates-go/data"
+	"github.com/herdworks/httt/data"
 )
 
 // Parameter is the legacy HyperTemplates directive parameter.

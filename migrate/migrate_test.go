@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	migrationrules "github.com/herdworks/hypertemplates-go/migrate/rules"
-	migrationtypes "github.com/herdworks/hypertemplates-go/migrate/types"
+	migrationrules "github.com/herdworks/httt/migrate/rules"
+	migrationtypes "github.com/herdworks/httt/migrate/types"
 	"golang.org/x/net/html"
 )
 

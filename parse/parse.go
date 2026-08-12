@@ -12,11 +12,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/herdworks/hypertemplates-go/csvdata"
-	"github.com/herdworks/hypertemplates-go/data"
-	"github.com/herdworks/hypertemplates-go/htmldata"
-	"github.com/herdworks/hypertemplates-go/markdown"
-	"github.com/herdworks/hypertemplates-go/opmldata"
+	"github.com/herdworks/httt/csvdata"
+	"github.com/herdworks/httt/data"
+	"github.com/herdworks/httt/htmldata"
+	"github.com/herdworks/httt/markdown"
+	"github.com/herdworks/httt/opmldata"
 )
 
 // Option configures format-specific behavior on a parse call.

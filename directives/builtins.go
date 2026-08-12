@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"io"
 
-	htdata "github.com/herdworks/hypertemplates-go/data"
-	htdocument "github.com/herdworks/hypertemplates-go/document"
-	"github.com/herdworks/hypertemplates-go/theme"
+	htdata "github.com/herdworks/httt/data"
+	htdocument "github.com/herdworks/httt/document"
+	"github.com/herdworks/httt/theme"
 	"golang.org/x/net/html"
 )
 

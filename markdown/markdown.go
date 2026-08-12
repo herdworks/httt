@@ -25,8 +25,8 @@ import (
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
 
-	"github.com/herdworks/hypertemplates-go/data"
-	"github.com/herdworks/hypertemplates-go/hypermark"
+	"github.com/herdworks/httt/data"
+	"github.com/herdworks/httt/hypermark"
 )
 
 // HyperMark is the markdown parser for HyperText documents. Parse populates

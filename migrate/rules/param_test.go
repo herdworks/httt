@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/herdworks/hypertemplates-go/migrate"
-	"github.com/herdworks/hypertemplates-go/migrate/rules"
-	migrationtypes "github.com/herdworks/hypertemplates-go/migrate/types"
+	"github.com/herdworks/httt/migrate"
+	"github.com/herdworks/httt/migrate/rules"
+	migrationtypes "github.com/herdworks/httt/migrate/types"
 )
 
 type externalRule struct{}

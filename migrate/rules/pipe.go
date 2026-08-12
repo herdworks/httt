@@ -1,7 +1,7 @@
 package rules
 
 import (
-	migrationtypes "github.com/herdworks/hypertemplates-go/migrate/types"
+	migrationtypes "github.com/herdworks/httt/migrate/types"
 )
 
 // Pipe reports push-based ht-pipe declarations for manual pull-based migration.

@@ -1,8 +1,8 @@
 package directives
 
 import (
-	"github.com/herdworks/hypertemplates-go/data"
-	"github.com/herdworks/hypertemplates-go/parse"
+	"github.com/herdworks/httt/data"
+	"github.com/herdworks/httt/parse"
 )
 
 type TemplateData = data.TemplateData

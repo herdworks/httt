@@ -290,7 +290,7 @@ return `${input}${suffix}`
 
 ## Integration Reference
 
-Go callers use `github.com/herdworks/hypertemplates-go/scripting` to compile
+Go callers use `github.com/herdworks/httt/scripting` to compile
 and run scripts.
 
 The JavaScript-facing rules above apply to:

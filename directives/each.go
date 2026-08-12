@@ -9,9 +9,9 @@ import (
 
 	"golang.org/x/net/html"
 
-	htdata "github.com/herdworks/hypertemplates-go/data"
-	htdocument "github.com/herdworks/hypertemplates-go/document"
-	htvariable "github.com/herdworks/hypertemplates-go/variable"
+	htdata "github.com/herdworks/httt/data"
+	htdocument "github.com/herdworks/httt/document"
+	htvariable "github.com/herdworks/httt/variable"
 )
 
 // EachDirective expands one element for every item in an explicit typed source.

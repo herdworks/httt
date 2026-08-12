@@ -25,7 +25,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/herdworks/hypertemplates-go/data"
+	"github.com/herdworks/httt/data"
 )
 
 // DefaultRowsKey is the top-level key under which UnmarshalTemplateData

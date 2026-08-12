@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/herdworks/hypertemplates-go/scripting"
+	"github.com/herdworks/httt/scripting"
 )
 
 // Plugin is a computed-namespace plugin: a JavaScript file whose

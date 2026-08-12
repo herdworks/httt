@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	htfiles "github.com/herdworks/hypertemplates-go/files"
-	httheme "github.com/herdworks/hypertemplates-go/theme"
+	htfiles "github.com/herdworks/httt/files"
+	httheme "github.com/herdworks/httt/theme"
 )
 
 func (migration *Migration) prepareOutput(theme httheme.Theme) (httheme.Theme, error) {

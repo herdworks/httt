@@ -1,9 +1,9 @@
 package document
 
 import (
-	"github.com/herdworks/hypertemplates-go/markdown"
-	"github.com/herdworks/hypertemplates-go/theme"
-	"github.com/herdworks/hypertemplates-go/variable"
+	"github.com/herdworks/httt/markdown"
+	"github.com/herdworks/httt/theme"
+	"github.com/herdworks/httt/variable"
 	"golang.org/x/net/html"
 )
 

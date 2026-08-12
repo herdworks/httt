@@ -9,8 +9,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	htdocument "github.com/herdworks/hypertemplates-go/document"
-	"github.com/herdworks/hypertemplates-go/theme"
+	htdocument "github.com/herdworks/httt/document"
+	"github.com/herdworks/httt/theme"
 	"golang.org/x/net/html"
 )
 

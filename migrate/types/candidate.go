@@ -3,7 +3,7 @@ package types
 import (
 	"fmt"
 
-	"github.com/herdworks/hypertemplates-go/document"
+	"github.com/herdworks/httt/document"
 	"golang.org/x/net/html"
 )
 

@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/herdworks/hypertemplates-go/data"
-	htfiles "github.com/herdworks/hypertemplates-go/files"
-	"github.com/herdworks/hypertemplates-go/variable"
+	"github.com/herdworks/httt/data"
+	htfiles "github.com/herdworks/httt/files"
+	"github.com/herdworks/httt/variable"
 	"golang.org/x/net/html"
 )
 
