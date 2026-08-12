@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.37.0 (2026-08-11)
+
 * **BREAKING:** Renamed the module to `github.com/herdworks/httt` and the root package from `hypertemplates` to `httt`.
 * Updated the OPML data dependency to `github.com/herdworks/hyperfeed` v0.27.0.
 
