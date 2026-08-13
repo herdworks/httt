@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.38.0 (2026-08-13)
+
 * **Added:** A standalone `httt` CLI with `init`, `ls`, `install`, `package`,
   `migrate`, and `render` commands.
 * **Added:** `httt init` creates an editable bootstrap theme, deriving its
