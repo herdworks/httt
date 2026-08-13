@@ -30,6 +30,25 @@ type Theme struct {
 	Plugins      variable.Plugins  `json:"-" yaml:"-"`
 }
 
+// Themes is a collection of theme configurations.
+type Themes []Theme
+
+// ColumnValues returns a requested list column for every theme.
+func (themes Themes) ColumnValues(field string) []string {
+	values := []string{}
+	for _, theme := range themes {
+		switch strings.ToLower(field) {
+		case "path":
+			values = append(values, theme.URI.Path)
+		case "name":
+			values = append(values, theme.Name)
+		case "version":
+			values = append(values, theme.Version)
+		}
+	}
+	return values
+}
+
 func (Theme) JSONSchemaName() string    { return "theme" }
 func (Theme) JSONSchemaSummary() string { return "theme.json theme configuration." }
 

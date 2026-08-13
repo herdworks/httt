@@ -1,0 +1,21 @@
+<footer>
+    <style class='component'>
+        footer {
+            background-color: rgba(0,0,0,1.0);
+            color: rgba(255,255,255,0.75);
+        }
+        footer section {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: center;
+        }
+        footer section p {
+            justify-self: end;
+            justify-content: end;
+        }
+    </style>
+    <section>
+        <h3 ht-apply>${ site.title, "Placeholder Title" }</h3>
+        <p ht-apply>&copy; ${ site.copyright, 2026 }</p>
+    </section>
+</footer>

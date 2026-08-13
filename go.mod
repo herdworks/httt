@@ -7,8 +7,14 @@ go 1.23.5
 
 // first-party dependencies
 require (
+	github.com/herdworks/clic v0.4.0
 	github.com/herdworks/hyperfeed v0.27.0
 )
+
+// local development dependencies (replacements)
+//
+// uncomment to use local dependencies
+// replace github.com/herdworks/hyperfeed => ../hyperfeed
 
 // direct dependencies
 require (

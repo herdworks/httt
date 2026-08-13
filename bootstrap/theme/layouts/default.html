@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+    <head>
+        <meta ht-include='fragments/head'>
+        <title ht-apply>${ page.title, site.title, "Placeholder Title" }</title>
+        <style id='components' ht-pipe='from "style.component" as css'></style>
+        <style id='style'></style>
+    </head>
+
+    <body>
+        <header ht-include='fragments/header'></header>
+        <main>
+            <section ht-apply>${ page.content, "Lorem ipsum, hipsters get some." }</section>
+        </main>
+        <footer ht-include='fragments/footer'></footer>
+    </body>
+</html>

@@ -1,0 +1,18 @@
+/* Minimal CSS Reset */
+*, *::before, *::after { box-sizing: border-box; }
+* {
+    margin: 0;
+    padding: 0;
+    -moz-text-size-adjust: none;
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
+}
+html {
+    min-height: 100%;
+    overflow-x: clip;
+    color-scheme: light dark;
+}
+body {
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}

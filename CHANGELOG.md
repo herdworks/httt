@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Added:** A standalone `httt` CLI with `init`, `ls`, `install`, `package`,
+  `migrate`, and `render` commands.
+* **Added:** `httt init` creates an editable bootstrap theme, deriving its
+  destination from a YAML or JSON config file containing `config.themes_dir` if
+  available.
+* **Added:** `httt render` with theme-aware rendering for layouts, fragments,
+  and blocks. It accepts every supported template-data format, can bind input
+  under one top-level key, resolves configured resource directories, and loads
+  theme plugins without constructing HyperTexting website context.
+* **Added:** `Config` for reading the theme-related subset of JSON and YAML
+  site configuration, and `theme.Themes` for CLI list output.
+* **Changed:** Theme installation accepts local ZIP archives and HTTP(S)
+  downloads, and rejects unsafe package theme names, versions, and archive
+  paths before they can escape the configured themes directory.
+* **Changed:** Adopted `clic v0.4.0` for remountable commands with mounted help
+  usage and inherited environment prefixes.
+
 ## v0.37.0 (2026-08-11)
 
 * **BREAKING:** Renamed the module to `github.com/herdworks/httt` and the root package from `hypertemplates` to `httt`.
