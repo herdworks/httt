@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.39.0 (2025-08-15)
+
 * **Added:** `httt check [--tidy] <file-or-directory>` to recursively validate
   rendered HTML. It reports every unrendered `${` artifact in element text or
   attributes with the owning rendered element, and completes every selected
