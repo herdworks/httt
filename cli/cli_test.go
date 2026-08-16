@@ -62,7 +62,7 @@ func TestCLICommandMetadata(t *testing.T) {
 	if err := CLI.Validate(); err != nil {
 		t.Fatalf("CLI.Validate() error = %v", err)
 	}
-	for _, name := range []string{"init", "ls", "install", "package", "migrate", "render"} {
+	for _, name := range []string{"init", "ls", "install", "package", "migrate", "render", "check"} {
 		if _, ok := CLI.Command.SubCommand(name); !ok {
 			t.Fatalf("CLI does not contain %q", name)
 		}

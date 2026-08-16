@@ -37,6 +37,7 @@ func Command() clic.Command {
 			PackageCommand,
 			MigrateCommand,
 			RenderCommand,
+			CheckCommand,
 		),
 	}
 }

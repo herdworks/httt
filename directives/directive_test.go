@@ -10,6 +10,21 @@ import (
 	"golang.org/x/net/html"
 )
 
+func TestAttributeNamesIncludesLegacyAttributesWhenRequested(t *testing.T) {
+	withoutLegacy := AttributeNames(false, false)
+	if !slices.Contains(withoutLegacy, "data-ht-apply") {
+		t.Fatalf("AttributeNames(false, false) = %#v, missing current attribute", withoutLegacy)
+	}
+	if slices.Contains(withoutLegacy, "data-ht-content") {
+		t.Fatalf("AttributeNames(false, false) = %#v, includes legacy attribute", withoutLegacy)
+	}
+
+	withLegacy := AttributeNames(false, true)
+	if !slices.Contains(withLegacy, "data-ht-content") {
+		t.Fatalf("AttributeNames(false, true) = %#v, missing legacy attribute", withLegacy)
+	}
+}
+
 func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 	tests := []struct {
 		name      string

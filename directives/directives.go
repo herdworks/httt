@@ -93,6 +93,46 @@ func Process(document *htdocument.Document, data *htdata.TemplateData, userData 
 	return document.HTML(document.Layout), nil
 }
 
+// AttributeNames returns every recognized directive attribute name. When
+// legacy is true, it also includes attributes from removed directives.
+func AttributeNames(strict, legacy bool) []string {
+	providers := []AttributeProvider{
+		IncludeDirective{},
+		DebugDirective{},
+		ConditionalDirective{},
+		EachDirective{},
+		ApplyDirective{},
+		AttributeMapDirective{},
+		BlockDirective{},
+		PipeDirective{},
+		BaseDirective{},
+	}
+	if legacy {
+		providers = append(providers, DeprecatedDirective{})
+	}
+	attributes := make([]string, 0)
+	seen := map[string]bool{}
+	add := func(attribute string) {
+		if seen[attribute] {
+			return
+		}
+		seen[attribute] = true
+		attributes = append(attributes, attribute)
+	}
+	for _, provider := range providers {
+		for _, attribute := range provider.Attributes(strict) {
+			add(attribute)
+		}
+	}
+	for _, attribute := range (EachDirective{}).offsetAttributes(strict) {
+		add(attribute)
+	}
+	for _, attribute := range (EachDirective{}).limitAttributes(strict) {
+		add(attribute)
+	}
+	return attributes
+}
+
 func defaultDirectiveSelectors(d AttributeProvider, strict bool) []string {
 	strictAttributes := d.Attributes(true)
 	var selectors []string

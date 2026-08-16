@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Added:** `httt check [--tidy] <file-or-directory>` to recursively validate
+  rendered HTML. It reports every unrendered `${` artifact in element text or
+  attributes with the owning rendered element, and completes every selected
+  file before returning a failing status. Text bodies of `pre` and `code`
+  elements are excluded so literal examples and JavaScript template strings do
+  not produce false positives.
+* **Added:** `httt check --tidy` reports remaining current and deprecated
+  HyperTemplates directive attributes alongside unrendered template artifacts.
+* **Added:** `directives.AttributeNames(strict, legacy)` for tools that need to
+  enumerate active directive attributes and optionally include attributes from
+  removed directives.
+
 ## v0.38.0 (2026-08-13)
 
 * **Added:** A standalone `httt` CLI with `init`, `ls`, `install`, `package`,
