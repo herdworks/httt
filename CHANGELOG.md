@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* Fixed a data race when concurrent Markdown parser construction shared mutable
+  mention-extension configuration.
+
 ## v0.39.0 (2025-08-15)
 
 * **Added:** `httt check [--tidy] <file-or-directory>` to recursively validate

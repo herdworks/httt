@@ -169,8 +169,9 @@ func New(config *HyperMarkConfig) *HyperMark {
 	if config == nil {
 		config = &DefaultHyperMarkConfig
 	}
+	configCopy := *config
 	md := &HyperMark{
-		Config:      config,
+		Config:      &configCopy,
 		FrontMatter: map[string]any{},
 		Mentions:    hypermark.Mentions{},
 	}

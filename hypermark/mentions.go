@@ -91,19 +91,19 @@ func (e *MentionExtension) Extend(m goldmark.Markdown) {
 
 func (m *MentionConfig) TagPrefix() string {
 	if m == nil {
-		m = &DefaultMentionConfig
+		return DefaultMentionConfig.HrefPrefix
 	}
 	if len(m.HrefPrefix) == 0 {
-		m.HrefPrefix = DefaultMentionConfig.HrefPrefix
+		return DefaultMentionConfig.HrefPrefix
 	}
 	return m.HrefPrefix
 }
 func (m *MentionConfig) TagSuffix() string {
 	if m == nil {
-		m = &DefaultMentionConfig
+		return DefaultMentionConfig.HrefSuffix
 	}
 	if len(m.HrefSuffix) == 0 {
-		m.HrefSuffix = DefaultMentionConfig.HrefSuffix
+		return DefaultMentionConfig.HrefSuffix
 	}
 	return m.HrefSuffix
 }
@@ -212,15 +212,20 @@ func EntityMentionExtension(config *MentionConfig) *MentionExtension {
 	if config == nil {
 		config = &DefaultMentionConfig
 	}
-	extension := EntityMentions
-	extension.Config = config
-	return extension
+	return &MentionExtension{
+		Config:   config,
+		Trigger:  EntityMentionTrigger,
+		Pattern:  EntityMentionPattern,
+		External: false,
+	}
 }
 func HashtagMentionExtension(config *MentionConfig) *MentionExtension {
 	if config == nil {
 		config = &DefaultMentionConfig
 	}
-	extension := HashtagMentions
-	extension.Config = config
-	return extension
+	return &MentionExtension{
+		Config:  config,
+		Trigger: HashtagMentionTrigger,
+		Pattern: HashtagMentionPattern,
+	}
 }
