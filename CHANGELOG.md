@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.39.1 (2026-08-20)
+
 * Fixed a data race when concurrent Markdown parser construction shared mutable
   mention-extension configuration.
 
