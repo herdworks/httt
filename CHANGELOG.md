@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.40.0 (2026-08-26)
+
 * **BREAKING:** Recast `ht-with` as the single-pass, non-iterating counterpart
   to `ht-each`; it is no longer an `ht-apply` or `ht-each` modifier.
   `ht-with` now renders its target as a nested template, making its
