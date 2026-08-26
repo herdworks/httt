@@ -80,14 +80,19 @@ func (d EachDirective) allAttributes(strict bool) []string {
 	return attributes
 }
 
-func (d EachDirective) Selectors(strict bool) []string {
-	attributes := d.Attributes(strict)
-	selectors := make([]string, 0, len(attributes))
-	boundaries := defaultBoundaryAttributes(strict)
-	for _, attribute := range attributes {
-		selectors = append(selectors, fmt.Sprintf("[%s]%s", attribute, excludeBoundaryDescendants(boundaries, attribute)))
+func (EachDirective) Selectors(strict bool) []string {
+	if strict {
+		return []string{
+			"[data-ht-each]:not([data-ht-each] *, [data-ht-with] *)",
+			"[data-ht-with]:not([data-ht-each] *, [data-ht-with] *)",
+		}
 	}
-	return selectors
+	return []string{
+		"[data-ht-each]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
+		"[data-ht-with]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
+		"[ht-each]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
+		"[ht-with]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
+	}
 }
 
 func (d EachDirective) Elements(document *htdocument.Document) []*html.Node {

@@ -3,7 +3,7 @@
 // reference: https://go.dev/doc/modules/gomod-ref#replace
 module github.com/herdworks/httt
 
-go 1.23.5
+go 1.26.2
 
 // first-party dependencies
 require (

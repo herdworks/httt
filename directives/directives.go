@@ -139,10 +139,9 @@ func defaultDirectiveSelectors(d AttributeProvider, strict bool) []string {
 	boundaries := defaultBoundaryAttributes(strict)
 	for _, attribute := range attributes {
 		selectors = append(selectors, fmt.Sprintf(
-			"[%s]%s%s",
+			"[%s]%s",
 			attribute,
-			excludeBoundaryElements(boundaries, attribute),
-			excludeBoundaryDescendants(boundaries, attribute),
+			selectorBoundaries(boundaries, true),
 		))
 	}
 	return selectors
@@ -164,18 +163,17 @@ func baseBoundaryAttributes(strict bool) []string {
 	return attributes
 }
 
-func excludeBoundaryElements(boundaries []string, attribute string) string {
-	conditions := make([]string, 0, len(boundaries))
-	for _, boundary := range boundaries {
-		conditions = append(conditions, fmt.Sprintf("[%s][%s]", boundary, attribute))
+func selectorBoundaries(boundaries []string, includeBoundaryElements bool) string {
+	conditionCount := len(boundaries)
+	if includeBoundaryElements {
+		conditionCount *= 2
 	}
-	return fmt.Sprintf(":not(%s)", strings.Join(conditions, ", "))
-}
-
-func excludeBoundaryDescendants(boundaries []string, attribute string) string {
-	conditions := make([]string, 0, len(boundaries))
+	conditions := make([]string, 0, conditionCount)
 	for _, boundary := range boundaries {
-		conditions = append(conditions, fmt.Sprintf("[%s] [%s]", boundary, attribute))
+		if includeBoundaryElements {
+			conditions = append(conditions, fmt.Sprintf("[%s]", boundary))
+		}
+		conditions = append(conditions, fmt.Sprintf("[%s] *", boundary))
 	}
 	return fmt.Sprintf(":not(%s)", strings.Join(conditions, ", "))
 }

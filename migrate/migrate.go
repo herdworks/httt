@@ -150,8 +150,8 @@ func loadTheme(rawPath string) (httheme.Theme, error) {
 		return theme, fmt.Errorf("theme configuration %q is not a regular file", themePath)
 	}
 	theme.URI = &url.URL{Path: themePath}
-	if err := theme.Parse(io.Discard); err != nil {
-		return theme, fmt.Errorf("parse theme configuration %q: %w", themePath, err)
+	if err := theme.Load(io.Discard); err != nil {
+		return theme, fmt.Errorf("load theme configuration %q: %w", themePath, err)
 	}
 	if err := theme.Validate(); err != nil {
 		return theme, fmt.Errorf("validate theme configuration %q: %w", themePath, err)

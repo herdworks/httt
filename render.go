@@ -69,7 +69,7 @@ func renderTheme(dataPath, themePath, layoutRef, fragmentRef, blockRef, binding 
 		return nil, err
 	}
 	t := &theme.Theme{URI: &url.URL{Path: themePath}}
-	if err = t.Parse(io.Discard); err != nil {
+	if err = t.Load(io.Discard); err != nil {
 		return nil, err
 	}
 	t.ResolveConfig()

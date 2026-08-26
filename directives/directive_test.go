@@ -3,6 +3,7 @@ package directives
 import (
 	"io"
 	"slices"
+	"strings"
 	"testing"
 
 	htdata "github.com/herdworks/httt/data"
@@ -56,25 +57,25 @@ func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 			name:      "include",
 			directive: IncludeDirective{},
 			strict: []string{
-				"[data-ht-include]:not([data-ht-each] [data-ht-include], [data-ht-with] [data-ht-include])",
+				"[data-ht-include]:not([data-ht-each] *, [data-ht-with] *)",
 			},
 			legacy: []string{
-				"[data-ht-include]:not([data-ht-each] [data-ht-include], [data-ht-with] [data-ht-include], [ht-each] [data-ht-include], [ht-with] [data-ht-include])",
-				"[ht-include]:not([data-ht-each] [ht-include], [data-ht-with] [ht-include], [ht-each] [ht-include], [ht-with] [ht-include])",
+				"[data-ht-include]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
+				"[ht-include]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
 			},
 		},
 		{
 			name:      "each",
 			directive: EachDirective{},
 			strict: []string{
-				"[data-ht-each]:not([data-ht-each] [data-ht-each], [data-ht-with] [data-ht-each])",
-				"[data-ht-with]:not([data-ht-each] [data-ht-with], [data-ht-with] [data-ht-with])",
+				"[data-ht-each]:not([data-ht-each] *, [data-ht-with] *)",
+				"[data-ht-with]:not([data-ht-each] *, [data-ht-with] *)",
 			},
 			legacy: []string{
-				"[data-ht-each]:not([data-ht-each] [data-ht-each], [data-ht-with] [data-ht-each], [ht-each] [data-ht-each], [ht-with] [data-ht-each])",
-				"[data-ht-with]:not([data-ht-each] [data-ht-with], [data-ht-with] [data-ht-with], [ht-each] [data-ht-with], [ht-with] [data-ht-with])",
-				"[ht-each]:not([data-ht-each] [ht-each], [data-ht-with] [ht-each], [ht-each] [ht-each], [ht-with] [ht-each])",
-				"[ht-with]:not([data-ht-each] [ht-with], [data-ht-with] [ht-with], [ht-each] [ht-with], [ht-with] [ht-with])",
+				"[data-ht-each]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
+				"[data-ht-with]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
+				"[ht-each]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
+				"[ht-with]:not([data-ht-each] *, [data-ht-with] *, [ht-each] *, [ht-with] *)",
 			},
 		},
 		{
@@ -93,11 +94,11 @@ func TestDirectiveSelectorsMatchLegacyQueries(t *testing.T) {
 			name:      "base",
 			directive: BaseDirective{},
 			strict: []string{
-				"[data-ht-base]:not([data-ht-each][data-ht-base], [data-ht-with][data-ht-base]):not([data-ht-each] [data-ht-base], [data-ht-with] [data-ht-base])",
+				"[data-ht-base]:not([data-ht-each], [data-ht-each] *, [data-ht-with], [data-ht-with] *)",
 			},
 			legacy: []string{
-				"[data-ht-base]:not([data-ht-each][data-ht-base], [data-ht-with][data-ht-base], [ht-each][data-ht-base], [ht-with][data-ht-base]):not([data-ht-each] [data-ht-base], [data-ht-with] [data-ht-base], [ht-each] [data-ht-base], [ht-with] [data-ht-base])",
-				"[ht-base]:not([data-ht-each][ht-base], [data-ht-with][ht-base], [ht-each][ht-base], [ht-with][ht-base]):not([data-ht-each] [ht-base], [data-ht-with] [ht-base], [ht-each] [ht-base], [ht-with] [ht-base])",
+				"[data-ht-base]:not([data-ht-each], [data-ht-each] *, [data-ht-with], [data-ht-with] *, [ht-each], [ht-each] *, [ht-with], [ht-with] *)",
+				"[ht-base]:not([data-ht-each], [data-ht-each] *, [data-ht-with], [data-ht-with] *, [ht-each], [ht-each] *, [ht-with], [ht-with] *)",
 			},
 		},
 	}
@@ -126,27 +127,113 @@ func TestBoundarySelectorHelpers(t *testing.T) {
 	}
 
 	boundaries := defaultBoundaryAttributes(true)
-	if got, want := excludeBoundaryElements(boundaries, "data-ht-apply"), ":not([data-ht-each][data-ht-apply], [data-ht-with][data-ht-apply])"; got != want {
-		t.Fatalf("boundary elements selector = %q, want %q", got, want)
+	if got, want := selectorBoundaries(boundaries, true), ":not([data-ht-each], [data-ht-each] *, [data-ht-with], [data-ht-with] *)"; got != want {
+		t.Fatalf("boundary roots and descendants selector = %q, want %q", got, want)
 	}
-	if got, want := excludeBoundaryDescendants(boundaries, "data-ht-apply"), ":not([data-ht-each] [data-ht-apply], [data-ht-with] [data-ht-apply])"; got != want {
+	if got, want := selectorBoundaries(boundaries, false), ":not([data-ht-each] *, [data-ht-with] *)"; got != want {
 		t.Fatalf("boundary descendants selector = %q, want %q", got, want)
 	}
 
-	if got, want := (ApplyDirective{}).Selectors(true), []string{"[data-ht-apply]:not([data-ht-each][data-ht-apply], [data-ht-with][data-ht-apply]):not([data-ht-each] [data-ht-apply], [data-ht-with] [data-ht-apply])"}; !slices.Equal(got, want) {
+	if got, want := (ApplyDirective{}).Selectors(true), []string{"[data-ht-apply]:not([data-ht-each], [data-ht-each] *, [data-ht-with], [data-ht-with] *)"}; !slices.Equal(got, want) {
 		t.Fatalf("default selectors = %v, want %v", got, want)
 	}
 	if got, want := (ApplyDirective{}).Selectors(false), []string{
-		"[data-ht-apply]:not([data-ht-each][data-ht-apply], [data-ht-with][data-ht-apply], [ht-each][data-ht-apply], [ht-with][data-ht-apply]):not([data-ht-each] [data-ht-apply], [data-ht-with] [data-ht-apply], [ht-each] [data-ht-apply], [ht-with] [data-ht-apply])",
-		"[ht-apply]:not([data-ht-each][ht-apply], [data-ht-with][ht-apply], [ht-each][ht-apply], [ht-with][ht-apply]):not([data-ht-each] [ht-apply], [data-ht-with] [ht-apply], [ht-each] [ht-apply], [ht-with] [ht-apply])",
+		"[data-ht-apply]:not([data-ht-each], [data-ht-each] *, [data-ht-with], [data-ht-with] *, [ht-each], [ht-each] *, [ht-with], [ht-with] *)",
+		"[ht-apply]:not([data-ht-each], [data-ht-each] *, [data-ht-with], [data-ht-with] *, [ht-each], [ht-each] *, [ht-with], [ht-with] *)",
 	}; !slices.Equal(got, want) {
 		t.Fatalf("legacy default selectors = %v, want %v", got, want)
 	}
-	if got, want := basedAttributeSelector("href", true), "[href]:not([data-ht-each][href], [data-ht-with][href], [data-ht-base][href]):not([data-ht-each] [href], [data-ht-with] [href], [data-ht-base] [href])"; got != want {
+	if got, want := basedAttributeSelector("href", true), "[href]:not([data-ht-each], [data-ht-each] *, [data-ht-with], [data-ht-with] *, [data-ht-base], [data-ht-base] *)"; got != want {
 		t.Fatalf("strict based selector = %q, want %q", got, want)
 	}
-	if got, want := basedAttributeSelector("href", false), "[href]:not([data-ht-each][href], [data-ht-with][href], [data-ht-base][href], [ht-each][href], [ht-with][href], [ht-base][href]):not([data-ht-each] [href], [data-ht-with] [href], [data-ht-base] [href], [ht-each] [href], [ht-with] [href], [ht-base] [href])"; got != want {
+	if got, want := basedAttributeSelector("href", false), "[href]:not([data-ht-each], [data-ht-each] *, [data-ht-with], [data-ht-with] *, [data-ht-base], [data-ht-base] *, [ht-each], [ht-each] *, [ht-with], [ht-with] *, [ht-base], [ht-base] *)"; got != want {
 		t.Fatalf("legacy based selector = %q, want %q", got, want)
+	}
+}
+
+func TestBoundarySelectorsPreserveLegacyQueriesWithoutWithScopes(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`<!doctype html><html><body>
+		<div data-ht-apply id="apply-root"></div>
+		<section data-ht-each="item in ${ items }"><div data-ht-apply id="apply-data-nested"></div><example-fragment data-ht-include="data.html"></example-fragment><a href="data.html"></a></section>
+		<section ht-each="item in ${ items }"><div ht-apply id="apply-legacy-nested"></div><example-fragment ht-include="legacy.html"></example-fragment><a href="legacy.html"></a></section>
+		<div ht-apply id="apply-root-legacy"></div><example-fragment data-ht-include="root.html"></example-fragment><example-fragment ht-include="root-legacy.html"></example-fragment><a href="root.html"></a>
+	</body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		queryAll bool
+		before   []string
+		current  []string
+		after    []string
+	}{
+		{
+			name: "default directive",
+			before: []string{
+				"[data-ht-apply]:not([data-ht-each] [data-ht-apply], [data-ht-each][data-ht-apply]):not([ht-each] [data-ht-apply], [ht-each][data-ht-apply])",
+				"[ht-apply]:not([ht-each] [ht-apply], [ht-each][ht-apply]):not([data-ht-each] [ht-apply], [data-ht-each][ht-apply])",
+			},
+			current: []string{
+				"[data-ht-apply]:not([data-ht-each][data-ht-apply], [data-ht-with][data-ht-apply], [ht-each][data-ht-apply], [ht-with][data-ht-apply]):not([data-ht-each] [data-ht-apply], [data-ht-with] [data-ht-apply], [ht-each] [data-ht-apply], [ht-with] [data-ht-apply])",
+				"[ht-apply]:not([data-ht-each][ht-apply], [data-ht-with][ht-apply], [ht-each][ht-apply], [ht-with][ht-apply]):not([data-ht-each] [ht-apply], [data-ht-with] [ht-apply], [ht-each] [ht-apply], [ht-with] [ht-apply])",
+			},
+			after: (ApplyDirective{}).Selectors(false),
+		},
+		{
+			name:     "include directive",
+			queryAll: true,
+			before: []string{
+				"[data-ht-include]:not([data-ht-each] [data-ht-include]):not([ht-each] [data-ht-include])",
+				"[ht-include]:not([ht-each] [ht-include]):not([data-ht-each] [ht-include])",
+			},
+			current: []string{
+				"[data-ht-include]:not([data-ht-each] [data-ht-include], [data-ht-with] [data-ht-include], [ht-each] [data-ht-include], [ht-with] [data-ht-include])",
+				"[ht-include]:not([data-ht-each] [ht-include], [data-ht-with] [ht-include], [ht-each] [ht-include], [ht-with] [ht-include])",
+			},
+			after: (IncludeDirective{}).Selectors(false),
+		},
+		{
+			name: "each directive",
+			before: []string{
+				"[data-ht-each]:not([data-ht-each] [data-ht-each]):not([ht-each] [data-ht-each])",
+				"[ht-each]:not([ht-each] [ht-each]):not([data-ht-each] [ht-each])",
+			},
+			current: []string{
+				"[data-ht-each]:not([data-ht-each] [data-ht-each], [data-ht-with] [data-ht-each], [ht-each] [data-ht-each], [ht-with] [data-ht-each])",
+				"[data-ht-with]:not([data-ht-each] [data-ht-with], [data-ht-with] [data-ht-with], [ht-each] [data-ht-with], [ht-with] [data-ht-with])",
+				"[ht-each]:not([data-ht-each] [ht-each], [data-ht-with] [ht-each], [ht-each] [ht-each], [ht-with] [ht-each])",
+				"[ht-with]:not([data-ht-each] [ht-with], [data-ht-with] [ht-with], [ht-each] [ht-with], [ht-with] [ht-with])",
+			},
+			after: (EachDirective{}).Selectors(false),
+		},
+		{
+			name: "base URL resolution",
+			before: []string{
+				"[href]:not([data-ht-each] [href], [data-ht-each][href], [data-ht-base] [href], [data-ht-base][href]):not([ht-each] [href], [ht-each][href], [ht-base] [href], [ht-base][href])",
+			},
+			current: []string{
+				"[href]:not([data-ht-each][href], [data-ht-with][href], [data-ht-base][href], [ht-each][href], [ht-with][href], [ht-base][href]):not([data-ht-each] [href], [data-ht-with] [href], [data-ht-base] [href], [ht-each] [href], [ht-with] [href], [ht-base] [href])",
+			},
+			after: []string{basedAttributeSelector("href", false)},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			query := htdocument.QueryRoot
+			if test.queryAll {
+				query = htdocument.QueryAll
+			}
+			before := query(layout, test.before...)
+			if got := query(layout, test.current...); !slices.Equal(got, before) {
+				t.Fatalf("pre-wildcard query selected different elements")
+			}
+			if got := query(layout, test.after...); !slices.Equal(got, before) {
+				t.Fatalf("wildcard query selected different elements")
+			}
+		})
 	}
 }
 

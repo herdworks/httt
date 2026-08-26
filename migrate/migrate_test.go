@@ -394,7 +394,7 @@ func TestDiscoverUsesConfiguredDirectoriesAndLayoutPrecedence(t *testing.T) {
 	}
 }
 
-func TestLoadThemeUsesParseAndValidate(t *testing.T) {
+func TestLoadThemeUsesThemeLoadAndValidate(t *testing.T) {
 	root := t.TempDir()
 	themePath := writeTheme(t, root, `{"name":"Loaded","config":{"layouts_dir":"templates"}}`)
 	theme, err := loadTheme(themePath)
@@ -409,7 +409,7 @@ func TestLoadThemeUsesParseAndValidate(t *testing.T) {
 		t.Fatalf("invalid config error = %v", err)
 	}
 	malformedPath := writeFile(t, root, "malformed.json", `{`)
-	if _, err := loadTheme(malformedPath); err == nil || !strings.Contains(err.Error(), "parse theme configuration") {
+	if _, err := loadTheme(malformedPath); err == nil || !strings.Contains(err.Error(), "load theme configuration") {
 		t.Fatalf("malformed config error = %v", err)
 	}
 }

@@ -144,9 +144,8 @@ func ResolveBasedAttributes(document *htdocument.Document, element *html.Node, a
 func basedAttributeSelector(attribute string, strict bool) string {
 	boundaries := baseBoundaryAttributes(strict)
 	return fmt.Sprintf(
-		"[%s]%s%s",
+		"[%s]%s",
 		attribute,
-		excludeBoundaryElements(boundaries, attribute),
-		excludeBoundaryDescendants(boundaries, attribute),
+		selectorBoundaries(boundaries, true),
 	)
 }

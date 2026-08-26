@@ -1,6 +1,8 @@
 package theme
 
 import (
+	"bytes"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -49,6 +51,105 @@ func TestThemeConfigValidateAllowsEmptyDefaults(t *testing.T) {
 	var config ThemeConfig
 	if err := config.Validate(); err != nil {
 		t.Fatalf("ThemeConfig.Validate() error = %v", err)
+	}
+}
+
+func TestThemeLoadCachesRenderResources(t *testing.T) {
+	root := t.TempDir()
+	theme := &Theme{URI: &url.URL{Path: filepath.Join(root, "theme.json")}}
+	writeThemeTestFileContent(t, theme.URI.Path, `{"config":{"blocks_dir":"components","layouts_dir":"templates","fragments_dir":"partials"}}`)
+
+	cached := map[string]string{
+		"components/card.txt":    "cached block",
+		"templates/default.html": "cached layout",
+		"partials/nav.svg":       "cached fragment",
+	}
+	uncached := map[string]string{
+		"static/site.css": "static",
+		"data/site.json":  "data",
+		"types/page.json": "type",
+		"plugins/site.js": "plugin",
+	}
+	for resourceRef, content := range cached {
+		writeThemeTestFileContent(t, filepath.Join(root, filepath.FromSlash(resourceRef)), content)
+	}
+	writeThemeTestFileContent(t, filepath.Join(root, "components", "empty.html"), "")
+	for resourceRef, content := range uncached {
+		writeThemeTestFileContent(t, filepath.Join(root, filepath.FromSlash(resourceRef)), content)
+	}
+
+	if err := theme.Load(io.Discard); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	for resourceRef, content := range cached {
+		writeThemeTestFileContent(t, filepath.Join(root, filepath.FromSlash(resourceRef)), "changed "+content)
+		resourceBytes, found, err := theme.ResourceBytes(resourceRef)
+		if err != nil {
+			t.Fatalf("ResourceBytes(%q) error = %v", resourceRef, err)
+		}
+		if !found || string(resourceBytes) != content {
+			t.Fatalf("ResourceBytes(%q) = %q, %t; want %q, true", resourceRef, resourceBytes, found, content)
+		}
+	}
+	resourceBytes, found, err := theme.ResourceBytes("components/empty.html")
+	if err != nil {
+		t.Fatalf("ResourceBytes(empty.html) error = %v", err)
+	}
+	if !found || len(resourceBytes) != 0 {
+		t.Fatalf("ResourceBytes(empty.html) = %q, %t; want empty, true", resourceBytes, found)
+	}
+	for resourceRef, content := range uncached {
+		want := "changed " + content
+		writeThemeTestFileContent(t, filepath.Join(root, filepath.FromSlash(resourceRef)), want)
+		resourceBytes, found, err := theme.ResourceBytes(resourceRef)
+		if err != nil {
+			t.Fatalf("ResourceBytes(%q) error = %v", resourceRef, err)
+		}
+		if !found || string(resourceBytes) != want {
+			t.Fatalf("ResourceBytes(%q) = %q, %t; want %q, true", resourceRef, resourceBytes, found, want)
+		}
+	}
+
+	if err := theme.Load(io.Discard); err != nil {
+		t.Fatalf("second Load() error = %v", err)
+	}
+	for resourceRef, content := range cached {
+		want := []byte("changed " + content)
+		resourceBytes, found, err := theme.ResourceBytes(resourceRef)
+		if err != nil {
+			t.Fatalf("ResourceBytes(%q) after reparse error = %v", resourceRef, err)
+		}
+		if !found || !bytes.Equal(resourceBytes, want) {
+			t.Fatalf("ResourceBytes(%q) after reparse = %q, %t; want %q, true", resourceRef, resourceBytes, found, want)
+		}
+	}
+}
+
+func TestThemeLoadAllowsMissingRenderResourceDirectories(t *testing.T) {
+	root := t.TempDir()
+	theme := &Theme{URI: &url.URL{Path: filepath.Join(root, "theme.json")}}
+	writeThemeTestFileContent(t, theme.URI.Path, "{}")
+	writeThemeTestFile(t, filepath.Join(root, "layouts", "default.html"))
+
+	if err := theme.Load(io.Discard); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+}
+
+func TestThemeLoadFailsForUnreadableRenderResource(t *testing.T) {
+	root := t.TempDir()
+	theme := &Theme{URI: &url.URL{Path: filepath.Join(root, "theme.json")}}
+	writeThemeTestFileContent(t, theme.URI.Path, "{}")
+	broken := filepath.Join(root, "layouts", "missing.html")
+	if err := os.MkdirAll(filepath.Dir(broken), 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.Symlink(filepath.Join(root, "not-found.html"), broken); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	if err := theme.Load(io.Discard); err == nil {
+		t.Fatal("Load() error = nil, want unreadable resource error")
 	}
 }
 

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Changed:** Renamed `Theme.Parse` to `Theme.Load`. Loading a valid theme
+  now reads its layouts, fragments, and blocks into an immutable render-resource
+  cache; callers that change those files must load the theme again to observe
+  the changes.
+* **Changed:** Updated the CLI, renderer, and migration loader to use
+  `Theme.Load`, ensuring they share the cached render-resource behavior.
+* **Changed:** Raised the module Go version to 1.26.2 to match the configured
+  CI toolchain and benchmark API usage.
+* **Changed:** Simplified directive scope selectors with boundary-root and
+  boundary-descendant exclusions. The new expressions preserve selector results
+  for templates without `ht-with` while reducing Cascadia selector work.
+
 ## v0.40.0 (2026-08-26)
 
 * **BREAKING:** Recast `ht-with` as the single-pass, non-iterating counterpart

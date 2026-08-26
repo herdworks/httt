@@ -114,7 +114,7 @@ func loadTheme(path string) (*httheme.Theme, error) {
 		return nil, err
 	}
 	theme := &httheme.Theme{URI: &url.URL{Path: path}}
-	if err := theme.Parse(io.Discard); err != nil {
+	if err := theme.Load(io.Discard); err != nil {
 		return nil, err
 	}
 	theme.ResolveConfig()

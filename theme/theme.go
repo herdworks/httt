@@ -20,18 +20,28 @@ import (
 )
 
 type Theme struct {
-	URI *url.URL `json:"-" yaml:"-"`
-	// BuiltinsFS supplies embedded-resource fallbacks for this theme. A nil
-	// value uses the package's default builtin pack.
-	BuiltinsFS   fs.FS             `json:"-" yaml:"-"`
-	Href         string            `json:"href,omitempty" yaml:"href,omitempty"`
-	Name         string            `json:"name,omitempty" yaml:"name,omitempty"`
-	Description  string            `json:"description,omitempty" yaml:"description,omitempty"`
-	Version      string            `json:"version,omitempty" yaml:"version,omitempty"`
-	Config       ThemeConfig       `json:"config,omitempty" yaml:"config,omitempty"`
-	TemplateData data.TemplateData `json:"data,omitempty" yaml:"data,omitempty"`
-	Assets       []string          `json:"-" yaml:"-"`
-	Plugins      variable.Plugins  `json:"-" yaml:"-"`
+	URI           *url.URL          `json:"-" yaml:"-"`
+	Href          string            `json:"href,omitempty" yaml:"href,omitempty"`
+	Name          string            `json:"name,omitempty" yaml:"name,omitempty"`
+	Description   string            `json:"description,omitempty" yaml:"description,omitempty"`
+	Version       string            `json:"version,omitempty" yaml:"version,omitempty"`
+	Config        ThemeConfig       `json:"config,omitempty" yaml:"config,omitempty"`
+	TemplateData  data.TemplateData `json:"data,omitempty" yaml:"data,omitempty"`
+	Assets        []string          `json:"-" yaml:"-"`
+	Plugins       variable.Plugins  `json:"-" yaml:"-"`
+	BuiltinsFS    fs.FS             `json:"-" yaml:"-"`
+	resourceCache map[string][]byte
+}
+
+type ThemeConfig struct {
+	URL                   string `json:"url,omitempty" yaml:"url,omitempty"`
+	ContentTypesDirectory string `json:"contenttypes_dir,omitempty" yaml:"contenttypes_dir,omitempty"`
+	BlocksDirectory       string `json:"blocks_dir,omitempty" yaml:"blocks_dir,omitempty"`
+	LayoutsDirectory      string `json:"layouts_dir,omitempty" yaml:"layouts_dir,omitempty"`
+	FragmentsDirectory    string `json:"fragments_dir,omitempty" yaml:"fragments_dir,omitempty"`
+	PluginsDirectory      string `json:"plugins_dir,omitempty" yaml:"plugins_dir,omitempty"`
+	DataDirectory         string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
+	StaticDirectory       string `json:"static_dir,omitempty" yaml:"static_dir,omitempty"`
 }
 
 // Themes is a collection of theme configurations.
@@ -62,28 +72,28 @@ func (Theme) JSONSchemaDescription() string {
 	return "A theme source configuration file stored as theme.json."
 }
 
-type ThemeConfig struct {
-	URL                   string `json:"url,omitempty" yaml:"url,omitempty"`
-	ContentTypesDirectory string `json:"contenttypes_dir,omitempty" yaml:"contenttypes_dir,omitempty"`
-	BlocksDirectory       string `json:"blocks_dir,omitempty" yaml:"blocks_dir,omitempty"`
-	LayoutsDirectory      string `json:"layouts_dir,omitempty" yaml:"layouts_dir,omitempty"`
-	FragmentsDirectory    string `json:"fragments_dir,omitempty" yaml:"fragments_dir,omitempty"`
-	PluginsDirectory      string `json:"plugins_dir,omitempty" yaml:"plugins_dir,omitempty"`
-	DataDirectory         string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
-	StaticDirectory       string `json:"static_dir,omitempty" yaml:"static_dir,omitempty"`
-}
-
-func (theme *Theme) Parse(w io.Writer) (err error) {
+func (theme *Theme) Load(w io.Writer) (err error) {
 	if w == nil {
 		w = os.Stdout
 	}
 
-	var fileBytes []byte
-	if fileBytes, err = os.ReadFile(theme.URI.Path); err == nil {
-		return json.Unmarshal(fileBytes, &theme)
-	} else {
+	fileBytes, err := os.ReadFile(theme.URI.Path)
+	if err != nil {
 		fmt.Fprintf(w, "theme \"%s\" warning: %v\n", theme.URI.Path, err)
+		return nil
 	}
+	parsed := *theme
+	if err = json.Unmarshal(fileBytes, &parsed); err != nil {
+		return err
+	}
+	cache := map[string][]byte(nil)
+	if parsed.Config.Validate() == nil {
+		if cache, err = parsed.loadResourceCache(); err != nil {
+			return err
+		}
+	}
+	*theme = parsed
+	theme.resourceCache = cache
 	return nil
 }
 
@@ -206,6 +216,9 @@ func (theme *Theme) ResourceBytes(resourceRef string) ([]byte, bool, error) {
 	}
 	if filepath.Ext(resourceRef) == "" {
 		resourceRef += ".html"
+	}
+	if resourceBytes, hit := theme.resourceCache[resourceRef]; hit {
+		return resourceBytes, true, nil // cache hit!
 	}
 	resourcePath := theme.ResourcePath(resourceRef)
 	exists, err := theme.ResourceExists(resourcePath)
@@ -430,6 +443,51 @@ func (theme *Theme) Archive(archive string, w io.Writer) (err error) {
 		fmt.Fprintf(w, "file %q written (%d bytes)\n", header.Name, written)
 	}
 
+	return nil
+}
+
+func (theme *Theme) loadResourceCache() (cache map[string][]byte, err error) {
+	cache = map[string][]byte{}
+	for _, directory := range []string{
+		theme.BlocksDirName(),
+		theme.LayoutsDirName(),
+		theme.FragmentsDirName(),
+	} {
+		if err = theme.cacheResourceDirectory(cache, directory); err != nil {
+			return nil, err
+		}
+	}
+	return cache, nil
+}
+
+func (theme *Theme) cacheResourceDirectory(cache map[string][]byte, directory string) (err error) {
+	directoryPath := filepath.Join(theme.RootDir(), directory)
+	resourcePaths, err := htfiles.List(directoryPath, true)
+	if err != nil {
+		return fmt.Errorf("list theme resource directory %q: %w", directory, err)
+	}
+	for _, resourcePath := range resourcePaths {
+		resourceRef, err := htfiles.CleanRelativePath(path.Join(directory, resourcePath))
+		if err != nil {
+			return err
+		}
+		filePath, err := htfiles.LocalPath(theme.RootDir(), resourceRef)
+		if err != nil {
+			return err
+		}
+		info, err := os.Stat(filePath)
+		if err != nil {
+			return fmt.Errorf("stat theme resource %q: %w", resourceRef, err)
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		resourceBytes, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("read theme resource %q: %w", resourceRef, err)
+		}
+		cache[resourceRef] = resourceBytes
+	}
 	return nil
 }
 

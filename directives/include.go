@@ -38,7 +38,7 @@ func (d IncludeDirective) Selectors(strict bool) []string {
 	selectors := make([]string, 0, len(attributes))
 	boundaries := defaultBoundaryAttributes(strict)
 	for _, attribute := range attributes {
-		selectors = append(selectors, fmt.Sprintf("[%s]%s", attribute, excludeBoundaryDescendants(boundaries, attribute)))
+		selectors = append(selectors, fmt.Sprintf("[%s]%s", attribute, selectorBoundaries(boundaries, false)))
 	}
 	return selectors
 }
