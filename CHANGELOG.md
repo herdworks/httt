@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.40.1 (2026-08-26)
+
 * **Changed:** Renamed `Theme.Parse` to `Theme.Load`. Loading a valid theme
   now reads its layouts, fragments, and blocks into an immutable render-resource
   cache; callers that change those files must load the theme again to observe
