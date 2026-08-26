@@ -32,13 +32,13 @@ func (IncludeDirective) Attributes(strict bool) []string {
 }
 
 func (d IncludeDirective) Selectors(strict bool) []string {
-	// Unlike defaultDirectiveSelectors, keep includes on an ht-each root so
-	// the fragment is resolved before the loop expands it. Only descendants
-	// of a loop are deferred to the nested render pass.
-	selectors := []string{"[data-ht-include]:not([data-ht-each] [data-ht-include])"}
-	if !strict {
-		selectors[0] += ":not([ht-each] [data-ht-include])"
-		selectors = append(selectors, "[ht-include]:not([ht-each] [ht-include]):not([data-ht-each] [ht-include])")
+	// Keep includes on scope roots so fragments expand before their nested
+	// rendering pass; only descendants of ht-each and ht-with are deferred.
+	attributes := d.Attributes(strict)
+	selectors := make([]string, 0, len(attributes))
+	boundaries := defaultBoundaryAttributes(strict)
+	for _, attribute := range attributes {
+		selectors = append(selectors, fmt.Sprintf("[%s]%s", attribute, excludeBoundaryDescendants(boundaries, attribute)))
 	}
 	return selectors
 }
@@ -66,7 +66,7 @@ func (d IncludeDirective) Process(document *htdocument.Document, element *html.N
 	if err != nil {
 		return fmt.Errorf("ht-include: error evaluating %q=%q:\n%s\n%w", attribute.Key, attribute.Val, htdocument.ElementString(element), errors.Join(ErrInclude, err))
 	}
-	htdocument.ForwardAttributes(element, fragments, WithModifier{}.Attributes(false), forwardedAttributeSkipKeys()...)
+	htdocument.ForwardAttributes(element, fragments, (EachDirective{}).withAttributes(false), forwardedAttributeSkipKeys()...)
 	htdocument.OuterHTML(element, fragments)
 	return nil
 }

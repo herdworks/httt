@@ -18,9 +18,9 @@ type ApplyDirective struct{}
 var _ Directive = ApplyDirective{} // make the compiler check Directive interface conformance
 
 func (d ApplyDirective) Attributes(strict bool) []string {
-	attributes := []string{"data-ht-apply", "data-ht-with"}
+	attributes := []string{"data-ht-apply"}
 	if !strict {
-		attributes = append(attributes, "ht-apply", "ht-with")
+		attributes = append(attributes, "ht-apply")
 	}
 	return attributes
 }
@@ -49,16 +49,7 @@ func (d ApplyDirective) Process(document *htdocument.Document, element *html.Nod
 	if document == nil || element == nil || element.Type != html.ElementNode {
 		return nil
 	}
-
-	// shallow clone data and apply ht-with bindings, if any
 	scoped := data.ShallowClone()
-	if err = (WithModifier{}).Bindings(element, &scoped, document.StrictMode); err != nil {
-		return fmt.Errorf(
-			"ht-apply: invalid ht-with directive modifier;\n%s\n%w",
-			htdocument.ElementString(element),
-			err,
-		)
-	}
 
 	// load custom plugins
 	funcs := document.Plugins.FuncMap()
@@ -122,7 +113,6 @@ func (d ApplyDirective) Process(document *htdocument.Document, element *html.Nod
 		}
 	}
 
-	htdocument.RemoveAttributes(element, WithModifier{}.Attributes(false)...)
 	if document.TidyMode {
 		htdocument.RemoveAttributes(element, d.Attributes(false)...)
 	}

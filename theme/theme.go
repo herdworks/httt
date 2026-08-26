@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path"
@@ -19,7 +20,10 @@ import (
 )
 
 type Theme struct {
-	URI          *url.URL          `json:"-" yaml:"-"`
+	URI *url.URL `json:"-" yaml:"-"`
+	// BuiltinsFS supplies embedded-resource fallbacks for this theme. A nil
+	// value uses the package's default builtin pack.
+	BuiltinsFS   fs.FS             `json:"-" yaml:"-"`
 	Href         string            `json:"href,omitempty" yaml:"href,omitempty"`
 	Name         string            `json:"name,omitempty" yaml:"name,omitempty"`
 	Description  string            `json:"description,omitempty" yaml:"description,omitempty"`
@@ -215,7 +219,7 @@ func (theme *Theme) ResourceBytes(resourceRef string) ([]byte, bool, error) {
 		}
 		return resourceBytes, true, nil
 	}
-	return ReadBuiltinResource(resourceRef)
+	return theme.BuiltinResourceBytes(resourceRef)
 }
 
 // ResourceHTML returns the parsed HTML contents of a resource within the theme.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
+	"strings"
 
 	htdata "github.com/herdworks/httt/data"
 	htdocument "github.com/herdworks/httt/document"
@@ -134,22 +134,48 @@ func AttributeNames(strict, legacy bool) []string {
 }
 
 func defaultDirectiveSelectors(d AttributeProvider, strict bool) []string {
-	strictAttributes := d.Attributes(true)
-	var selectors []string
-	for _, attribute := range strictAttributes {
-		selector := fmt.Sprintf("[%[1]s]:not([data-ht-each] [%[1]s], [data-ht-each][%[1]s])", attribute)
-		if !strict {
-			selector += fmt.Sprintf(":not([ht-each] [%[1]s], [ht-each][%[1]s])", attribute)
-		}
-		selectors = append(selectors, selector)
-	}
-	if !strict {
-		attributes := slices.Clone(d.Attributes(false))
-		attributes = slices.DeleteFunc(attributes, func(s string) bool { return slices.Contains(strictAttributes, s) })
-		for _, attribute := range attributes {
-			selector := fmt.Sprintf("[%[1]s]:not([ht-each] [%[1]s], [ht-each][%[1]s]):not([data-ht-each] [%[1]s], [data-ht-each][%[1]s])", attribute)
-			selectors = append(selectors, selector)
-		}
+	attributes := d.Attributes(strict)
+	selectors := make([]string, 0, len(attributes))
+	boundaries := defaultBoundaryAttributes(strict)
+	for _, attribute := range attributes {
+		selectors = append(selectors, fmt.Sprintf(
+			"[%s]%s%s",
+			attribute,
+			excludeBoundaryElements(boundaries, attribute),
+			excludeBoundaryDescendants(boundaries, attribute),
+		))
 	}
 	return selectors
+}
+
+func defaultBoundaryAttributes(strict bool) []string {
+	attributes := []string{"data-ht-each", "data-ht-with"}
+	if !strict {
+		attributes = append(attributes, "ht-each", "ht-with")
+	}
+	return attributes
+}
+
+func baseBoundaryAttributes(strict bool) []string {
+	attributes := []string{"data-ht-each", "data-ht-with", "data-ht-base"}
+	if !strict {
+		attributes = append(attributes, "ht-each", "ht-with", "ht-base")
+	}
+	return attributes
+}
+
+func excludeBoundaryElements(boundaries []string, attribute string) string {
+	conditions := make([]string, 0, len(boundaries))
+	for _, boundary := range boundaries {
+		conditions = append(conditions, fmt.Sprintf("[%s][%s]", boundary, attribute))
+	}
+	return fmt.Sprintf(":not(%s)", strings.Join(conditions, ", "))
+}
+
+func excludeBoundaryDescendants(boundaries []string, attribute string) string {
+	conditions := make([]string, 0, len(boundaries))
+	for _, boundary := range boundaries {
+		conditions = append(conditions, fmt.Sprintf("[%s] [%s]", boundary, attribute))
+	}
+	return fmt.Sprintf(":not(%s)", strings.Join(conditions, ", "))
 }

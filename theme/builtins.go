@@ -21,11 +21,7 @@ type Builtin struct {
 //go:embed embedded
 var embeddedFS embed.FS
 
-// BuiltinsFS is the filesystem consulted when a theme resource is not found
-// on disk. Defaults to the fragments embedded with this package, exposed at
-// keys rooted at "builtins/...". Caller programs may replace it with any fs.FS
-// whose keys begin at "builtins/" to ship their own built-in resource pack.
-var BuiltinsFS fs.FS = MustSubFS(embeddedFS, "embedded")
+var builtinsFS fs.FS = MustSubFS(embeddedFS, "embedded")
 
 var defaultBuiltins = []Builtin{
 	{Name: "head_start", Selector: "head", Mode: "prepend", Fragment: "fragments/builtin/head_start"},
@@ -36,14 +32,15 @@ func DefaultBuiltins() []Builtin {
 	return slices.Clone(defaultBuiltins)
 }
 
-// ReadBuiltinResource returns embedded bytes for a theme-relative ref.
-// It returns (nil, false, nil) when BuiltinsFS has no entry at that path.
-func ReadBuiltinResource(ref string) ([]byte, bool, error) {
+// BuiltinResourceBytes returns builtin bytes for a theme-relative ref. It
+// returns (nil, false, nil) when the theme's builtin filesystem has no entry
+// at that path.
+func (theme *Theme) BuiltinResourceBytes(ref string) ([]byte, bool, error) {
 	embedPath := path.Join("builtins", filepath.ToSlash(ref))
 	if filepath.Ext(embedPath) == "" {
 		embedPath += ".html"
 	}
-	data, err := fs.ReadFile(BuiltinsFS, embedPath)
+	data, err := fs.ReadFile(theme.builtinFS(), embedPath)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil
 	}
@@ -51,6 +48,13 @@ func ReadBuiltinResource(ref string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	return data, true, nil
+}
+
+func (theme *Theme) builtinFS() fs.FS {
+	if theme != nil && theme.BuiltinsFS != nil {
+		return theme.BuiltinsFS
+	}
+	return builtinsFS
 }
 
 // MustSubFS returns an fs.FS rooted at dir within fsys, panicking on error.

@@ -347,6 +347,236 @@ func TestEachExpressionParser(t *testing.T) {
 	}
 }
 
+func TestWithApplyCreatesLocalSourceOrderedBindings(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`<html><body><section ht-with="${ page.author } as author" ht-with="${ author.name } as name" title="${ name }"><p ht-apply>${ name }</p><span ht-apply>${ name }</span></section><span ht-apply>${ name }</span></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := htdata.TemplateData{"name": "Outer", "page": htdata.TemplateData{"author": htdata.TemplateData{"name": "Ada"}}}
+	output, err := Process(&htdocument.Document{Layout: layout, TidyMode: true}, &data, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(output, []byte(`<section title="Ada"><p>Ada</p><span>Ada</span></section>`)) {
+		t.Fatalf("scoped target did not render: %s", output)
+	}
+	if !bytes.Contains(output, []byte(`<span>Outer</span>`)) {
+		t.Fatalf("binding scope leaked outside the target: %s", output)
+	}
+	if data.Get("name") != "Outer" {
+		t.Fatalf("binding changed outer data: %#v", data)
+	}
+}
+
+func TestWithWithoutApplyUsesImplicitApply(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`<html><body><p ht-with="${ page.title } as title" title="${ title }">${ title }</p></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := htdata.TemplateData{"page": htdata.TemplateData{"title": "Implicit"}}
+	output, err := Process(&htdocument.Document{Layout: layout, TidyMode: true}, &data, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(output, []byte(`<p title="Implicit">Implicit</p>`)) || bytes.Contains(output, []byte("ht-with")) {
+		t.Fatalf("implicit apply output: %s", output)
+	}
+}
+
+func TestWithStrictModeUsesDataAlias(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`<html><body><p data-ht-with="${ page.title } as title">${ title }</p></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := htdata.TemplateData{"page": htdata.TemplateData{"title": "Strict"}}
+	output, err := Process(&htdocument.Document{Layout: layout, StrictMode: true, TidyMode: true}, &data, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(output, []byte(`>Strict</p>`)) || bytes.Contains(output, []byte("data-ht-with")) {
+		t.Fatalf("strict scoped output: %s", output)
+	}
+}
+
+func TestWithBindsCollectionsAsOneValue(t *testing.T) {
+	for _, value := range []any{[]string{"one", "two"}, htdata.TemplateData{"name": "Ada"}, "text", nil} {
+		directive := EachDirective{}
+		element := &html.Node{Type: html.ElementNode, Data: "p", Attr: []html.Attribute{{Key: "ht-with", Val: "${ value } as bound"}}}
+		data := htdata.TemplateData{"value": value}
+		scopes, err := directive.dataBindings(element, &data, false)
+		if err != nil || len(scopes) != 1 || !reflect.DeepEqual(scopes[0]["bound"], value) {
+			t.Fatalf("scopedData(%#v) = %#v, %v; want one bound scope", value, scopes, err)
+		}
+	}
+}
+
+func TestWithMatchesEachForSingleObjectBinding(t *testing.T) {
+	data := htdata.TemplateData{
+		"page": htdata.TemplateData{
+			"foo": htdata.TemplateData{
+				"object": htdata.TemplateData{"title": "Ada", "description": "Single scoped binding"},
+			},
+		},
+	}
+	layouts := map[string]string{
+		"each": `<article ht-each="binding in ${ page.foo.object }"><h2 ht-apply>${ binding.title }</h2><p ht-apply>${ binding.description }</p></article>`,
+		"with": `<article ht-with="${ page.foo.object } as binding"><h2 ht-apply>${ binding.title }</h2><p ht-apply>${ binding.description }</p></article>`,
+	}
+	outputs := make(map[string][]byte, len(layouts))
+	for name, fragment := range layouts {
+		layout, err := html.Parse(strings.NewReader(`<html><body>` + fragment + `</body></html>`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		output, err := Process(&htdocument.Document{Layout: layout, TidyMode: true}, &data, nil, nil)
+		if err != nil {
+			t.Fatalf("%s Process() error = %v", name, err)
+		}
+		outputs[name] = output
+	}
+	if !bytes.Equal(outputs["with"], outputs["each"]) {
+		t.Fatalf("ht-with output = %s, want ht-each output %s", outputs["with"], outputs["each"])
+	}
+}
+
+func TestWithRejectsEachCombination(t *testing.T) {
+	for _, attributes := range []string{
+		`ht-each="item in ${ items }" ht-with="${ item } as value"`,
+		`data-ht-each="item in ${ items }" data-ht-with="${ item } as value"`,
+		`ht-each="item in ${ items }" data-ht-with="${ item } as value"`,
+		`data-ht-each="item in ${ items }" ht-with="${ item } as value"`,
+	} {
+		layout, err := html.Parse(strings.NewReader(`<html><body><p ` + attributes + `>unused</p></body></html>`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := htdata.TemplateData{"items": []string{"one"}}
+		if _, err := Process(&htdocument.Document{Layout: layout}, &data, nil, nil); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+			t.Fatalf("Process(%q) error = %v, want mixed directive error", attributes, err)
+		}
+	}
+}
+
+func TestWithRendersOneTargetForNilBinding(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`<html><body><section ht-with="${ missing } as bound"><p ht-apply>${ bound, "nil" }</p></section></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := Process(&htdocument.Document{Layout: layout, TidyMode: true}, &htdata.TemplateData{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := bytes.Count(output, []byte(`<section>`)); got != 1 || !bytes.Contains(output, []byte(`<p>nil</p>`)) {
+		t.Fatalf("nil scoped binding output = %s, want exactly one rendered target with a nil binding", output)
+	}
+}
+
+func TestWithAcceptsExplicitApply(t *testing.T) {
+	for _, attributes := range []string{
+		`ht-with="${ value } as bound" ht-apply`,
+		`data-ht-with="${ value } as bound" data-ht-apply`,
+	} {
+		layout, err := html.Parse(strings.NewReader(`<html><body><p ` + attributes + `>${ bound }</p></body></html>`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := htdata.TemplateData{"value": "one"}
+		output, err := Process(&htdocument.Document{Layout: layout, TidyMode: true}, &data, nil, nil)
+		if err != nil {
+			t.Fatalf("Process(%q) error = %v", attributes, err)
+		}
+		if !bytes.Contains(output, []byte(`<p>one</p>`)) {
+			t.Fatalf("Process(%q) output = %s, want rendered scoped value", attributes, output)
+		}
+	}
+}
+
+func TestWithScopesConditionalAndBase(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`<html><body><section ht-with="${ page.card } as card" ht-if="${ card.visible }" ht-base="href on ${ card.base }"><a ht-apply href="entry">${ card.title }</a></section></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := htdata.TemplateData{"page": htdata.TemplateData{"card": htdata.TemplateData{"visible": true, "base": "/cards", "title": "Ada"}}}
+	output, err := Process(&htdocument.Document{Layout: layout, TidyMode: true}, &data, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(output, []byte(`<a href="/cards/entry">Ada</a>`)) {
+		t.Fatalf("scoped conditional/base output: %s", output)
+	}
+}
+
+func TestWithIncludeForwardsRepeatedBindings(t *testing.T) {
+	document := setupBuiltinTest(t,
+		`<!doctype html><html><body><example-fragment ht-include="fragments/example.html" ht-with="${ page.foo } as foo" ht-with="${ foo.name } as name"></example-fragment></body></html>`,
+		map[string]string{"fragments/example.html": `<example-fragment><p ht-apply>${ name }</p></example-fragment>`},
+	)
+	document.TidyMode = true
+	data := htdata.TemplateData{"page": htdata.TemplateData{"foo": htdata.TemplateData{"name": "Included"}}}
+	output, err := Process(document, &data, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(output, []byte(`<p>Included</p>`)) || bytes.Contains(output, []byte("ht-with")) {
+		t.Fatalf("included binding output: %s", output)
+	}
+}
+
+func TestWithRejectsInvalidBindingBeforeRendering(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`<html><body><p ht-with="${ missing } as 9bad">${ missing }</p></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := htdata.TemplateData{}
+	_, err = Process(&htdocument.Document{Layout: layout}, &data, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), `invalid "ht-with" directive on <p`) || !strings.Contains(err.Error(), `invalid binding "9bad"`) {
+		t.Fatalf("error = %v, want ht-with attribution and invalid binding syntax", err)
+	}
+}
+
+func TestWithDataBindingResolvesSourceOrderedBindings(t *testing.T) {
+	data := htdata.TemplateData{"author": htdata.TemplateData{"name": "Ada"}, "second": "second"}
+	directive := EachDirective{}
+	if _, err := directive.withDataBinding(nil, &data, false); err != nil {
+		t.Fatalf("withDataBinding(nil) error = %v", err)
+	}
+	element := &html.Node{Type: html.ElementNode, Data: "p", Attr: []html.Attribute{
+		{Key: "ht-with", Val: "${ author } as person"},
+		{Key: "ht-with", Val: "${ person.name } as name"},
+		{Key: "ht-with", Val: "${ second } as name"},
+	}}
+	bindings, err := directive.withDataBinding(element, &data, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bindings) != 1 {
+		t.Fatalf("withDataBinding returned %d bindings, want 1", len(bindings))
+	}
+	if got := bindings[0].Get("name"); got != "second" {
+		t.Fatalf("binding = %#v, want final resolved value", got)
+	}
+	if data.Get("name") != nil {
+		t.Fatalf("bindings changed outer data: %#v", data)
+	}
+	element.Attr = []html.Attribute{{Key: "ht-with", Val: "${ author } as 9bad"}}
+	if _, err := directive.withDataBinding(element, &data, false); err == nil {
+		t.Fatal("withDataBinding accepted an invalid binding")
+	}
+}
+
+func TestWithIncludePreservesRepeatedBindingOrder(t *testing.T) {
+	placeholder := &html.Node{Type: html.ElementNode, Data: "example", Attr: []html.Attribute{
+		{Key: "ht-with", Val: "${ page.author } as author"},
+		{Key: "ht-with", Val: "${ author.name } as name"},
+	}}
+	fragment := &html.Node{Type: html.ElementNode, Data: "section"}
+	htdocument.ForwardAttributes(placeholder, []*html.Node{fragment}, (EachDirective{}).withAttributes(false))
+	attributes := htdocument.GetAttributes(fragment, "ht-with")
+	if len(attributes) != 2 || attributes[0].Val != placeholder.Attr[0].Val || attributes[1].Val != placeholder.Attr[1].Val {
+		t.Fatalf("forwarded attributes = %#v, want source-ordered duplicates", attributes)
+	}
+}
+
 func TestEachLegacyTemplateFailsWithMigrationHint(t *testing.T) {
 	layout, err := html.Parse(strings.NewReader(`<html><body><p ht-template="item:items"></p></body></html>`))
 	if err != nil {

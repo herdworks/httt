@@ -17,16 +17,42 @@ import (
 // EachDirective expands one element for every item in an explicit typed source.
 type EachDirective struct{}
 
+type EachDirectiveBindMode int
+
+const (
+	BindNone EachDirectiveBindMode = iota
+	BindEach
+	BindWith
+	BindError
+)
+
 var _ Directive = EachDirective{}           // make the compiler check Directive interface conformance
 var _ ExpressiveDirective = EachDirective{} // make the compiler check ExpressiveDirective interface conformance
 
 var bindingSyntax = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var eachExpressionGrammar = ExpressionGrammar{Operators: []string{"in"}, MaxTokens: 3}
+var withExpressionGrammar = ExpressionGrammar{Operators: []string{"as"}, MaxTokens: 3}
 
 func (EachDirective) Attributes(strict bool) []string {
+	attributes := []string{"data-ht-each", "data-ht-with"}
+	if !strict {
+		attributes = append(attributes, "ht-each", "ht-with")
+	}
+	return attributes
+}
+
+func (d EachDirective) eachAttributes(strict bool) []string {
 	attributes := []string{"data-ht-each"}
 	if !strict {
 		attributes = append(attributes, "ht-each")
+	}
+	return attributes
+}
+
+func (d EachDirective) withAttributes(strict bool) []string {
+	attributes := []string{"data-ht-with"}
+	if !strict {
+		attributes = append(attributes, "ht-with")
 	}
 	return attributes
 }
@@ -51,18 +77,17 @@ func (d EachDirective) allAttributes(strict bool) []string {
 	attributes := d.Attributes(strict)
 	attributes = append(attributes, d.offsetAttributes(strict)...)
 	attributes = append(attributes, d.limitAttributes(strict)...)
-	attributes = append(attributes, WithModifier{}.Attributes(strict)...)
 	return attributes
 }
 
 func (d EachDirective) Selectors(strict bool) []string {
-	if strict {
-		return []string{"[data-ht-each]:not([data-ht-each] [data-ht-each])"}
+	attributes := d.Attributes(strict)
+	selectors := make([]string, 0, len(attributes))
+	boundaries := defaultBoundaryAttributes(strict)
+	for _, attribute := range attributes {
+		selectors = append(selectors, fmt.Sprintf("[%s]%s", attribute, excludeBoundaryDescendants(boundaries, attribute)))
 	}
-	return []string{
-		"[data-ht-each]:not([data-ht-each] [data-ht-each]):not([ht-each] [data-ht-each])",
-		"[ht-each]:not([ht-each] [ht-each]):not([data-ht-each] [ht-each])",
-	}
+	return selectors
 }
 
 func (d EachDirective) Elements(document *htdocument.Document) []*html.Node {
@@ -85,22 +110,14 @@ func (d EachDirective) Process(document *htdocument.Document, element *html.Node
 	if w == nil {
 		w = os.Stdout
 	}
-	var binding string
-	var values []any
-	attributes := htdocument.GetAttributes(element, d.Attributes(document.StrictMode)...)
-	offset := htdocument.GetAttributeInt(element, d.offsetAttributes(document.StrictMode)...)
-	limit := htdocument.GetAttributeInt(element, d.limitAttributes(document.StrictMode)...)
-	if binding, values, err = d.expressionParser(attributes[0].Val, data); err != nil {
-		return fmt.Errorf("invalid %q directive on %s: %w", attributes[0].Key, htdocument.ElementString(element), err)
+	if len(htdocument.GetAttributes(element, d.Attributes(document.StrictMode)...)) == 0 {
+		return nil
 	}
-	for index, value := range values {
-		index += 1
-		var count int
-		var ok bool
-		if count, ok = d.expressionWindow(index, len(values), offset, limit); !ok {
-			continue
-		}
-
+	var bindings []htdata.TemplateData
+	if bindings, err = d.dataBindings(element, data, document.StrictMode); err != nil {
+		return err
+	}
+	for index := range bindings {
 		// clone the layout template for mutation
 		var implicitApply bool
 		layoutFragment := htdocument.CloneElement(element)
@@ -109,24 +126,9 @@ func (d EachDirective) Process(document *htdocument.Document, element *html.Node
 			htdocument.SetAttribute(layoutFragment, "data-ht-apply", "")
 		}
 
-		// Copy the context's top-level bindings so the iteration binding and
-		// metadata remain local without duplicating the complete data graph.
-		// Template data is read-only during rendering; values under unchanged
-		// bindings are intentionally shared with the outer context.
-		nested := data.ShallowClone()
-		nested[binding] = value
-		nested["each"] = htdata.TemplateData{"index": index, "count": count, "total": len(values)}
-		if err := (WithModifier{}).Bindings(element, &nested, document.StrictMode); err != nil {
-			return fmt.Errorf(
-				"ht-each: invalid ht-with directive modifier;\n%s\n%w",
-				htdocument.ElementString(element),
-				err,
-			)
-		}
-
 		// process the fragment and insert it into the parent element
 		nestedDoc := htdocument.Document{Layout: layoutFragment, Theme: document.Theme, TidyMode: document.TidyMode, MarkdownConfig: document.MarkdownConfig, Plugins: document.Plugins}
-		if _, err := Process(&nestedDoc, &nested, userData, w); err != nil {
+		if _, err := Process(&nestedDoc, &bindings[index], userData, w); err != nil {
 			return err
 		}
 		if implicitApply {
@@ -139,11 +141,93 @@ func (d EachDirective) Process(document *htdocument.Document, element *html.Node
 
 	// clean up
 	htdocument.SetAttribute(element, "hidden", "true")
-	htdocument.RemoveAttributes(element, WithModifier{}.Attributes(false)...)
 	if document.TidyMode {
 		htdocument.RemoveElement(element)
 	}
 	return nil
+}
+
+func (d EachDirective) dataBindings(element *html.Node, data *htdata.TemplateData, strict bool) ([]htdata.TemplateData, error) {
+	switch d.bindMode(element, strict) {
+	case BindNone:
+		return nil, nil
+	case BindWith:
+		return d.withDataBinding(element, data, strict)
+	case BindEach:
+		return d.eachDataBindings(element, data, strict)
+	case BindError:
+		fallthrough
+	default:
+		return nil, fmt.Errorf("ht-each and ht-with cannot be combined on %s", htdocument.ElementString(element))
+	}
+}
+
+func (d EachDirective) eachDataBindings(element *html.Node, data *htdata.TemplateData, strict bool) (bindings []htdata.TemplateData, err error) {
+	var attributes []html.Attribute
+	var binding string
+	var values []any
+	var offset = htdocument.GetAttributeInt(element, d.offsetAttributes(strict)...)
+	var limit = htdocument.GetAttributeInt(element, d.limitAttributes(strict)...)
+	if attributes = htdocument.GetAttributes(element, d.eachAttributes(strict)...); len(attributes) == 0 {
+		return nil, nil
+	}
+	if binding, values, err = d.expressionParser(attributes[0].Val, data); err == nil {
+		bindings = make([]htdata.TemplateData, 0, len(values)) // pre-allocate the binding slice
+	} else {
+		return nil, d.bindingError(element, attributes[0], err)
+	}
+	for index, value := range values {
+		index++
+		count, ok := d.expressionWindow(index, len(values), offset, limit)
+		if !ok {
+			continue
+		}
+		nested := data.ShallowClone()
+		nested[binding] = value
+		nested["each"] = htdata.TemplateData{"index": index, "count": count, "total": len(values)}
+		bindings = append(bindings, nested)
+	}
+	return bindings, nil
+}
+
+func (d EachDirective) withDataBinding(element *html.Node, data *htdata.TemplateData, strict bool) ([]htdata.TemplateData, error) {
+	var attributes = htdocument.GetAttributes(element, d.withAttributes(strict)...)
+	var bindings = []htdata.TemplateData{data.ShallowClone()}
+	var err error
+	for _, attribute := range attributes {
+		var tokens []Token
+		var value any
+		if tokens, err = tokenizeExpression(attribute.Val, withExpressionGrammar); err != nil {
+			return nil, d.bindingError(element, attribute, err)
+		}
+		if err = d.ValidateWithExpression(tokens); err != nil {
+			return nil, d.bindingError(element, attribute, err)
+		}
+		if value, err = htvariable.ResolveValue(tokens[0].Raw, &bindings[0]); err != nil {
+			return nil, d.bindingError(element, attribute, err)
+		}
+		bindings[0][tokens[2].Raw] = value
+	}
+	return bindings, nil
+}
+
+func (d EachDirective) bindMode(element *html.Node, strict bool) (mode EachDirectiveBindMode) {
+	hasEach := len(htdocument.GetAttributes(element, d.eachAttributes(strict)...)) > 0
+	hasWith := len(htdocument.GetAttributes(element, d.withAttributes(strict)...)) > 0
+	switch {
+	case hasEach && hasWith:
+		return BindError
+	case hasEach:
+		return BindEach
+	case hasWith:
+		return BindWith
+	default:
+		return BindNone
+	}
+}
+
+func (EachDirective) bindingError(element *html.Node, attribute html.Attribute, err error) error {
+	return fmt.Errorf("invalid %q directive on %s: %w", attribute.Key, htdocument.ElementString(element), err)
 }
 
 func (d EachDirective) expressionParser(expression string, data htvariable.Getter) (binding string, values []any, err error) {
@@ -177,6 +261,22 @@ func (d EachDirective) ValidateExpression(tokens Tokens) error {
 	}
 	if tokens[2].Kind != TokenVariable {
 		return fmt.Errorf("expected template variable ${ ... } as the third token")
+	}
+	return nil
+}
+
+func (EachDirective) ValidateWithExpression(tokens Tokens) error {
+	if len(tokens) != 3 {
+		return fmt.Errorf("ht-with: invalid syntax (expected \"${ variable } as binding\", got %q)", tokens.Expression())
+	}
+	if tokens[0].Kind != TokenVariable {
+		return fmt.Errorf("ht-with: expected template variable ${ ... } as the first token")
+	}
+	if tokens[1].Kind != TokenOperator || tokens[1].Raw != "as" {
+		return fmt.Errorf("ht-with: expected \"as\" operator, got %q", tokens[1].Raw)
+	}
+	if tokens[2].Kind != TokenLiteral || tokens[2].Quoted || !bindingSyntax.MatchString(tokens[2].Raw) || tokens[2].Raw == "each" {
+		return fmt.Errorf("ht-with: invalid binding %q", tokens[2].Raw)
 	}
 	return nil
 }

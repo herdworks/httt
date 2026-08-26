@@ -97,8 +97,8 @@ func includeBuiltinSlot(document *htdocument.Document, slot theme.Builtin) error
 }
 
 func resolveBuiltinFragment(document *htdocument.Document, ref string) ([]byte, bool, error) {
-	if document.Theme != nil {
+	if document != nil && document.Theme != nil {
 		return document.Theme.ResourceBytes(ref)
 	}
-	return theme.ReadBuiltinResource(ref)
+	return (*theme.Theme)(nil).BuiltinResourceBytes(ref)
 }

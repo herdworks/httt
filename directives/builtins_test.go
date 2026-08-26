@@ -52,12 +52,9 @@ func processOrFatal(t *testing.T, document *htdocument.Document) string {
 	return string(out)
 }
 
-// withBuiltinsFS temporarily replaces BuiltinsFS for the duration of a test.
-func withBuiltinsFS(t *testing.T, fsys fstest.MapFS) {
+func withBuiltinsFS(t *testing.T, document *htdocument.Document, fsys fstest.MapFS) {
 	t.Helper()
-	saved := theme.BuiltinsFS
-	theme.BuiltinsFS = fsys
-	t.Cleanup(func() { theme.BuiltinsFS = saved })
+	document.Theme.BuiltinsFS = fsys
 }
 
 // TestBuiltinsDefaultApplies — the embedded head_start fragment is injected
@@ -151,13 +148,13 @@ func TestBuiltinsHtIncludeFallback(t *testing.T) {
 }
 
 func TestBuiltinsHtIncludeThemeOverride(t *testing.T) {
-	withBuiltinsFS(t, fstest.MapFS{
-		"builtins/fragments/override.html": &fstest.MapFile{Data: []byte(`<p>builtin fallback</p>`)},
-	})
 	tmpl := setupBuiltinTest(t,
 		`<!doctype html><html><head></head><body><div ht-include="fragments/override"></div></body></html>`,
 		map[string]string{"fragments/override.html": `<p>theme override</p>`},
 	)
+	withBuiltinsFS(t, tmpl, fstest.MapFS{
+		"builtins/fragments/override.html": &fstest.MapFile{Data: []byte(`<p>builtin fallback</p>`)},
+	})
 	out := processOrFatal(t, tmpl)
 	if !strings.Contains(out, "theme override") {
 		t.Errorf("ht-include did not resolve the theme resource:\n%s", out)
@@ -168,29 +165,29 @@ func TestBuiltinsHtIncludeThemeOverride(t *testing.T) {
 }
 
 func TestBuiltinsHtIncludeEmptyThemeOverride(t *testing.T) {
-	withBuiltinsFS(t, fstest.MapFS{
-		"builtins/fragments/empty.html": &fstest.MapFile{Data: []byte(`<p>builtin fallback</p>`)},
-	})
 	tmpl := setupBuiltinTest(t,
 		`<!doctype html><html><head></head><body><div ht-include="fragments/empty"></div></body></html>`,
 		map[string]string{"fragments/empty.html": ""},
 	)
+	withBuiltinsFS(t, tmpl, fstest.MapFS{
+		"builtins/fragments/empty.html": &fstest.MapFile{Data: []byte(`<p>builtin fallback</p>`)},
+	})
 	out := processOrFatal(t, tmpl)
 	if strings.Contains(out, "builtin fallback") {
 		t.Errorf("ht-include used the builtin despite an empty theme override:\n%s", out)
 	}
 }
 
-// TestBuiltinsFSSwap — replacing BuiltinsFS surfaces alternative content.
+// TestBuiltinsFSSwap — assigning a theme builtin filesystem surfaces alternative content.
 func TestBuiltinsFSSwap(t *testing.T) {
-	withBuiltinsFS(t, fstest.MapFS{
-		"builtins/fragments/builtin/head_start.html": &fstest.MapFile{Data: []byte(`<meta name="swapped">`)},
-		"builtins/fragments/builtin/head_last.html":  &fstest.MapFile{Data: []byte(``)},
-	})
 	tmpl := setupBuiltinTest(t,
 		`<!doctype html><html><head><title>X</title></head><body></body></html>`,
 		nil,
 	)
+	withBuiltinsFS(t, tmpl, fstest.MapFS{
+		"builtins/fragments/builtin/head_start.html": &fstest.MapFile{Data: []byte(`<meta name="swapped">`)},
+		"builtins/fragments/builtin/head_last.html":  &fstest.MapFile{Data: []byte(``)},
+	})
 	out := processOrFatal(t, tmpl)
 	if !strings.Contains(out, `name="swapped"`) {
 		t.Errorf("expected swapped builtin content:\n%s", out)

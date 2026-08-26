@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **BREAKING:** Recast `ht-with` as the single-pass, non-iterating counterpart
+  to `ht-each`; it is no longer an `ht-apply` or `ht-each` modifier.
+  `ht-with` now renders its target as a nested template, making its
+  source-ordered local bindings available to that target and all descendants.
+  It binds every value, including arrays, maps, scalars, and `nil`, exactly
+  once; it has no `each.*` metadata and cannot be combined with `ht-each`.
+  The strict-mode spelling is `data-ht-with`.
+* **Changed:** Moved builtin resource fallback configuration from package-global
+  state to `Theme.BuiltinsFS`. A nil theme filesystem continues to use the
+  embedded builtin pack, while independent themes can now use distinct
+  fallback packs without sharing mutable configuration.
+
 ## v0.39.1 (2026-08-20)
 
 * Fixed a data race when concurrent Markdown parser construction shared mutable
