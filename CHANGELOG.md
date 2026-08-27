@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.41.0 (2026-08-27)
+
 * **Added:** Callable template-variable expressions and CSS `--ht-var(...)`
   expressions may end with one strict JSON options map. Generic functions and
   JavaScript plugins receive options-map calls as an `{ args, options }`
