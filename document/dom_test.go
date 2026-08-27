@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 func TestCloneElementPreservesNamespace(t *testing.T) {
@@ -23,6 +24,71 @@ func TestCloneElementPreservesNamespace(t *testing.T) {
 	}
 	if len(clone.Attr) != 1 || clone.Attr[0].Namespace != "xlink" {
 		t.Fatalf("clone attrs = %#v", clone.Attr)
+	}
+}
+
+func TestNodesToHTMLStringPreservesSingleParagraph(t *testing.T) {
+	for _, tagName := range []string{"p", "P"} {
+		t.Run(tagName, func(t *testing.T) {
+			paragraph := &html.Node{Type: html.ElementNode, Data: tagName}
+			paragraph.AppendChild(&html.Node{Type: html.TextNode, Data: "Hello "})
+			paragraph.AppendChild(&html.Node{Type: html.ElementNode, Data: "strong"})
+			paragraph.LastChild.AppendChild(&html.Node{Type: html.TextNode, Data: "World"})
+
+			got, err := NodesToHTMLString([]*html.Node{paragraph})
+			if err != nil {
+				t.Fatalf("NodesToHTMLString() error = %v", err)
+			}
+			if want := "<" + tagName + ">Hello <strong>World</strong></" + tagName + ">"; got != want {
+				t.Fatalf("NodesToHTMLString() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestMarkdownVariableFuncDisplay(t *testing.T) {
+	parent := &html.Node{Type: html.ElementNode, Data: "h1", DataAtom: atom.H1}
+	render := MarkdownVariableFunc(parent, nil)
+
+	for _, tc := range []struct {
+		name    string
+		options map[string]any
+		want    string
+	}{
+		{name: "default inline", want: "Hello <strong>World</strong>"},
+		{name: "inline", options: map[string]any{"display": "inline"}, want: "Hello <strong>World</strong>"},
+		{name: "block", options: map[string]any{"display": "block"}, want: "<p>Hello <strong>World</strong></p>\n"},
+		{name: "invalid display", options: map[string]any{"display": true}, want: "Hello <strong>World</strong>"},
+		{name: "unknown option", options: map[string]any{"unknown": true}, want: "Hello <strong>World</strong>"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got string
+			var err error
+			if tc.options == nil {
+				got, err = render("Hello **World**")
+			} else {
+				got, err = render("Hello **World**", tc.options)
+			}
+			if err != nil {
+				t.Fatalf("MarkdownVariableFunc() error = %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("MarkdownVariableFunc() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMarkdownVariableFuncKeepsMultipleBlocks(t *testing.T) {
+	parent := &html.Node{Type: html.ElementNode, Data: "article", DataAtom: atom.Article}
+	render := MarkdownVariableFunc(parent, nil)
+
+	got, err := render("First paragraph.\n\nSecond paragraph.")
+	if err != nil {
+		t.Fatalf("MarkdownVariableFunc() error = %v", err)
+	}
+	if want := "<p>First paragraph.</p>\n<p>Second paragraph.</p>\n"; got != want {
+		t.Fatalf("MarkdownVariableFunc() = %q, want %q", got, want)
 	}
 }
 

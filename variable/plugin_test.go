@@ -17,6 +17,12 @@ const titlePluginSrc = `
 export default (input) => input.replace(/\b\w/g, c => c.toUpperCase())
 `
 
+const optionsPluginSrc = `
+export default function({ args, options }) {
+	return args.filter(Boolean).join(options.separator ?? " ")
+}
+`
+
 func TestLoadPlugins(t *testing.T) {
 	root := t.TempDir()
 	upperPath := filepath.Join(root, "upper.js")
@@ -234,5 +240,30 @@ export default function(updated = null, created = null, format = "") {
 	}
 	if rendered != "YYYY-MM-DD:2026-04-28T00:00:00Z" {
 		t.Fatalf("Render fmtdate plugin = %q, want formatted fallback date", rendered)
+	}
+}
+
+func TestLoadPluginsOptionsEnvelope(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "join.js")
+	if err := os.WriteFile(path, []byte(optionsPluginSrc), 0644); err != nil {
+		t.Fatalf("write options plugin: %v", err)
+	}
+
+	plugins, err := LoadPlugins([]string{path})
+	if err != nil {
+		t.Fatalf("LoadPlugins() error = %v", err)
+	}
+	rendered, err := RenderString(
+		`${ join(page.first, page.second, { "separator": " · " }) }`,
+		testGetter{"page": map[string]any{"first": "One", "second": "Two"}},
+		SyntaxDefault,
+		plugins.FuncMap(),
+	)
+	if err != nil {
+		t.Fatalf("RenderString() error = %v", err)
+	}
+	if rendered != "One · Two" {
+		t.Fatalf("RenderString() = %q, want One · Two", rendered)
 	}
 }

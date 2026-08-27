@@ -206,9 +206,10 @@ func (theme *Theme) ResourceExists(path string) (status bool, err error) {
 	return false, err
 }
 
-// ResourceBytes returns the contents of a resource within the theme, falling
-// back to embedded builtins at the same relative path. It reports found=false
-// when neither the theme nor builtins contain the resource.
+// ResourceBytes returns immutable resource bytes from the theme, falling back
+// to embedded builtins at the same relative path. Cached resources are
+// returned zero-copy; callers must not mutate the returned bytes. It reports
+// found=false when neither the theme nor builtins contain the resource.
 func (theme *Theme) ResourceBytes(resourceRef string) ([]byte, bool, error) {
 	resourceRef = filepath.ToSlash(resourceRef)
 	if _, err := htfiles.CleanRelativePath(resourceRef); err != nil {

@@ -763,7 +763,68 @@ func TestRenderVariablesMarkdownFunc(t *testing.T) {
 		t.Fatalf("expected <h1> from markdown rendering, got:\n%s", htmlBytes)
 	}
 	if !bytes.Contains(htmlBytes, []byte("<p>A paragraph.</p>")) {
-		t.Fatalf("expected <p>A paragraph.</p>, got:\n%s", htmlBytes)
+		t.Fatalf("expected <p>A paragraph.</p> for multi-block markdown, got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderVariablesMarkdownFuncUnwrapsSingleParagraph(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<h1 ht-apply>${ markdown(page.title) }</h1>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"title": "Hello **World**",
+		},
+	}
+
+	template := &document.Document{Layout: layout, TidyMode: true}
+	htmlBytes, err := Process(template, &data, nil, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("<h1>Hello <strong>World</strong></h1>")) {
+		t.Fatalf("expected unwrapped inline markdown, got:\n%s", htmlBytes)
+	}
+	if bytes.Contains(htmlBytes, []byte("<h1><p>")) {
+		t.Fatalf("expected no paragraph nested in heading, got:\n%s", htmlBytes)
+	}
+}
+
+func TestRenderVariablesMarkdownFuncDisplayBlock(t *testing.T) {
+	layout, err := html.Parse(strings.NewReader(`
+		<html>
+			<body>
+				<h1 ht-apply>${ markdown(page.title, { "display": "block" }) }</h1>
+			</body>
+		</html>
+	`))
+	if err != nil {
+		t.Fatalf("error parsing layout html: %v", err)
+	}
+
+	data := TemplateData{
+		"page": TemplateData{
+			"title": "Hello **World**",
+		},
+	}
+
+	template := &document.Document{Layout: layout, TidyMode: true}
+	htmlBytes, err := Process(template, &data, nil, nil)
+	if err != nil {
+		t.Fatalf("error processing template: %v", err)
+	}
+
+	if !bytes.Contains(htmlBytes, []byte("<h1><p>Hello <strong>World</strong></p>")) {
+		t.Fatalf("expected block markdown paragraph, got:\n%s", htmlBytes)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"testing/fstest"
 )
 
 func writeThemeTestFile(t *testing.T, path string) {
@@ -122,6 +123,77 @@ func TestThemeLoadCachesRenderResources(t *testing.T) {
 		if !found || !bytes.Equal(resourceBytes, want) {
 			t.Fatalf("ResourceBytes(%q) after reparse = %q, %t; want %q, true", resourceRef, resourceBytes, found, want)
 		}
+	}
+}
+
+func TestThemeResourceBytesUsesCachedSliceAndNormalizesHTMLRef(t *testing.T) {
+	root := t.TempDir()
+	theme := &Theme{URI: &url.URL{Path: filepath.Join(root, "theme.json")}}
+	writeThemeTestFileContent(t, theme.URI.Path, "{}")
+	writeThemeTestFileContent(t, filepath.Join(root, "layouts", "default.html"), "cached layout")
+
+	if err := theme.Load(io.Discard); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resourceBytes, found, err := theme.ResourceBytes("layouts/default")
+	if err != nil {
+		t.Fatalf("ResourceBytes() error = %v", err)
+	}
+	if !found || string(resourceBytes) != "cached layout" {
+		t.Fatalf("ResourceBytes() = %q, %t; want cached layout, true", resourceBytes, found)
+	}
+	cachedBytes := theme.resourceCache["layouts/default.html"]
+	if &resourceBytes[0] != &cachedBytes[0] {
+		t.Fatal("ResourceBytes() copied cached bytes")
+	}
+}
+
+func TestThemeResourceBytesFallsBackToBuiltinsAfterCacheMiss(t *testing.T) {
+	root := t.TempDir()
+	theme := &Theme{
+		URI: &url.URL{Path: filepath.Join(root, "theme.json")},
+		BuiltinsFS: fstest.MapFS{
+			"builtins/fragments/builtin/head.html": &fstest.MapFile{Data: []byte("builtin head")},
+		},
+	}
+	writeThemeTestFileContent(t, theme.URI.Path, "{}")
+
+	if err := theme.Load(io.Discard); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resourceBytes, found, err := theme.ResourceBytes("fragments/builtin/head")
+	if err != nil {
+		t.Fatalf("ResourceBytes() error = %v", err)
+	}
+	if !found || string(resourceBytes) != "builtin head" {
+		t.Fatalf("ResourceBytes() = %q, %t; want builtin head, true", resourceBytes, found)
+	}
+}
+
+func TestThemeLoadRetainsCacheAfterFailedReload(t *testing.T) {
+	root := t.TempDir()
+	theme := &Theme{URI: &url.URL{Path: filepath.Join(root, "theme.json")}}
+	writeThemeTestFileContent(t, theme.URI.Path, "{}")
+	writeThemeTestFileContent(t, filepath.Join(root, "layouts", "default.html"), "first")
+
+	if err := theme.Load(io.Discard); err != nil {
+		t.Fatalf("first Load() error = %v", err)
+	}
+	writeThemeTestFileContent(t, filepath.Join(root, "layouts", "default.html"), "second")
+	broken := filepath.Join(root, "layouts", "missing.html")
+	if err := os.Symlink(filepath.Join(root, "not-found.html"), broken); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	if err := theme.Load(io.Discard); err == nil {
+		t.Fatal("second Load() error = nil, want unreadable resource error")
+	}
+	resourceBytes, found, err := theme.ResourceBytes("layouts/default")
+	if err != nil {
+		t.Fatalf("ResourceBytes() error = %v", err)
+	}
+	if !found || string(resourceBytes) != "first" {
+		t.Fatalf("ResourceBytes() = %q, %t; want first, true", resourceBytes, found)
 	}
 }
 

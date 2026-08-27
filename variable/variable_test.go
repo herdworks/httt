@@ -127,6 +127,39 @@ func TestRenderStringPluginArgumentsUseGetterAndSourceOrder(t *testing.T) {
 	}
 }
 
+func TestRenderStringPluginOptionsEnvelope(t *testing.T) {
+	var got map[string]any
+	funcs := FuncMap{
+		"example": func(envelope map[string]any) string {
+			got = envelope
+			return "ok"
+		},
+	}
+
+	rendered, err := RenderString(
+		`${ example(page.first, page.missing, "literal", { "separator": " · ", "nested": [1, { "ok": true }] }) }`,
+		testGetter{"page": map[string]any{"first": "first"}},
+		SyntaxDefault,
+		funcs,
+	)
+	if err != nil {
+		t.Fatalf("RenderString() error = %v", err)
+	}
+	if rendered != "ok" {
+		t.Fatalf("RenderString() = %q, want ok", rendered)
+	}
+	if want := []any{"first", nil, "literal"}; !reflect.DeepEqual(got["args"], want) {
+		t.Fatalf("envelope args = %#v, want %#v", got["args"], want)
+	}
+	options, ok := got["options"].(map[string]any)
+	if !ok {
+		t.Fatalf("envelope options = %T, want map[string]any", got["options"])
+	}
+	if options["separator"] != " · " || !reflect.DeepEqual(options["nested"], []any{float64(1), map[string]any{"ok": true}}) {
+		t.Fatalf("envelope options = %#v", options)
+	}
+}
+
 func TestRenderStringBuiltinsUseFallbackSelection(t *testing.T) {
 	data := testGetter{"page": map[string]any{"title": "<Hello>"}}
 	funcs := FuncMap{
@@ -150,6 +183,31 @@ func TestRenderStringBuiltinsUseFallbackSelection(t *testing.T) {
 		if rendered != tc.want {
 			t.Fatalf("RenderString(%q) = %q, want %q", tc.source, rendered, tc.want)
 		}
+	}
+}
+
+func TestRenderStringMarkdownOptionsUseSelectedFallback(t *testing.T) {
+	var gotValue any
+	var gotOptions map[string]any
+	funcs := FuncMap{
+		"markdown": func(value any, options map[string]any) string {
+			gotValue = value
+			gotOptions = options
+			return "ok"
+		},
+	}
+
+	rendered, err := RenderString(
+		`${ markdown(page.missing, page.title, "fallback", { "display": "block" }) }`,
+		testGetter{"page": map[string]any{"title": "Title"}},
+		SyntaxDefault,
+		funcs,
+	)
+	if err != nil {
+		t.Fatalf("RenderString() error = %v", err)
+	}
+	if rendered != "ok" || gotValue != "Title" || gotOptions["display"] != "block" {
+		t.Fatalf("markdown result = %q, value = %#v, options = %#v", rendered, gotValue, gotOptions)
 	}
 }
 
@@ -265,6 +323,28 @@ func TestRenderStringRejectsUnsupportedSyntax(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := RenderString(tc.source, testGetter{}, SyntaxDefault, funcs); err == nil {
 				t.Fatalf("RenderString(%q) error = nil", tc.source)
+			}
+		})
+	}
+}
+
+func TestRenderStringRejectsInvalidOptionsMaps(t *testing.T) {
+	funcs := FuncMap{
+		"example":  func(...any) string { return "ok" },
+		"text":     texttemplate.HTMLEscaper,
+		"markdown": func(any, ...map[string]any) string { return "ok" },
+	}
+	for _, source := range []string{
+		`${ example(page.title, { "verbose": }, page.other) }`,
+		`${ example({ "verbose": true }, page.title) }`,
+		`${ example(page.title, { "one": true }, { "two": true }) }`,
+		`${ page.title, { "verbose": true } }`,
+		`${ get(page.title, { "verbose": true }) }`,
+		`${ text(page.title, { "verbose": true }) }`,
+	} {
+		t.Run(source, func(t *testing.T) {
+			if _, err := RenderString(source, testGetter{"page": map[string]any{"title": "Title"}}, SyntaxDefault, funcs); err == nil {
+				t.Fatalf("RenderString(%q) error = nil", source)
 			}
 		})
 	}

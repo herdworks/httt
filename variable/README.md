@@ -18,17 +18,25 @@ ${ page.foo, page.bar, "Placeholder" }
 ${ get(page.foo, page.bar, "Placeholder") }
 ${ text(page.foo, "Placeholder") }
 ${ markdown(page.foo, "# Placeholder") }
+${ markdown(page.foo, { "display": "block" }) }
 ${ example(page.foo, page.bar, "Placeholder") }
+${ example(page.foo, { "separator": " · " }) }
 ```
 
 An expression that does not begin with `name(` is an implicit `get`. Every
 unquoted argument is a keypath and is resolved through `Getter.Get`. Literal
 arguments may be quoted strings, booleans, or finite numbers.
 
-Nested calls, grouping parentheses, arrays, objects, `undefined`, trailing
-commas, and pipe operators are not supported. Complex logic belongs in a
-template-data plugin that prepares a directly readable value or in one
-template-variable plugin that performs the complete inline transformation.
+Nested calls, grouping parentheses, arrays, objects as positional values,
+`undefined`, trailing commas, and pipe operators are not supported. A callable
+expression may end with one strict JSON object options map. Complex logic
+belongs in a template-data plugin that prepares a directly readable value or
+in one template-variable plugin that performs the complete inline
+transformation.
+
+When a generic function call has a final options map, it receives one argument
+with `args` and `options` keys. Calls without options retain positional
+arguments. Implicit and explicit `get` expressions do not support options.
 
 ## Lookup And Fallbacks
 
@@ -75,18 +83,23 @@ text nodes:
 Both use the same fallback rules as `get`. Attribute and CSS contexts do not
 register these functions.
 
+`markdown(..., { "display": "block" })` preserves a sole rendered paragraph.
+Without that option, Markdown unwraps a sole paragraph for inline use. Other
+Markdown options are ignored. `text` and `get` do not support options maps.
+
 `RenderNodes` interprets ordinary string results as HTML fragments. Authors
 must use `text(...)` when angle brackets should remain text.
 
 ## CSS Values
 
 `SyntaxCSS` recognizes `--ht-var(...)` while preserving the same expression
-grammar:
+grammar, including final options maps on callable expressions:
 
 ```css
 .hero {
     color: --ht-var("theme.color", red);
     content: --ht-var("label(page.title)", "Placeholder");
+    accent: --ht-var("label(page.title, { \"tone\": \"bright\" })");
 }
 ```
 

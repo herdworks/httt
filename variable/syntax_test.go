@@ -2,6 +2,7 @@ package variable
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -41,6 +42,29 @@ func TestRenderCSSFunctionCallAndFallback(t *testing.T) {
 	}
 	if rendered != "DEFAULT" {
 		t.Fatalf("RenderString() = %q, want DEFAULT", rendered)
+	}
+}
+
+func TestRenderCSSFunctionCallOptionsEnvelope(t *testing.T) {
+	var got map[string]any
+	funcs := FuncMap{
+		"optional": func(envelope map[string]any) string {
+			got = envelope
+			return "blue"
+		},
+	}
+	rendered, err := RenderString(`--ht-var("optional(theme.color, { \"verbose\": true })")`, testGetter{"theme": map[string]any{"color": "red"}}, SyntaxCSS, funcs)
+	if err != nil {
+		t.Fatalf("RenderString() error = %v", err)
+	}
+	if rendered != "blue" {
+		t.Fatalf("RenderString() = %q, want blue", rendered)
+	}
+	if want := []any{"red"}; !reflect.DeepEqual(got["args"], want) {
+		t.Fatalf("envelope args = %#v, want %#v", got["args"], want)
+	}
+	if options := got["options"].(map[string]any); options["verbose"] != true {
+		t.Fatalf("envelope options = %#v", options)
 	}
 }
 

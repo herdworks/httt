@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Added:** Callable template-variable expressions and CSS `--ht-var(...)`
+  expressions may end with one strict JSON options map. Generic functions and
+  JavaScript plugins receive options-map calls as an `{ args, options }`
+  envelope, while existing positional calls retain their current shape.
+* **Changed:** `markdown(...)` now unwraps its output when it renders exactly
+  one paragraph, making short Markdown values safe in elements that already
+  provide block structure. Pass `{ "display": "block" }` as the final
+  argument to preserve a sole paragraph wrapper.
+
 ## v0.40.1 (2026-08-26)
 
 * **Changed:** Renamed `Theme.Parse` to `Theme.Load`. Loading a valid theme

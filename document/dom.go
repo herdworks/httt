@@ -2,6 +2,7 @@ package document
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	stdhtml "html"
 	"slices"
@@ -13,6 +14,10 @@ import (
 	htmarkdown "github.com/herdworks/httt/markdown"
 	"golang.org/x/net/html"
 )
+
+type markdownOptions struct {
+	Display string `json:"display"`
+}
 
 func (document *Document) HTML(elements ...*html.Node) []byte {
 	return HTML(elements...)
@@ -320,11 +325,14 @@ func MarkdownContent(parent *html.Node, config *htmarkdown.HyperMarkConfig, valu
 	return html.ParseFragment(strings.NewReader(md.Content), parent)
 }
 
-func MarkdownVariableFunc(parent *html.Node, config *htmarkdown.HyperMarkConfig) func(any) (string, error) {
-	return func(value any) (string, error) {
+func MarkdownVariableFunc(parent *html.Node, config *htmarkdown.HyperMarkConfig) func(any, ...map[string]any) (string, error) {
+	return func(value any, options ...map[string]any) (string, error) {
 		nodes, err := MarkdownContent(parent, config, value)
 		if err != nil {
 			return "", err
+		}
+		if markdownDisplay(options) != "block" {
+			nodes = unwrapSingleParagraph(nodes)
 		}
 		return NodesToHTMLString(nodes)
 	}
@@ -340,12 +348,44 @@ func NodesToHTMLString(nodes []*html.Node) (string, error) {
 	return buf.String(), nil
 }
 
+func markdownDisplay(options []map[string]any) string {
+	if len(options) == 0 || options[0] == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(options[0])
+	if err != nil {
+		return ""
+	}
+	var decoded markdownOptions
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		return ""
+	}
+	return decoded.Display
+}
+
 func ElementString(element *html.Node) string {
 	var buffer bytes.Buffer
 	if err := html.Render(&buffer, element); err != nil {
 		return ""
 	}
 	return stdhtml.UnescapeString(buffer.String())
+}
+
+func unwrapSingleParagraph(nodes []*html.Node) []*html.Node {
+	var paragraph *html.Node
+	for _, node := range nodes {
+		if node.Type == html.TextNode && strings.TrimSpace(node.Data) == "" {
+			continue
+		}
+		if paragraph != nil || node.Type != html.ElementNode || !strings.EqualFold(node.Data, "p") {
+			return nodes
+		}
+		paragraph = node
+	}
+	if paragraph == nil {
+		return nodes
+	}
+	return ChildNodes(paragraph)
 }
 
 func matchesAttributeKey(key string, keys ...string) bool {

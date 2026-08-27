@@ -28,6 +28,7 @@ Call a plugin with one JavaScript-shaped top-level function expression:
 ${ upper(page.title) }
 ${ example(page.foo, page.bar, "Placeholder") }
 ${ fmtdate(page.updated_at, page.created_at, "YYYY-MM-DD") }
+${ example(page.foo, { "separator": " · " }) }
 ```
 
 Every unquoted argument is resolved through `Getter.Get`. Quoted strings,
@@ -38,6 +39,21 @@ They own their argument validation, coercion, fallback, and pass-through policy.
 Nested calls and pipe operators are unsupported. A transformation requiring
 composition must be implemented as one plugin or moved into a template-data
 plugin so the template can use a simple lookup.
+
+A call may end with one strict JSON options map. In that form, the plugin
+receives one object with `args` and `options` keys instead of positional
+arguments:
+
+```js
+export default function({ args, options }) {
+  return args.filter(Boolean).join(options.separator ?? " ")
+}
+```
+
+Calls without an options map retain their positional shape, so a plugin may
+also use `export default function(...args) {}`. Plugins may define any valid
+JavaScript function signature; the template call determines the values it
+receives.
 
 The Go-facing function shape is:
 

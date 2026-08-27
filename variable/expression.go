@@ -15,6 +15,7 @@ import (
 type expression struct {
 	name        string
 	arguments   []argument
+	options     map[string]any
 	cssFallback *string
 }
 
@@ -22,6 +23,11 @@ type argument struct {
 	keypath   string
 	literal   any
 	isLiteral bool
+}
+
+type parsedArguments struct {
+	arguments []argument
+	options   map[string]any
 }
 
 type segment struct {
@@ -48,17 +54,38 @@ const (
 func (expr *expression) evaluate(data Getter, funcs FuncMap) (any, error) {
 	switch expr.name {
 	case getFuncName:
+		if expr.options != nil {
+			return nil, optionsNotSupportedError(expr.name)
+		}
 		return expr.resolveArguments(data), nil
-	case textFuncName, markdownFuncName:
+	case textFuncName:
+		if expr.options != nil {
+			return nil, optionsNotSupportedError(expr.name)
+		}
 		value := expr.resolveArguments(data)
 		if nilValue(value) {
 			return nil, nil
+		}
+		return executeFunction(expr.name, []any{value}, funcs)
+	case markdownFuncName:
+		value := expr.resolveArguments(data)
+		if nilValue(value) {
+			return nil, nil
+		}
+		if expr.options != nil {
+			return executeFunction(expr.name, []any{value, expr.options}, funcs)
 		}
 		return executeFunction(expr.name, []any{value}, funcs)
 	default:
 		arguments := make([]any, 0, len(expr.arguments))
 		for _, argument := range expr.arguments {
 			arguments = append(arguments, argument.resolve(data))
+		}
+		if expr.options != nil {
+			arguments = []any{map[string]any{
+				"args":    arguments,
+				"options": expr.options,
+			}}
 		}
 		return executeFunction(expr.name, arguments, funcs)
 	}
@@ -234,11 +261,15 @@ func parseExpression(source string, funcs FuncMap) (*expression, error) {
 		return nil, fmt.Errorf("%w: %v", errInvalidVariable, err)
 	}
 	if !call {
-		arguments, err := parseArguments(body)
+		// implicit get expression
+		parsed, err := parseArguments(body)
 		if err != nil {
 			return nil, err
 		}
-		expression := &expression{name: getFuncName, arguments: arguments}
+		if parsed.options != nil {
+			return nil, optionsNotSupportedError(getFuncName)
+		}
+		expression := &expression{name: getFuncName, arguments: parsed.arguments}
 		if err := validateFallbackArguments(expression); err != nil {
 			return nil, err
 		}
@@ -250,11 +281,15 @@ func parseExpression(source string, funcs FuncMap) (*expression, error) {
 			return nil, fmt.Errorf("%w: function %q not registered", errInvalidVariable, name)
 		}
 	}
-	arguments, err := parseArguments(argumentsSource)
+	parsed, err := parseArguments(argumentsSource)
 	if err != nil {
 		return nil, err
 	}
-	expression := &expression{name: name, arguments: arguments}
+	if name == getFuncName && parsed.options != nil {
+		// explicit get(...) does not support options
+		return nil, optionsNotSupportedError(name)
+	}
+	expression := &expression{name: name, arguments: parsed.arguments, options: parsed.options}
 	if name == getFuncName || name == textFuncName || name == markdownFuncName {
 		if err := validateFallbackArguments(expression); err != nil {
 			return nil, err
@@ -333,23 +368,33 @@ func matchingCallParen(source string, open int) (int, error) {
 	return 0, errors.New("missing closing )")
 }
 
-func parseArguments(source string) ([]argument, error) {
+func parseArguments(source string) (parsedArguments, error) {
 	if strings.TrimSpace(source) == "" {
-		return nil, nil
+		return parsedArguments{}, nil
 	}
 	segments, err := splitArguments(source)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errInvalidVariable, err)
+		return parsedArguments{}, fmt.Errorf("%w: %v", errInvalidVariable, err)
 	}
-	arguments := make([]argument, 0, len(segments))
-	for _, segment := range segments {
-		argument, err := parseArgument(strings.TrimSpace(segment))
-		if err != nil {
-			return nil, err
+	parsed := parsedArguments{arguments: make([]argument, 0, len(segments))}
+	for index, segment := range segments {
+		segment = strings.TrimSpace(segment)
+		if strings.HasPrefix(segment, "{") {
+			if index != len(segments)-1 {
+				return parsedArguments{}, fmt.Errorf("%w: options map must be the final argument", errInvalidVariable)
+			}
+			if err := json.Unmarshal([]byte(segment), &parsed.options); err != nil {
+				return parsedArguments{}, fmt.Errorf("%w: invalid options map: %w", errInvalidVariable, err)
+			}
+			continue
 		}
-		arguments = append(arguments, argument)
+		argument, err := parseArgument(segment)
+		if err != nil {
+			return parsedArguments{}, err
+		}
+		parsed.arguments = append(parsed.arguments, argument)
 	}
-	return arguments, nil
+	return parsed, nil
 }
 
 func splitArguments(source string) ([]string, error) {
@@ -357,7 +402,9 @@ func splitArguments(source string) ([]string, error) {
 	start := 0
 	quote := byte(0)
 	escaped := false
-	depth := 0
+	parenDepth := 0
+	objectDepth := 0
+	arrayDepth := 0
 	for cursor := 0; cursor < len(source); cursor++ {
 		char := source[cursor]
 		if quote != 0 {
@@ -378,14 +425,28 @@ func splitArguments(source string) ([]string, error) {
 		case '\'', '"':
 			quote = char
 		case '(':
-			depth++
+			parenDepth++
 		case ')':
-			if depth == 0 {
+			if parenDepth == 0 {
 				return nil, errors.New("unexpected )")
 			}
-			depth--
+			parenDepth--
+		case '{':
+			objectDepth++
+		case '}':
+			if objectDepth == 0 {
+				return nil, errors.New("unexpected }")
+			}
+			objectDepth--
+		case '[':
+			arrayDepth++
+		case ']':
+			if arrayDepth == 0 {
+				return nil, errors.New("unexpected ]")
+			}
+			arrayDepth--
 		case ',':
-			if depth == 0 {
+			if parenDepth == 0 && objectDepth == 0 && arrayDepth == 0 {
 				segment := strings.TrimSpace(source[start:cursor])
 				if segment == "" {
 					return nil, errors.New("empty argument")
@@ -398,8 +459,14 @@ func splitArguments(source string) ([]string, error) {
 	if quote != 0 {
 		return nil, errors.New("unterminated string")
 	}
-	if depth != 0 {
+	if parenDepth != 0 {
 		return nil, errors.New("missing closing )")
+	}
+	if objectDepth != 0 {
+		return nil, errors.New("missing closing }")
+	}
+	if arrayDepth != 0 {
+		return nil, errors.New("missing closing ]")
 	}
 	last := strings.TrimSpace(source[start:])
 	if last == "" {
@@ -438,6 +505,10 @@ func parseArgument(source string) (argument, error) {
 		return argument{}, fmt.Errorf("%w: %w: %v", errInvalidVariable, errInvalidKeypath, err)
 	}
 	return argument{keypath: source}, nil
+}
+
+func optionsNotSupportedError(name string) error {
+	return fmt.Errorf("%w: function %q does not support options", errInvalidVariable, name)
 }
 
 func parseStringLiteral(source string) (string, error) {
@@ -649,6 +720,7 @@ func readVariable(source string, start int) (*variable, error) {
 	bodyStart := cursor
 	quote := byte(0)
 	escaped := false
+	braceDepth := 0
 	for cursor < len(source) {
 		char := source[cursor]
 		if quote != 0 {
@@ -670,6 +742,16 @@ func readVariable(source string, start int) (*variable, error) {
 		}
 		if char == '\'' || char == '"' {
 			quote = char
+			cursor++
+			continue
+		}
+		if char == '{' {
+			braceDepth++
+			cursor++
+			continue
+		}
+		if char == '}' && braceDepth > 0 {
+			braceDepth--
 			cursor++
 			continue
 		}
