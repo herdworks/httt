@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.41.1 (2026-09-06)
+
 * **Added:** `files.ClearRegularFiles`, which clears direct regular files from
   a directory while preserving nested directories and their contents.
 * **Changed:** File discovery now ignores symlinks. Theme loading and migration
