@@ -170,7 +170,7 @@ func TestThemeResourceBytesFallsBackToBuiltinsAfterCacheMiss(t *testing.T) {
 	}
 }
 
-func TestThemeLoadRetainsCacheAfterFailedReload(t *testing.T) {
+func TestThemeLoadSkipsSymlinkDuringReload(t *testing.T) {
 	root := t.TempDir()
 	theme := &Theme{URI: &url.URL{Path: filepath.Join(root, "theme.json")}}
 	writeThemeTestFileContent(t, theme.URI.Path, "{}")
@@ -185,15 +185,15 @@ func TestThemeLoadRetainsCacheAfterFailedReload(t *testing.T) {
 		t.Fatalf("Symlink() error = %v", err)
 	}
 
-	if err := theme.Load(io.Discard); err == nil {
-		t.Fatal("second Load() error = nil, want unreadable resource error")
+	if err := theme.Load(io.Discard); err != nil {
+		t.Fatalf("second Load() error = %v", err)
 	}
 	resourceBytes, found, err := theme.ResourceBytes("layouts/default")
 	if err != nil {
 		t.Fatalf("ResourceBytes() error = %v", err)
 	}
-	if !found || string(resourceBytes) != "first" {
-		t.Fatalf("ResourceBytes() = %q, %t; want first, true", resourceBytes, found)
+	if !found || string(resourceBytes) != "second" {
+		t.Fatalf("ResourceBytes() = %q, %t; want second, true", resourceBytes, found)
 	}
 }
 
@@ -208,7 +208,7 @@ func TestThemeLoadAllowsMissingRenderResourceDirectories(t *testing.T) {
 	}
 }
 
-func TestThemeLoadFailsForUnreadableRenderResource(t *testing.T) {
+func TestThemeLoadSkipsSymlinkRenderResource(t *testing.T) {
 	root := t.TempDir()
 	theme := &Theme{URI: &url.URL{Path: filepath.Join(root, "theme.json")}}
 	writeThemeTestFileContent(t, theme.URI.Path, "{}")
@@ -220,8 +220,8 @@ func TestThemeLoadFailsForUnreadableRenderResource(t *testing.T) {
 		t.Fatalf("Symlink() error = %v", err)
 	}
 
-	if err := theme.Load(io.Discard); err == nil {
-		t.Fatal("Load() error = nil, want unreadable resource error")
+	if err := theme.Load(io.Discard); err != nil {
+		t.Fatalf("Load() error = %v", err)
 	}
 }
 

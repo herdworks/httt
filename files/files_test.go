@@ -49,6 +49,23 @@ func TestFilesList(t *testing.T) {
 	}
 }
 
+func TestFilesListSkipsSymlinks(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target.txt")
+	writeTestFile(t, target)
+	if err := os.Symlink(target, filepath.Join(root, "link.txt")); err != nil {
+		t.Skipf("Symlink() unavailable: %v", err)
+	}
+
+	paths, err := List(root, false)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if want := []string{"target.txt"}; !reflect.DeepEqual(paths, want) {
+		t.Fatalf("List() = %#v, want %#v", paths, want)
+	}
+}
+
 func TestFilesListMissingDirectory(t *testing.T) {
 	got, err := List(filepath.Join(t.TempDir(), "missing"), true)
 	if err != nil {
@@ -56,6 +73,32 @@ func TestFilesListMissingDirectory(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("List missing directory = %#v, want empty", got)
+	}
+}
+
+func TestClearRegularFiles(t *testing.T) {
+	root := t.TempDir()
+	regularPath := filepath.Join(root, "remove.txt")
+	nestedPath := filepath.Join(root, "nested", "keep.txt")
+	writeTestFile(t, regularPath)
+	writeTestFile(t, nestedPath)
+
+	if err := ClearRegularFiles(root); err != nil {
+		t.Fatalf("ClearRegularFiles() error = %v", err)
+	}
+	if _, err := os.Stat(regularPath); !os.IsNotExist(err) {
+		t.Fatalf("regular file exists after clear: %v", err)
+	}
+	if _, err := os.Stat(nestedPath); err != nil {
+		t.Fatalf("nested file missing after clear: %v", err)
+	}
+
+	missingDirectory := filepath.Join(root, "missing")
+	if err := ClearRegularFiles(missingDirectory); err != nil {
+		t.Fatalf("ClearRegularFiles(missing) error = %v", err)
+	}
+	if info, err := os.Stat(missingDirectory); err != nil || !info.IsDir() {
+		t.Fatalf("missing directory = %#v, %v; want created directory", info, err)
 	}
 }
 

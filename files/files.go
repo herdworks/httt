@@ -30,7 +30,29 @@ func ResourceDirectoryName(directory string, fallback string) string {
 	return directory
 }
 
-// List returns sorted slash-separated file paths relative to root.
+// ClearRegularFiles creates directory when needed, then removes its direct
+// regular files. Nested directories and their contents are preserved.
+func ClearRegularFiles(directory string) (err error) {
+	var paths []string
+	if err = os.MkdirAll(directory, 0755); err != nil {
+		return err
+	}
+	if paths, err = List(directory, false); err != nil {
+		return err
+	}
+	for _, path := range paths {
+		filePath, err := LocalPath(directory, path)
+		if err != nil {
+			return err
+		}
+		if err = os.Remove(filePath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// List returns sorted slash-separated regular file paths relative to root.
 func List(root string, recursive bool) ([]string, error) {
 	var paths []string
 	rootAbs, err := filepath.Abs(root)
@@ -54,7 +76,7 @@ func List(root string, recursive bool) ([]string, error) {
 			if walkErr != nil {
 				return walkErr
 			}
-			if entry.IsDir() {
+			if entry.IsDir() || !entry.Type().IsRegular() {
 				return nil
 			}
 			relPath, err := RelativePath(rootAbs, path)
@@ -77,7 +99,7 @@ func List(root string, recursive bool) ([]string, error) {
 			return nil, fmt.Errorf("read file root %q: %w", rootAbs, err)
 		}
 		for _, entry := range entries {
-			if entry.IsDir() {
+			if entry.IsDir() || !entry.Type().IsRegular() {
 				continue
 			}
 			relPath, err := RelativePath(rootAbs, filepath.Join(rootAbs, entry.Name()))
@@ -139,7 +161,9 @@ func CleanRelativePath(relPath string) (string, error) {
 	return relPath, nil
 }
 
-// LocalPath resolves a slash-separated relative file path under root.
+// LocalPath resolves a validated slash-separated relative file path under root.
+// It rejects absolute and parent-traversal paths, preventing lexical escapes
+// from root; it does not resolve symlinks.
 func LocalPath(root string, relPath string) (string, error) {
 	relPath, err := CleanRelativePath(relPath)
 	if err != nil {

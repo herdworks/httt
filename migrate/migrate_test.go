@@ -584,7 +584,7 @@ func TestOutputDirectoryMustBeEmptyAndDisjoint(t *testing.T) {
 	})
 }
 
-func TestOutputDirectoryCopiesSourceSymlinkContents(t *testing.T) {
+func TestOutputDirectorySkipsSourceSymlink(t *testing.T) {
 	root := t.TempDir()
 	themePath := writeTheme(t, root, `{}`)
 	outside := writeFile(t, t.TempDir(), "outside.css", "external")
@@ -604,15 +604,12 @@ func TestOutputDirectoryCopiesSourceSymlinkContents(t *testing.T) {
 		t.Fatalf("report = %#v", report)
 	}
 	outputPath := filepath.Join(outputRoot, "static/link.css")
-	if got := readFile(t, outputPath); got != "external" {
-		t.Fatalf("copied symlink contents = %q", got)
-	}
-	if info, err := os.Lstat(outputPath); err != nil || info.Mode()&os.ModeSymlink != 0 {
-		t.Fatalf("output path is not a regular copy: info=%v err=%v", info, err)
+	if _, err := os.Lstat(outputPath); !os.IsNotExist(err) {
+		t.Fatalf("output contains skipped symlink or unexpected error: %v", err)
 	}
 }
 
-func TestInPlaceMigrationFollowsSourceFileSymlink(t *testing.T) {
+func TestInPlaceMigrationSkipsSourceFileSymlink(t *testing.T) {
 	root := t.TempDir()
 	themePath := writeTheme(t, root, `{}`)
 	outside := writeFile(t, t.TempDir(), "outside.html", `<div ht-if="hidden"></div>`)
@@ -631,10 +628,10 @@ func TestInPlaceMigrationFollowsSourceFileSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !report.Complete() || report.Counters.Migrated != 1 || report.Counters.FilesChanged != 1 {
+	if !report.Complete() || report.Counters.Migrated != 0 || report.Counters.FilesChanged != 0 {
 		t.Fatalf("report = %#v", report)
 	}
-	if got := readFile(t, outside); got != `<div></div>` {
+	if got := readFile(t, outside); got != `<div ht-if="hidden"></div>` {
 		t.Fatalf("symlink target = %q", got)
 	}
 }

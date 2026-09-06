@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Added:** `files.ClearRegularFiles`, which clears direct regular files from
+  a directory while preserving nested directories and their contents.
+* **Changed:** File discovery now ignores symlinks. Theme loading and migration
+  therefore skip symlinked resources rather than reading, copying, or editing
+  their targets outside the managed tree.
+
 ## v0.41.0 (2026-08-27)
 
 * **Added:** Callable template-variable expressions and CSS `--ht-var(...)`
