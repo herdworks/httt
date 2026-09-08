@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Changed:** `Theme.LayoutHTML` now resolves an empty layout reference to the
+  theme's configured default layout (`default.html`).
+
 ## v0.41.1 (2026-09-06)
 
 * **Added:** `files.ClearRegularFiles`, which clears direct regular files from

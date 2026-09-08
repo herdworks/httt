@@ -257,6 +257,9 @@ func (theme *Theme) ResourceHTML(resourceRef string) (*html.Node, error) {
 
 func (theme *Theme) LayoutHTML(layoutRef string) (*html.Node, error) {
 	layoutDir := theme.LayoutsDirName()
+	if layoutRef == "" {
+		layoutRef = "default"
+	}
 	layoutRef = filepath.ToSlash(layoutRef)
 	layoutRef = strings.TrimPrefix(layoutRef, "/")
 	if !strings.HasPrefix(layoutRef, layoutDir+"/") {

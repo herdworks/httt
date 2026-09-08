@@ -368,6 +368,18 @@ func TestThemeLayoutHTMLUsesLayoutsDirWithoutMutatingConfig(t *testing.T) {
 	}
 }
 
+func TestThemeLayoutHTMLUsesDefaultLayoutForEmptyRef(t *testing.T) {
+	root := t.TempDir()
+	theme := &Theme{
+		URI: &url.URL{Path: filepath.Join(root, "theme.json")},
+	}
+	writeThemeTestFile(t, filepath.Join(theme.LayoutsDirPath(), "default.html"))
+
+	if _, err := theme.LayoutHTML(""); err != nil {
+		t.Fatalf("LayoutHTML empty ref returned error: %v", err)
+	}
+}
+
 func TestThemeLayoutHTMLUsesConfiguredLayoutsDir(t *testing.T) {
 	root := t.TempDir()
 	theme := &Theme{
