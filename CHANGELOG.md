@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+## v0.41.3 (2026-09-15)
+
 * **Changed:** `httt check` now checks `pre` and `code` attributes but skips
   their child subtrees, including syntax-highlighted descendants.
 
