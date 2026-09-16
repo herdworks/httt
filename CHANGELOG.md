@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Changed:** `httt check` now checks `pre` and `code` attributes but skips
+  their child subtrees, including syntax-highlighted descendants.
+
 ## v0.41.2 (2026-09-07)
 
 * **Changed:** `Theme.LayoutHTML` now resolves an empty layout reference to the

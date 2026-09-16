@@ -11,7 +11,7 @@ func CheckCommand() clic.Command {
 	tidy := CheckTidyOption()
 	return clic.Command{
 		Meta: clic.CommandMeta{
-			Description: "Check rendered HTML for template artifacts.",
+			Description: "Check rendered HTML for template artifacts outside literal pre and code content.",
 			Usage: []string{
 				"{{ .Command }} [--tidy] <file-or-directory>",
 			},

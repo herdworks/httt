@@ -35,12 +35,14 @@ type Options struct {
 
 // SkipRule controls which parts of matching HTML nodes are not checked.
 // Attributes names attribute values to skip; Text skips direct text-node
-// children. A matching non-element node is skipped entirely.
+// children; Subtree skips child traversal after checking the matching
+// element's attributes. A matching non-element node is skipped entirely.
 type SkipRule struct {
 	Kind       html.NodeType
 	Name       string
 	Attributes []string
 	Text       bool
+	Subtree    bool
 }
 
 // Finding identifies one template artifact and its owning rendered element.
@@ -68,6 +70,9 @@ func (document *Document) walk(node *html.Node) error {
 		if err := document.checkAttributes(node); err != nil {
 			return err
 		}
+	}
+	if document.skipSubtree(node) {
+		return nil
 	}
 	for child := node.FirstChild; child != nil; child = child.NextSibling {
 		if child.Type == html.TextNode && (document.skipText(node) || document.skipNode(child)) {
@@ -165,6 +170,15 @@ func (document *Document) skipText(element *html.Node) bool {
 	return false
 }
 
+func (document *Document) skipSubtree(node *html.Node) bool {
+	for _, rule := range document.skipRules {
+		if rule.Subtree && matchesSkipRule(rule, node) {
+			return true
+		}
+	}
+	return false
+}
+
 // Error formats the finding as a complete source-file diagnostic.
 func (finding Finding) Error() string {
 	return fmt.Sprintf("file %q error:\n\n%s", finding.Path, finding.Element)
@@ -174,8 +188,8 @@ func (finding Finding) Error() string {
 func DefaultSkipRules() []SkipRule {
 	return []SkipRule{
 		{Kind: html.CommentNode},
-		{Kind: html.ElementNode, Name: "pre", Text: true},
-		{Kind: html.ElementNode, Name: "code", Text: true},
+		{Kind: html.ElementNode, Name: "pre", Subtree: true},
+		{Kind: html.ElementNode, Name: "code", Subtree: true},
 	}
 }
 

@@ -44,21 +44,27 @@ func TestHTMLFile(t *testing.T) {
 			source: "<!-- ${ comment } --><p>clean</p>",
 		},
 		{
-			name:    "literal element text is ignored but attributes are checked",
-			source:  "<pre ht-apply href='${ pre.href }'>${ pre.text }</pre><code data-ht-debug='element' data-value='${ code.value }'>${ code.text }</code>",
+			name:    "literal boundaries check their attributes but skip children",
+			source:  "<pre ht-apply href='${ pre.href }'>${ pre.text }<code><span data-ht-apply data-value='${ span.value }'>${ nested }</span></code></pre><code data-ht-debug='element' data-value='${ code.value }'>${ code.text }</code>",
 			options: Options{Tidy: true},
 			want: []string{
-				findingString("example.html", `<pre ht-apply="" href="${ pre.href }">${ pre.text }</pre>`),
-				findingString("example.html", `<pre ht-apply="" href="${ pre.href }">${ pre.text }</pre>`),
+				findingString("example.html", `<pre ht-apply="" href="${ pre.href }">${ pre.text }<code><span data-ht-apply="" data-value="${ span.value }">${ nested }</span></code></pre>`),
+				findingString("example.html", `<pre ht-apply="" href="${ pre.href }">${ pre.text }<code><span data-ht-apply="" data-value="${ span.value }">${ nested }</span></code></pre>`),
 				findingString("example.html", `<code data-ht-debug="element" data-value="${ code.value }">${ code.text }</code>`),
 				findingString("example.html", `<code data-ht-debug="element" data-value="${ code.value }">${ code.text }</code>`),
 			},
 		},
 		{
-			name:   "nested elements in literal content are checked",
-			source: "<code><span>${ nested }</span></code>",
+			name:    "syntax highlighted literal subtree text is ignored",
+			source:  `<pre><code class="chroma"><span class="nx">${ page.title }</span></code></pre>`,
+			options: Options{Tidy: true},
+		},
+		{
+			name:    "custom rules can disable literal subtree exclusions",
+			source:  `<pre><code><span>${ page.title }</span></code></pre>`,
+			options: Options{SkipRules: []SkipRule{}},
 			want: []string{
-				findingString("example.html", `<span>${ nested }</span>`),
+				findingString("example.html", `<span>${ page.title }</span>`),
 			},
 		},
 		{
