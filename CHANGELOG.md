@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Changed:** HTTT Projects automation uses a fresh, scoped GitHub App token
+  and `actions/add-to-project` v2.0.1; requires dedicated pilot configuration.
+
 ## v0.41.3 (2026-09-15)
 
 * **Changed:** `httt check` now checks `pre` and `code` attributes but skips

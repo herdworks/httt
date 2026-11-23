@@ -4,17 +4,51 @@ on:
   issues:
     types:
       - opened
-  pull_request:
+  # Use the base-branch workflow only; never checkout or execute PR contents.
+  pull_request_target:
     types:
       - opened
+
+# Organization Projects access comes only from the scoped App token below.
+permissions: {}
 
 jobs:
   add-to-project:
     name: Add to Project
+    # Pilot policy: issues and same-repository PR metadata only. Fork PRs and
+    # Dependabot PRs are excluded; do not broaden this without a security review.
+    if: >-
+      github.repository == 'herdworks/httt' &&
+      (github.event_name == 'issues' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'))
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
+      - name: Check Projects App configuration
+        env:
+          PROJECTS_APP_CLIENT_ID: ${{ vars.HTTT_PROJECTS_APP_CLIENT_ID }}
+          PROJECTS_APP_PRIVATE_KEY: ${{ secrets.HTTT_PROJECTS_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$PROJECTS_APP_CLIENT_ID" ] || [ -z "$PROJECTS_APP_PRIVATE_KEY" ]; then
+            echo "::error::Projects App is not configured. Set HTTT_PROJECTS_APP_CLIENT_ID and HTTT_PROJECTS_APP_PRIVATE_KEY as described in .github/projects-automation.md."
+            exit 1
+          fi
+
+      - name: Mint Projects App installation token
+        id: projects-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.HTTT_PROJECTS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HTTT_PROJECTS_APP_PRIVATE_KEY }}
+          owner: herdworks
+          repositories: httt
+          permission-organization-projects: write
+          permission-issues: read
+          permission-pull-requests: read
+
       - name: Add to Project
-        uses: actions/add-to-project@v1.0.2
+        uses: actions/add-to-project@f2c1f1fa649a891be84948ea89b5dfba1526ef05 # v2.0.1
         with:
           project-url: https://github.com/orgs/herdworks/projects/4
-          github-token: ${{ secrets.PROJECTS_AUTOMATION_TOKEN }}
+          github-token: ${{ steps.projects-token.outputs.token }}
