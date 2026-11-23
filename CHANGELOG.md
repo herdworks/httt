@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Added:** `httt install --latest` (also exposed through the importable install
+  command for `hyperctl theme install`) installs local or remote archives as
+  `latest` after successful unpacking, retaining the actual theme version.
+  Failed unpacking preserves the previous `latest` and cleans up the new partial
+  version directory so the same version can be retried.
+
 ## v0.41.3 (2026-09-15)
 
 * **Changed:** `httt check` now checks `pre` and `code` attributes but skips
