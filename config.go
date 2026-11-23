@@ -16,6 +16,7 @@ type Config struct {
 	Path   string
 	Theme  string `json:"theme" yaml:"theme"`
 	Themes string `json:"themes_dir" yaml:"themes_dir"`
+	Static string `json:"static_dir" yaml:"static_dir"`
 }
 
 // LoadConfig reads the theme-tooling subset of a JSON or YAML site config.
@@ -28,6 +29,7 @@ func LoadConfig(path string) (Config, error) {
 		Config struct {
 			Theme  string `json:"theme" yaml:"theme"`
 			Themes string `json:"themes_dir" yaml:"themes_dir"`
+			Static string `json:"static_dir" yaml:"static_dir"`
 		} `json:"config" yaml:"config"`
 	}
 	switch filepath.Ext(path) {
@@ -41,12 +43,18 @@ func LoadConfig(path string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("parse site config: %w", err)
 	}
-	config := Config{Path: path, Theme: source.Config.Theme, Themes: source.Config.Themes}
+	config := Config{Path: path, Theme: source.Config.Theme, Themes: source.Config.Themes, Static: source.Config.Static}
 	if config.Theme == "" {
 		config.Theme = "theme.json"
 	}
 	if config.Themes == "" {
 		config.Themes = "themes"
+	}
+	if config.Static == "" {
+		config.Static = "static"
+	}
+	if err := files.ValidateRelativePath("site.config.static_dir", config.Static); err != nil {
+		return Config{}, err
 	}
 	if err := files.ValidateRelativePath("site.config.theme", config.Theme); err != nil {
 		return Config{}, err
@@ -68,4 +76,9 @@ func (config Config) ThemePath() string {
 // ThemesDirPath returns the configured themes directory rooted at the site directory.
 func (config Config) ThemesDirPath() string {
 	return filepath.Join(config.RootDir(), config.Themes)
+}
+
+// StaticDirPath returns the site's configured static directory, not the theme's.
+func (config Config) StaticDirPath() string {
+	return filepath.Join(config.RootDir(), config.Static)
 }

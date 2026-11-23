@@ -60,3 +60,33 @@ func TestLoadConfigRejectsUnsupportedAndMalformedFiles(t *testing.T) {
 		t.Fatal("LoadConfig() accepted malformed YAML")
 	}
 }
+
+func TestLoadConfigStaticDirectory(t *testing.T) {
+	for _, test := range []struct{ extension, source, want string }{
+		{"yaml", "config: {}", "static"},
+		{"yaml", "config:\n  static_dir: public/assets\n", "public/assets"},
+		{"json", `{"config":{"static_dir":"public"}}`, "public"},
+		{"yaml", "config:\n  static_dir: ../outside\n", ""},
+	} {
+		t.Run(test.source, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "site."+test.extension)
+			if err := os.WriteFile(path, []byte(test.source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			config, err := LoadConfig(path)
+			if test.want == "" {
+				if err == nil {
+					t.Fatal("accepted invalid static directory")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := config.StaticDirPath(); got != filepath.Join(root, test.want) {
+				t.Fatalf("StaticDirPath = %q", got)
+			}
+		})
+	}
+}

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## Unreleased
 
+* **Added:** Local `httt theme release` / `httt release` preparation using native
+  theme archives, a canonical single-theme `.hypertexting/themes.json` index,
+  exact-byte SHA-256 digests, staged verification, and immutable version checks
+  (#24). Supports the site's `config.static_dir` and custom initial archive
+  paths, which remain immutable per version. Release outputs are root-confined
+  and reject symlink paths; packaging preserves unrelated `.hypertexting` assets.
+* **Added:** `httt theme package` alongside the compatible top-level `package`
+  command, plus shared theme release-index fetching and installed-theme
+  resolution. Website-root `config.url` values expand to
+  `/.hypertexting/themes.json`; explicit non-root index paths remain unchanged.
+
 ## v0.41.3 (2026-09-15)
 
 * **Changed:** `httt check` now checks `pre` and `code` attributes but skips
