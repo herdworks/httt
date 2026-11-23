@@ -20,17 +20,19 @@ import (
 )
 
 type Theme struct {
-	URI           *url.URL          `json:"-" yaml:"-"`
-	Href          string            `json:"href,omitempty" yaml:"href,omitempty"`
-	Name          string            `json:"name,omitempty" yaml:"name,omitempty"`
-	Description   string            `json:"description,omitempty" yaml:"description,omitempty"`
-	Version       string            `json:"version,omitempty" yaml:"version,omitempty"`
-	Config        ThemeConfig       `json:"config,omitempty" yaml:"config,omitempty"`
-	TemplateData  data.TemplateData `json:"data,omitempty" yaml:"data,omitempty"`
-	Assets        []string          `json:"-" yaml:"-"`
-	Plugins       variable.Plugins  `json:"-" yaml:"-"`
-	BuiltinsFS    fs.FS             `json:"-" yaml:"-"`
-	resourceCache map[string][]byte
+	URI              *url.URL          `json:"-" yaml:"-"`
+	Href             string            `json:"href,omitempty" yaml:"href,omitempty"`
+	Name             string            `json:"name,omitempty" yaml:"name,omitempty"`
+	Description      string            `json:"description,omitempty" yaml:"description,omitempty"`
+	Version          string            `json:"version,omitempty" yaml:"version,omitempty"`
+	Config           ThemeConfig       `json:"config,omitempty" yaml:"config,omitempty"`
+	TemplateData     data.TemplateData `json:"data,omitempty" yaml:"data,omitempty"`
+	Assets           []string          `json:"-" yaml:"-"`
+	Plugins          variable.Plugins  `json:"-" yaml:"-"`
+	BuiltinsFS       fs.FS             `json:"-" yaml:"-"`
+	resourceCache    map[string][]byte
+	archiveExcludes  []string
+	archiveStageDirs []string
 }
 
 type ThemeConfig struct {
@@ -332,6 +334,13 @@ func (theme *Theme) FilePaths() (paths []string, err error) {
 		}
 		for _, p := range files {
 			var relPath string
+			excluded, err := theme.excludedFromArchive(filepath.Join(dirPath, p))
+			if err != nil {
+				return nil, err
+			}
+			if excluded {
+				continue
+			}
 
 			relPath = filepath.ToSlash(filepath.Join(dir, p))
 			if relPath == "." || relPath == "" {
@@ -348,6 +357,42 @@ func (theme *Theme) FilePaths() (paths []string, err error) {
 		}
 	}
 	return paths, nil
+}
+
+// excludedFromArchive uses absolute paths on both sides, including for a
+// relative source URI or release static root. Path errors must not silently
+// include staged archives in their own source file list.
+func (theme *Theme) excludedFromArchive(candidate string) (bool, error) {
+	if len(theme.archiveExcludes) == 0 && len(theme.archiveStageDirs) == 0 {
+		return false, nil
+	}
+	candidate, err := filepath.Abs(candidate)
+	if err != nil {
+		return false, err
+	}
+	for _, exclude := range theme.archiveExcludes {
+		exclude, err := filepath.Abs(exclude)
+		if err != nil {
+			return false, err
+		}
+		if candidate == exclude {
+			return true, nil
+		}
+	}
+	for _, directory := range theme.archiveStageDirs {
+		directory, err := filepath.Abs(directory)
+		if err != nil {
+			return false, err
+		}
+		relative, err := filepath.Rel(directory, candidate)
+		if err != nil {
+			return false, err
+		}
+		if filepath.IsLocal(relative) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Archive writes a zip archive containing every file returned by theme.FilePaths().

@@ -35,6 +35,8 @@ func Command() clic.Command {
 			ListCommand,
 			InstallCommand,
 			PackageCommand,
+			ReleaseCommand,
+			ThemeCommand,
 			MigrateCommand,
 			RenderCommand,
 			CheckCommand,
